@@ -15,7 +15,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 ## 현재 상태
 
 이 저장소는 초기 `0.1.0` 개발 트랙에 있습니다. 첫 릴리스 범위는 다음 오픈
-이슈로 관리합니다.
+이슈로 관리합니다. 자세한 릴리스 계획은 [`WIP.md`](WIP.md)에 두고, 완료된
+사용자-facing 변경은 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
 
 | 이슈 | 범위 |
 |---:|---|
@@ -129,31 +130,24 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 | 트랙 | 계획 |
 |---|---|
 | `0.1.0` | 초기 core, logging, testing, 문서, release preflight 이슈를 안정화합니다. |
-| `0.2.x` | 실제 예제를 기준으로 `serde`, cache, Redis, Testcontainers 패키지 경계를 평가합니다. |
+| `0.2.0` | #7-#20으로 ecosystem package planning을 추적하고, broad adapter는 research gate를 먼저 둡니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
+
+프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.
+
+- [WIP.md](WIP.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [Package layout policy](docs/package-layout.md)
+- [Release guide](docs/release.md)
+- [Research index](docs/research/README.ko.md)
 
 ## 생태계 백로그
 
 `0.2.0` milestone은 bluetape-go와 bluetape4k 생태계에서 이미 검증된 기능을
 Python-native 패키지로 옮기기 위한 다음 범위를 추적합니다. Python 패키지 경계나
 의존성 선택이 분명하지 않은 항목은 구현 전에 research issue로 먼저 다룹니다.
-
-| 이슈 | 트랙 |
-|---:|---|
-| [#7](https://github.com/bluetape4k/bluetape-py/issues/7) | Collections 헬퍼. |
-| [#8](https://github.com/bluetape4k/bluetape-py/issues/8) | Async 및 bounded concurrency primitives. |
-| [#9](https://github.com/bluetape4k/bluetape-py/issues/9) | Codec 및 compression 패키지. |
-| [#10](https://github.com/bluetape4k/bluetape-py/issues/10) | Serialization 전략 research. |
-| [#11](https://github.com/bluetape4k/bluetape-py/issues/11) | Cache 및 Redis coordination. |
-| [#12](https://github.com/bluetape4k/bluetape-py/issues/12) | Resilience policies. |
-| [#13](https://github.com/bluetape4k/bluetape-py/issues/13) | ID, measure, money value helpers. |
-| [#14](https://github.com/bluetape4k/bluetape-py/issues/14) | SQL, repository, audit outbox research. |
-| [#15](https://github.com/bluetape4k/bluetape-py/issues/15) | Testcontainers fixtures. |
-| [#16](https://github.com/bluetape4k/bluetape-py/issues/16) | AWS, graph, text, image adapter research. |
-| [#17](https://github.com/bluetape4k/bluetape-py/issues/17) | Leader election 및 distributed locks. |
-| [#18](https://github.com/bluetape4k/bluetape-py/issues/18) | JWT 및 key rotation. |
-| [#19](https://github.com/bluetape4k/bluetape-py/issues/19) | Rules, workflow, batch, work-report primitives. |
-| [#20](https://github.com/bluetape4k/bluetape-py/issues/20) | Probabilistic data structure helpers. |
+이슈별 task queue는 [`WIP.md`](WIP.md), research gate는
+[`docs/research/README.ko.md`](docs/research/README.ko.md)를 봅니다.
 
 ## 개발
 

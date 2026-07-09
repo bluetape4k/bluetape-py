@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project uses semantic versioning once the first tag is published.
+
+## [Unreleased]
+
+### Added
+
+- Initial Python-native workspace documentation for the thin `bluetape` meta
+  distribution and the focused `bluetape-core`, `bluetape-logging`, and
+  `bluetape-testing` packages.
+- Korean root README parity for the initial package boundary, install policy,
+  usage examples, package documentation links, and roadmap.
+- README bitmap hero and workspace overview diagram assets.
+- `WIP.md` for release planning, milestone scope, and the ecosystem backlog.
+- Release and package-layout documentation under `docs/`.
+- Research index documentation for future research-first package decisions.
+- Milestone `0.2.0` planning visibility through ecosystem issues #7 through
+  #20, including research gates #10, #14, and #16.
+
+### Changed
+
+- Root README now points detailed planning and release state to `WIP.md`,
+  `CHANGELOG.md`, and `docs/release.md` instead of carrying the full planning
+  model inline.

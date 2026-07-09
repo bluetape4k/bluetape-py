@@ -35,9 +35,16 @@ Research-first issues #10, #14, and #16 cover areas where Python package
 boundaries and dependency choices need source-backed evaluation before
 implementation.
 
+The project-management document shape follows `bluetape-go`: detailed planning
+and task queues live in `WIP.md`, completed user-facing changes live in
+`CHANGELOG.md`, release policy lives under `docs/release*`, package boundary
+rules live in `docs/package-layout.md`, and research gates are indexed under
+`docs/research/`.
+
 ## Validation
 
 - `git diff --check`: pass
+- `rg -n "WIP.md|CHANGELOG.md|docs/release|docs/research|docs/package-layout.md" README.md README.ko.md`: pass
 - `uv sync --all-packages`: pass
 - `uv build --all-packages`: pass
 - `uv run pytest`: pass, 11 tests
