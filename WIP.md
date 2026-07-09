@@ -23,6 +23,8 @@ distribution model:
 - `develop` is the integration branch and `main` is release-only.
 - Issues #1 through #5 track the `0.1.0` foundation, documentation, and release
   preflight scope.
+- PR #35 implements the remaining `0.1.0` issue scope for #1, #2, #3, and #5.
+  The issues stay open until that PR is merged into `develop`.
 - Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34 after the
   foundation is released.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
@@ -78,11 +80,11 @@ Before `v0.1.0`:
 
 ### `0.1.0` - Foundation
 
-- #1 - Expand `bluetape-core` foundation helpers.
-- #2 - Stabilize `bluetape-logging` context helpers.
-- #3 - Grow internal-first `bluetape-testing` helpers.
-- #4 - Publish initial package boundary and install guide.
-- #5 - Prepare `v0.1.0` release and PyPI publishing path.
+- #1 - Expand `bluetape-core` foundation helpers. Implemented in PR #35.
+- #2 - Stabilize `bluetape-logging` context helpers. Implemented in PR #35.
+- #3 - Grow internal-first `bluetape-testing` helpers. Implemented in PR #35.
+- #4 - Publish initial package boundary and install guide. Closed by PR #6.
+- #5 - Prepare `v0.1.0` release and PyPI publishing path. Implemented in PR #35.
 
 ### `0.2.0` - Ecosystem Backlog
 
