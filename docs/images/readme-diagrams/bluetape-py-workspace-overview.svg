@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="840"
+  viewBox="0 0 1440 840">
+
+  <defs>
+    <linearGradient id="hero-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F6FAFF"/>
+      <stop offset="48%" stop-color="#EDF7F5"/>
+      <stop offset="100%" stop-color="#FFF7ED"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-12%" y="-12%" width="124%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#60728A" flood-opacity="0.14"/>
+    </filter>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="12" refY="7"
+      orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#57708F"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="10" markerHeight="10" refX="8" refY="5"
+      orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 8 5 L 2 8 Z" fill="#8A9BB0"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1440" height="840" rx="0" fill="#F8FAFC" stroke="#D9E2EF" stroke-width="0"/>
+  <text x="720" y="64" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="40" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">bluetape-py workspace overview</text>
+  <text x="720" y="102" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="400" fill="#58677D" text-anchor="middle" dominant-baseline="middle">single repository / uv workspace / focused PyPI distributions</text>
+
+  <rect x="72" y="150" width="1296" height="134" rx="26" fill="#FFFFFF" stroke="#CBD7E6" stroke-width="2"/>
+  <text x="720" y="190" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="30" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">bluetape</text>
+  <text x="720" y="232" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="19" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">thin meta distribution: default dependency is bluetape-core only</text>
+
+  <line x1="720" y1="284" x2="720" y2="336" stroke="#57708F" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <rect x="492" y="336" width="456" height="124" rx="16" fill="#FFFFFF" stroke="#9BC4FF" stroke-width="2"/>
+<text x="720.0" y="378.16" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="21" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">bluetape-core</text>
+<text x="720.0" y="415.28" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">stdlib-only</text>
+<text x="720.0" y="435.28" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">validation foundation</text>
+
+  <line x1="600" y1="460" x2="280" y2="520" stroke="#8A9BB0" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow-soft)"/>
+  <line x1="720" y1="460" x2="720" y2="520" stroke="#8A9BB0" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow-soft)"/>
+  <line x1="840" y1="460" x2="1160" y2="520" stroke="#8A9BB0" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow-soft)"/>
+
+  <rect x="100" y="520" width="360" height="146" rx="16" fill="#F9FEFC" stroke="#8EDCC7" stroke-width="2"/>
+<text x="280.0" y="569.64" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="21" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">bluetape-logging</text>
+<text x="280.0" y="605.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">stdlib logging</text>
+<text x="280.0" y="625.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">contextvars</text>
+<text x="280.0" y="645.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">redaction</text>
+  <rect x="540" y="520" width="360" height="146" rx="16" fill="#FFFDF7" stroke="#F2C879" stroke-width="2"/>
+<text x="720.0" y="569.64" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="21" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">bluetape-testing</text>
+<text x="720.0" y="605.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">pytest helpers</text>
+<text x="720.0" y="625.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">internal-first</text>
+<text x="720.0" y="645.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">async waits</text>
+  <rect x="980" y="520" width="360" height="146" rx="16" fill="#F7FAFE" stroke="#B8C7DC" stroke-width="2"/>
+<text x="1160.0" y="569.64" font-family="Architects Daughter, ui-rounded, system-ui, sans-serif" font-size="21" font-weight="700" fill="#172033" text-anchor="middle" dominant-baseline="middle">future adapters</text>
+<text x="1160.0" y="595.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">serde</text>
+<text x="1160.0" y="615.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">cache</text>
+<text x="1160.0" y="635.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">redis</text>
+<text x="1160.0" y="655.12" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">testcontainers</text>
+
+  <rect x="116" y="706" width="1208" height="76" rx="18" fill="#FFFFFF" stroke="#D5DFEC" stroke-width="2"/>
+  <text x="720" y="734" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">0.1.0 track: issues #1-#5 keep core, logging, testing, docs, and release preflight visible</text>
+  <text x="720" y="762" font-family="Comic Mono, ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" font-weight="400" fill="#42526A" text-anchor="middle" dominant-baseline="middle">Rule: Python-native APIs first; no mechanical Kotlin, Go, or Rust porting</text>
+</svg>

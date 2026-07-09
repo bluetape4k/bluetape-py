@@ -1,6 +1,7 @@
 .venv/
 .ruff_cache/
 .pytest_cache/
+.worktrees/
 .coverage
 dist/
 build/
