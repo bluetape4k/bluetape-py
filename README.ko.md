@@ -130,7 +130,7 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 | 트랙 | 계획 |
 |---|---|
 | `0.1.0` | 초기 core, logging, testing, 문서, release preflight 이슈를 안정화합니다. |
-| `0.2.0` | #7-#20으로 ecosystem package planning을 추적하고, broad adapter는 research gate를 먼저 둡니다. |
+| `0.2.0` | #7-#34로 ecosystem package planning을 추적하고, broad adapter는 research gate를 먼저 둡니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.

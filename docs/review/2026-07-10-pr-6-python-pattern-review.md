@@ -30,10 +30,10 @@ The README hero now uses a generated bitmap identity visual similar to sibling
 bluetape ecosystem README heroes. The package relationship diagram remains a
 separate workspace overview asset instead of doubling as the hero image.
 
-The ecosystem backlog is tracked in milestone `0.2.0` through issues #7-#20.
-Research-first issues #10, #14, and #16 cover areas where Python package
-boundaries and dependency choices need source-backed evaluation before
-implementation.
+The ecosystem backlog is tracked in milestone `0.2.0` through issues #7-#34.
+Research-first issues #10, #14, #16, #21, #23, #31, and #34 cover areas where
+Python package boundaries and dependency choices need source-backed evaluation
+before implementation.
 
 The project-management document shape follows `bluetape-go`: detailed planning
 and task queues live in `WIP.md`, completed user-facing changes live in

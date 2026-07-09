@@ -19,7 +19,7 @@ and this project uses semantic versioning once the first tag is published.
 - Release and package-layout documentation under `docs/`.
 - Research index documentation for future research-first package decisions.
 - Milestone `0.2.0` planning visibility through ecosystem issues #7 through
-  #20, including research gates #10, #14, and #16.
+  #34, including research gates #10, #14, #16, #21, #23, #31, and #34.
 
 ### Changed
 

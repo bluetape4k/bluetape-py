@@ -131,7 +131,7 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 | Track | Plan |
 |---|---|
 | `0.1.0` | Stabilize the initial core, logging, testing, documentation, and release preflight issues. |
-| `0.2.0` | Track ecosystem package planning in issues #7-#20, with research gates before broad adapters. |
+| `0.2.0` | Track ecosystem package planning in issues #7-#34, with research gates before broad adapters. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:
