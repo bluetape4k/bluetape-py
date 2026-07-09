@@ -1,12 +1,42 @@
+# Local environments
 .venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test, lint, type-check, and coverage caches
 .ruff_cache/
 .pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.nox/
+.tox/
+.hypothesis/
 .idea/
 .omx/
 .worktrees/
 .coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Packaging and build artifacts
 dist/
 build/
+wheelhouse/
+.eggs/
 *.egg-info/
-__pycache__/
-*.py[cod]
+*.egg
+pip-wheel-metadata/
+
+# Notebook and local OS/editor metadata
+.ipynb_checkpoints/
+.DS_Store
