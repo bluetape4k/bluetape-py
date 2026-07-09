@@ -1,0 +1,31 @@
+[project]
+name = "bluetape"
+version = "0.1.0"
+description = "Thin meta distribution for Python-native bluetape packages."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = ["bluetape-core==0.1.0"]
+
+[project.optional-dependencies]
+logging = ["bluetape-logging==0.1.0"]
+testing = ["bluetape-testing==0.1.0"]
+dev = [
+    "bluetape-logging==0.1.0",
+    "bluetape-testing==0.1.0",
+]
+all = [
+    "bluetape-logging==0.1.0",
+    "bluetape-testing==0.1.0",
+]
+
+[tool.uv.sources]
+bluetape-core = { workspace = true }
+bluetape-logging = { workspace = true }
+bluetape-testing = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
