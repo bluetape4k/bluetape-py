@@ -14,17 +14,21 @@ PyPI 배포 패키지와 extras로 분리합니다.
 
 ## 현재 상태
 
-이 저장소는 초기 `0.1.0` 개발 트랙에 있습니다. 첫 릴리스 범위는 다음 오픈
-이슈로 관리합니다. 자세한 릴리스 계획은 [`WIP.md`](WIP.md)에 두고, 완료된
-사용자-facing 변경은 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
+`v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
+[`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
+PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
 
-| 이슈 | 범위 |
-|---:|---|
-| [#1](https://github.com/bluetape4k/bluetape-py/issues/1) | `bluetape-core` 기반 헬퍼 확장. |
-| [#2](https://github.com/bluetape4k/bluetape-py/issues/2) | `bluetape-logging` 컨텍스트 헬퍼 안정화. |
-| [#3](https://github.com/bluetape4k/bluetape-py/issues/3) | 내부 우선 `bluetape-testing` 헬퍼 확장. |
-| [#4](https://github.com/bluetape4k/bluetape-py/issues/4) | 초기 패키지 경계와 설치 가이드 공개. |
-| [#5](https://github.com/bluetape4k/bluetape-py/issues/5) | `0.1.0` 릴리스와 PyPI 배포 경로 준비. |
+현재 계획 트랙은
+[`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
+#7-#34 이슈로 ecosystem backlog를 확장합니다. 자세한 계획은
+[`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
+[`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
+
+| 트랙 | 범위 |
+|---|---|
+| `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
+| `0.2.0` | 진행 중인 ecosystem planning과 첫 확장 이슈 #7-#34. |
+| PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
 
@@ -129,7 +133,7 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 
 | 트랙 | 계획 |
 |---|---|
-| `0.1.0` | 초기 core, logging, testing, 문서, release preflight 이슈를 안정화합니다. |
+| `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
 | `0.2.0` | #7-#34로 ecosystem package planning을 추적하고, broad adapter는 research gate를 먼저 둡니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 

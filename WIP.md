@@ -1,14 +1,17 @@
 # WIP
 
 Snapshot: 2026-07-10 KST
-Scope: `0.1.0` Python-native foundation and `0.2.0` ecosystem package planning.
+Scope: `v0.1.0` released foundation and `0.2.0` ecosystem package planning.
 
-## Current Target Release
+## Current Target
 
-`v0.1.0` - initial Python-native bluetape workspace.
+`0.2.0` - ecosystem package planning and first expansion tracks.
 
-The first release keeps the default install thin and establishes the focused
-distribution model:
+`v0.1.0` has been released as the initial Python-native bluetape workspace:
+<https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0>.
+
+The released foundation keeps the default install thin and establishes the
+focused distribution model:
 
 - `bluetape`: thin meta distribution, default dependency is `bluetape-core`.
 - `bluetape-core`: stdlib-only validation and foundation helpers.
@@ -21,13 +24,12 @@ distribution model:
 - The repository is a Python 3.13+ `uv` workspace with focused packages under
   `packages/`.
 - `develop` is the integration branch and `main` is release-only.
+- `v0.1.0` is tagged on `main` and has a GitHub Release.
 - Issues #1 through #5 are closed for the `0.1.0` foundation, documentation,
   and release preflight scope.
-- PR #35 merged the remaining `0.1.0` implementation scope into `develop`.
 - PyPI publication remains on HOLD until project ownership and trusted
   publishing are confirmed outside this repository.
-- Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34 after the
-  foundation is released.
+- Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
 
@@ -45,7 +47,7 @@ distribution model:
 6. Prepare the first PyPI release path after local and GitHub CI validation are
    stable.
 
-## Release Checklist
+## `v0.1.0` Release Record
 
 Branch policy:
 
@@ -54,35 +56,35 @@ Branch policy:
 - Promote the verified `develop` tree to `main` before creating a stable tag and
   publishing to PyPI.
 
-Before `v0.1.0`:
+- GitHub Release: <https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0>
+- Tag target: `596e4898c915b55339521814ae7303953b50f4d2`
+- Foundation issues #1 through #5: closed.
+- Milestone `0.1.0`: closed.
+- PyPI publication: HOLD until ownership and trusted publishing are confirmed.
 
-1. Close issues #1 through #5. Done.
-2. Confirm `README.md`, `README.ko.md`, package READMEs, `WIP.md`, and
-   `CHANGELOG.md` describe the same release scope.
-3. Run `uv sync --all-packages`.
-4. Run `uv build --all-packages`.
-5. Run `uv run pytest`.
-6. Run `uv run ruff check .`.
-7. Run `uv run ruff format --check .`.
-8. Verify GitHub Actions CI on `develop`.
-9. Close milestone `0.1.0`.
-10. Promote `develop` to `main` through a release PR.
-11. Tag `v0.1.0` on `main`.
-12. Create GitHub Release `v0.1.0`.
-13. Publish distributions only after PyPI ownership and trusted publishing are
-    confirmed.
+## `0.2.0` Working Rules
+
+1. Use research-first issues for broad dependency or package-boundary choices.
+2. Keep the default `bluetape` install thin.
+3. Add new package families only after their import path, distribution name,
+   dependency boundary, tests, and README shape are explicit.
+4. Keep active package README files aligned with root README locale files when
+   user-facing behavior changes.
+5. Record completed user-facing changes in `CHANGELOG.md`.
 
 ## Milestone Roadmap
 
 | Milestone | Theme | Notes |
 |---|---|---|
-| `0.1.0` | Core helpers, logging, testing, docs, and release preflight | Keep the default install thin and the APIs Python-native. |
+| `v0.1.0` | Released core helpers, logging, testing, docs, and release preflight | Kept the default install thin and the APIs Python-native. |
 | `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34; research-first work gates broad adapters. |
 | `0.3.0` | First implementation wave after research gates | Candidate scope depends on accepted research decisions from #10, #14, #16, #21, #23, #31, and #34. |
 
 ## Task Queue
 
-### `0.1.0` - Foundation
+### `v0.1.0` - Released Foundation
+
+Historical release scope; all items are closed.
 
 - #1 - Expand `bluetape-core` foundation helpers. Implemented in PR #35.
 - #2 - Stabilize `bluetape-logging` context helpers. Implemented in PR #35.
