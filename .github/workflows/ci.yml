@@ -33,3 +33,6 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+      - name: Build distributions
+        run: uv build --all-packages

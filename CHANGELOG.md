@@ -20,9 +20,17 @@ and this project uses semantic versioning once the first tag is published.
 - Research index documentation for future research-first package decisions.
 - Milestone `0.2.0` planning visibility through ecosystem issues #7 through
   #34, including research gates #10, #14, #16, #21, #23, #31, and #34.
+- `require_instance` in `bluetape-core`.
+- `log_context(override=False)` duplicate-key protection and case-insensitive
+  logging redaction defaults.
+- `eventually` and `eventually_async` handling for falsy non-`None` values plus
+  positive timeout/interval validation.
+- PyPI preflight documentation for the intended `v0.1.0` distributions.
 
 ### Changed
 
 - Root README now points detailed planning and release state to `WIP.md`,
   `CHANGELOG.md`, and `docs/release.md` instead of carrying the full planning
   model inline.
+- GitHub Actions CI now builds all workspace distributions with
+  `uv build --all-packages`.

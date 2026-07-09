@@ -3,6 +3,17 @@
 from collections.abc import Sized
 
 
+def require_instance[T](value: object, expected_type: type[T], name: str) -> T:
+    """Return `value` when it is an instance of `expected_type`.
+
+    Raises:
+        TypeError: If `value` is not an instance of `expected_type`.
+    """
+    if not isinstance(value, expected_type):
+        raise TypeError(f"{name} must be {expected_type.__name__}")
+    return value
+
+
 def require_not_none[T](value: T | None, name: str) -> T:
     """Return `value` when present, otherwise raise `ValueError`.
 
@@ -34,6 +45,7 @@ def require_not_empty[T](value: T, name: str) -> T:
 
 
 __all__ = [
+    "require_instance",
     "require_not_blank",
     "require_not_empty",
     "require_not_none",

@@ -17,9 +17,13 @@ def get_log_context() -> dict[str, object]:
 
 
 @contextmanager
-def log_context(**values: object):
+def log_context(*, override: bool = True, **values: object):
     """Temporarily merge values into the current context-local logging context."""
     merged = get_log_context()
+    if not override:
+        duplicates = sorted(key for key in values if key in merged)
+        if duplicates:
+            raise KeyError(f"{duplicates[0]} already exists in log context")
     merged.update(values)
     token = _log_context.set(merged)
     try:
@@ -42,10 +46,14 @@ def redact(
     *,
     keys: Iterable[str],
     replacement: str = "***",
+    case_sensitive: bool = False,
 ) -> dict[str, object]:
     """Return a copy with selected keys replaced by `replacement`."""
-    sensitive = set(keys)
-    return {key: replacement if key in sensitive else value for key, value in values.items()}
+    sensitive = set(keys if case_sensitive else (key.casefold() for key in keys))
+    return {
+        key: replacement if (key if case_sensitive else key.casefold()) in sensitive else value
+        for key, value in values.items()
+    }
 
 
 __all__ = [
