@@ -132,6 +132,29 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 | `0.2.x` | 실제 예제를 기준으로 `serde`, cache, Redis, Testcontainers 패키지 경계를 평가합니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
+## 생태계 백로그
+
+`0.2.0` milestone은 bluetape-go와 bluetape4k 생태계에서 이미 검증된 기능을
+Python-native 패키지로 옮기기 위한 다음 범위를 추적합니다. Python 패키지 경계나
+의존성 선택이 분명하지 않은 항목은 구현 전에 research issue로 먼저 다룹니다.
+
+| 이슈 | 트랙 |
+|---:|---|
+| [#7](https://github.com/bluetape4k/bluetape-py/issues/7) | Collections 헬퍼. |
+| [#8](https://github.com/bluetape4k/bluetape-py/issues/8) | Async 및 bounded concurrency primitives. |
+| [#9](https://github.com/bluetape4k/bluetape-py/issues/9) | Codec 및 compression 패키지. |
+| [#10](https://github.com/bluetape4k/bluetape-py/issues/10) | Serialization 전략 research. |
+| [#11](https://github.com/bluetape4k/bluetape-py/issues/11) | Cache 및 Redis coordination. |
+| [#12](https://github.com/bluetape4k/bluetape-py/issues/12) | Resilience policies. |
+| [#13](https://github.com/bluetape4k/bluetape-py/issues/13) | ID, measure, money value helpers. |
+| [#14](https://github.com/bluetape4k/bluetape-py/issues/14) | SQL, repository, audit outbox research. |
+| [#15](https://github.com/bluetape4k/bluetape-py/issues/15) | Testcontainers fixtures. |
+| [#16](https://github.com/bluetape4k/bluetape-py/issues/16) | AWS, graph, text, image adapter research. |
+| [#17](https://github.com/bluetape4k/bluetape-py/issues/17) | Leader election 및 distributed locks. |
+| [#18](https://github.com/bluetape4k/bluetape-py/issues/18) | JWT 및 key rotation. |
+| [#19](https://github.com/bluetape4k/bluetape-py/issues/19) | Rules, workflow, batch, work-report primitives. |
+| [#20](https://github.com/bluetape4k/bluetape-py/issues/20) | Probabilistic data structure helpers. |
+
 ## 개발
 
 ```bash

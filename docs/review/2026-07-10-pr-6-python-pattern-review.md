@@ -4,7 +4,7 @@
 
 - PR: <https://github.com/bluetape4k/bluetape-py/pull/6>
 - Base: `develop` at `0f331dc`
-- Head: `docs/readme-ecosystem-overview` at `f5fea70`
+- Head: `docs/readme-ecosystem-overview` at current PR head
 - Applied guidance: `bluetape4k-workflow` plus `bluetape-py-patterns`
 
 ## Findings
@@ -26,6 +26,15 @@ The planned packages are clearly marked as planned and are not presented as
 currently installable import surfaces. The install section also states that the
 public `pip install` shape applies after the first PyPI release.
 
+The README hero now uses a generated bitmap identity visual similar to sibling
+bluetape ecosystem README heroes. The package relationship diagram remains a
+separate workspace overview asset instead of doubling as the hero image.
+
+The ecosystem backlog is tracked in milestone `0.2.0` through issues #7-#20.
+Research-first issues #10, #14, and #16 cover areas where Python package
+boundaries and dependency choices need source-backed evaluation before
+implementation.
+
 ## Validation
 
 - `git diff --check`: pass
@@ -34,14 +43,15 @@ public `pip install` shape applies after the first PyPI release.
 - `uv run pytest`: pass, 11 tests
 - `uv run ruff check .`: pass
 - `uv run ruff format --check .`: pass
-- `xmllint --noout docs/assets/bluetape-py-hero.svg docs/images/readme-diagrams/bluetape-py-workspace-overview.svg`: pass
-- `rsvg-convert` render smoke check for both README SVG assets: pass
-- `file` and `sips` PNG dimension checks for both README PNG assets: pass
+- `xmllint --noout docs/images/readme-diagrams/bluetape-py-workspace-overview.svg`: pass
+- `/Users/debop/.local/bin/cairosvg docs/images/readme-diagrams/bluetape-py-workspace-overview.svg -o docs/images/readme-diagrams/bluetape-py-workspace-overview.png -s 2`: pass
+- `file` and `sips` PNG dimension checks for the README hero and workspace overview PNG assets: pass
 - `actionlint`: pass
 
 ## Notes
 
-`cairosvg` was not used as final render evidence in this review because the
-local Python installation could not load the system cairo library. The same SVG
-assets were successfully rendered with `rsvg-convert`, and the committed PNG
-assets were verified as non-empty PNG files with expected dimensions.
+The Python-package `cairosvg` import path was not used as final render evidence
+because the local Python installation could not load the system cairo library.
+The installed CairoSVG CLI at `/Users/debop/.local/bin/cairosvg` successfully
+rendered the workspace overview PNG after the hero moved to generated
+bitmap-only output.

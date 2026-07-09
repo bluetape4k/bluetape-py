@@ -132,6 +132,30 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 | `0.2.x` | Evaluate `serde`, cache, Redis, and Testcontainers package boundaries using real examples. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
+## Ecosystem Backlog
+
+The `0.2.0` milestone tracks Python-native equivalents for proven bluetape-go
+and bluetape4k ecosystem capabilities. Research issues intentionally come before
+implementation where the Python package boundary or dependency choice is not
+obvious.
+
+| Issue | Track |
+|---:|---|
+| [#7](https://github.com/bluetape4k/bluetape-py/issues/7) | Collections helpers. |
+| [#8](https://github.com/bluetape4k/bluetape-py/issues/8) | Async and bounded concurrency primitives. |
+| [#9](https://github.com/bluetape4k/bluetape-py/issues/9) | Codec and compression packages. |
+| [#10](https://github.com/bluetape4k/bluetape-py/issues/10) | Serialization strategy research. |
+| [#11](https://github.com/bluetape4k/bluetape-py/issues/11) | Cache and Redis coordination. |
+| [#12](https://github.com/bluetape4k/bluetape-py/issues/12) | Resilience policies. |
+| [#13](https://github.com/bluetape4k/bluetape-py/issues/13) | ID, measure, and money value helpers. |
+| [#14](https://github.com/bluetape4k/bluetape-py/issues/14) | SQL, repository, and audit outbox research. |
+| [#15](https://github.com/bluetape4k/bluetape-py/issues/15) | Testcontainers fixtures. |
+| [#16](https://github.com/bluetape4k/bluetape-py/issues/16) | AWS, graph, text, and image adapter research. |
+| [#17](https://github.com/bluetape4k/bluetape-py/issues/17) | Leader election and distributed locks. |
+| [#18](https://github.com/bluetape4k/bluetape-py/issues/18) | JWT and key rotation. |
+| [#19](https://github.com/bluetape4k/bluetape-py/issues/19) | Rules, workflow, batch, and work-report primitives. |
+| [#20](https://github.com/bluetape4k/bluetape-py/issues/20) | Probabilistic data structure helpers. |
+
 ## Development
 
 ```bash
