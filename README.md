@@ -14,18 +14,22 @@ heavier capabilities into explicit PyPI distributions and extras.
 
 ## Current Status
 
-This repository is in the initial `0.1.0` development track. The first release
-is scoped by these open issues. Detailed release planning lives in
+`v0.1.0` has been released as the first Python-native foundation:
+[`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
+PyPI publication remains on hold until package ownership and trusted publishing
+are confirmed.
+
+The current planning track is milestone
+[`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It expands
+the ecosystem backlog from issues #7 through #34. Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
-| Issue | Scope |
-|---:|---|
-| [#1](https://github.com/bluetape4k/bluetape-py/issues/1) | Expand the `bluetape-core` foundation helpers. |
-| [#2](https://github.com/bluetape4k/bluetape-py/issues/2) | Stabilize `bluetape-logging` context helpers. |
-| [#3](https://github.com/bluetape4k/bluetape-py/issues/3) | Grow internal-first `bluetape-testing` helpers. |
-| [#4](https://github.com/bluetape4k/bluetape-py/issues/4) | Publish the initial package boundary and install guide. |
-| [#5](https://github.com/bluetape4k/bluetape-py/issues/5) | Prepare the `0.1.0` release and PyPI publishing path. |
+| Track | Scope |
+|---|---|
+| `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
+| `0.2.0` | Active ecosystem planning and first expansion issues #7-#34. |
+| PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
 
@@ -130,7 +134,7 @@ eventually(lambda: cache.get("ready"), timeout=2.0)
 
 | Track | Plan |
 |---|---|
-| `0.1.0` | Stabilize the initial core, logging, testing, documentation, and release preflight issues. |
+| `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
 | `0.2.0` | Track ecosystem package planning in issues #7-#34, with research gates before broad adapters. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
