@@ -56,12 +56,6 @@ source = { editable = "packages/bluetape-core" }
 name = "bluetape-logging"
 version = "0.1.0"
 source = { editable = "packages/bluetape-logging" }
-dependencies = [
-    { name = "bluetape-core" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "bluetape-core", editable = "packages/bluetape-core" }]
 
 [[package]]
 name = "bluetape-py-workspace"
@@ -99,15 +93,11 @@ name = "bluetape-testing"
 version = "0.1.0"
 source = { editable = "packages/bluetape-testing" }
 dependencies = [
-    { name = "bluetape-core" },
     { name = "pytest" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "bluetape-core", editable = "packages/bluetape-core" },
-    { name = "pytest", specifier = ">=8.4.0" },
-]
+requires-dist = [{ name = "pytest", specifier = ">=8.4.0" }]
 
 [[package]]
 name = "colorama"

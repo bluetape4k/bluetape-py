@@ -1,6 +1,7 @@
 # Release Guide
 
 Detailed release procedure: [`docs/release/release-guide.md`](release/release-guide.md).
+PyPI package preflight: [`docs/release/pypi-preflight.md`](release/pypi-preflight.md).
 
 ## Branches
 
@@ -33,7 +34,10 @@ Before `v1.0.0`, public APIs may still change. Document breaking changes in
 - `uv run pytest` passes locally.
 - `uv run ruff check .` passes locally.
 - `uv run ruff format --check .` passes locally.
-- GitHub Actions CI passes on `develop`.
+- GitHub Actions CI passes on `develop`, including the `uv build --all-packages`
+  distribution build step.
+- PyPI credentials or trusted publishing are explicitly confirmed before any
+  publish action.
 
 ## Changelog Rule
 

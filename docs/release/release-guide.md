@@ -35,6 +35,8 @@ Before creating a release PR:
 8. GitHub CI passes on the target `develop` commit.
 9. PyPI publish credentials and target repository are confirmed outside the
    repository before any publish action.
+10. `docs/release/pypi-preflight.md` lists the intended distributions and
+    records the current trusted publishing hold status.
 
 Useful preflight commands:
 
@@ -105,6 +107,17 @@ git push origin vX.Y.Z
 - `bluetape-core`, `bluetape-logging`, and `bluetape-testing`;
 - English and Korean root documentation;
 - package READMEs and release preflight documentation.
+
+The first release intends to publish exactly these distributions:
+
+- `bluetape`
+- `bluetape-core`
+- `bluetape-logging`
+- `bluetape-testing`
+
+Publishing remains on hold until PyPI project ownership and trusted publishing
+are confirmed outside the repository. Do not dispatch a publish workflow or
+upload artifacts while issue #5 is open.
 
 Release sequence:
 

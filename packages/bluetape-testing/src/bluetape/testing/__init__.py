@@ -6,6 +6,15 @@ from time import monotonic, sleep
 from typing import cast
 
 
+def _require_positive(value: float, name: str) -> None:
+    if value <= 0:
+        raise ValueError(f"{name} must be greater than 0")
+
+
+def _is_satisfied(value: object) -> bool:
+    return value is not None and value is not False
+
+
 def eventually[T](
     probe: Callable[[], T | None | bool],
     *,
@@ -13,11 +22,13 @@ def eventually[T](
     interval: float = 0.01,
 ) -> T:
     """Poll `probe` until it returns a truthy value or a non-`None` object."""
+    _require_positive(timeout, "timeout")
+    _require_positive(interval, "interval")
     deadline = monotonic() + timeout
 
     while monotonic() <= deadline:
         value = probe()
-        if value:
+        if _is_satisfied(value):
             return cast(T, value)
         sleep(interval)
 
@@ -31,11 +42,13 @@ async def eventually_async[T](
     interval: float = 0.01,
 ) -> T:
     """Async variant of `eventually`."""
+    _require_positive(timeout, "timeout")
+    _require_positive(interval, "interval")
     deadline = monotonic() + timeout
 
     while monotonic() <= deadline:
         value = await probe()
-        if value:
+        if _is_satisfied(value):
             return cast(T, value)
         await asyncio.sleep(interval)
 
