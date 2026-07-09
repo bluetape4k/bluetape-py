@@ -23,10 +23,10 @@ distribution model:
 - `develop` is the integration branch and `main` is release-only.
 - Issues #1 through #5 track the `0.1.0` foundation, documentation, and release
   preflight scope.
-- Milestone `0.2.0` tracks ecosystem expansion issues #7 through #20 after the
+- Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34 after the
   foundation is released.
-- Research-first issues #10, #14, and #16 must produce source-backed package
-  boundary decisions before implementation starts.
+- Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
+  source-backed package boundary decisions before implementation starts.
 
 ## `0.1.0` Scope
 
@@ -71,8 +71,8 @@ Before `v0.1.0`:
 | Milestone | Theme | Notes |
 |---|---|---|
 | `0.1.0` | Core helpers, logging, testing, docs, and release preflight | Keep the default install thin and the APIs Python-native. |
-| `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#20; research-first work gates broad adapters. |
-| `0.3.0` | First implementation wave after research gates | Candidate scope depends on accepted research decisions from #10, #14, and #16. |
+| `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34; research-first work gates broad adapters. |
+| `0.3.0` | First implementation wave after research gates | Candidate scope depends on accepted research decisions from #10, #14, #16, #21, #23, #31, and #34. |
 
 ## Task Queue
 
@@ -100,6 +100,20 @@ Before `v0.1.0`:
 - #18 - JWT and key-rotation helpers.
 - #19 - Rules, workflow, batch, and work-report primitives.
 - #20 - Probabilistic data structure helpers.
+- #21 - Python web API adapter boundary research.
+- #22 - Web API helpers and ASGI/FastAPI adapters.
+- #23 - Observability and OpenTelemetry boundary research.
+- #24 - Observability hooks and telemetry helpers.
+- #25 - Audit event and outbox publisher packages.
+- #26 - AWS integration provider packages.
+- #27 - Graph package and backend conformance suites.
+- #28 - Text search, tokenizer, and masking packages.
+- #29 - Image and media helper packages.
+- #30 - SQL toolkit, repository, and outbox helpers.
+- #31 - Geo, spatial, and statistics utility scope research.
+- #32 - Provider conformance and benchmark suites.
+- #33 - `bluetape-go` to `bluetape-py` ecosystem parity matrix.
+- #34 - Config, secrets, and credential provider boundary research.
 
 ## Research Gates
 
@@ -113,3 +127,12 @@ Research notes belong under `docs/research/` and should be linked from
   fixtures.
 - #16 must decide whether AWS, graph, text, and image work should be first-class
   packages, optional adapters, or examples only.
+- #21 must decide ASGI/FastAPI/framework adapter boundaries, request-context
+  ownership, RFC 7807 scope, and middleware conformance expectations.
+- #23 must decide stdlib logging hook boundaries, OpenTelemetry extras, and
+  async context propagation expectations.
+- #31 must decide whether geo, spatial, statistics, histogram, and geocoding
+  helpers are owned APIs, light wrappers, examples only, or rejected.
+- #34 must decide configuration, secrets, credentials, KMS/envelope encryption,
+  and cloud provider boundary policy before security-sensitive helpers are
+  implemented.
