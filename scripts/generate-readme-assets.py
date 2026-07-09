@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate source-backed README SVG assets for bluetape-py."""
+"""Generate source-backed README diagram SVG assets for bluetape-py."""
 
 from __future__ import annotations
 
@@ -152,120 +152,6 @@ def defs() -> str:
 """
 
 
-def hero_svg() -> str:
-    modules = [
-        ("core", "stdlib-only | validation"),
-        ("logging", "logging | contextvars"),
-        ("testing", "pytest | internal-first"),
-    ]
-    module_cards = []
-    for i, (title, subtitle) in enumerate(modules):
-        module_cards.append(
-            card(
-                980,
-                222 + i * 136,
-                420,
-                104,
-                f"bluetape-{title}",
-                subtitle,
-                fill=["#FFFFFF", "#F9FEFC", "#FFFDF7"][i],
-                stroke=["#9BC4FF", "#8EDCC7", "#F2C879"][i],
-            )
-        )
-    intro_lines = [
-        "thin default install",
-        "multiple PyPI distributions",
-        "one bluetape.* namespace",
-        "Python 3.13+ only",
-    ]
-    bg = rect(0, 0, 1600, 900, fill="url(#hero-bg)", stroke="#D9E2EF", rx=0, sw=0)
-    panel = rect(86, 82, 1428, 736, fill="#FFFFFF", stroke="#DCE6F2", rx=36)
-    title = svg_text(
-        150,
-        166,
-        "bluetape-py",
-        size=62,
-        fill="#172033",
-        weight="700",
-        anchor="start",
-        family=FONT_TITLE,
-    )
-    subtitle = svg_text(
-        152,
-        230,
-        "Python-native backend foundation",
-        size=25,
-        fill="#42526A",
-        anchor="start",
-    )
-    bullets = multiline(
-        154,
-        338,
-        intro_lines,
-        size=26,
-        fill="#172033",
-        weight="700",
-        anchor="start",
-        family=FONT_TITLE,
-        line_height=46,
-    )
-    install_box = rect(150, 526, 532, 116, fill="#F7FAFE", stroke="#B8C7DC", rx=24)
-    install_title = svg_text(
-        182,
-        568,
-        "pip install bluetape",
-        size=28,
-        fill="#172033",
-        weight="700",
-        anchor="start",
-    )
-    install_note = svg_text(
-        182,
-        612,
-        "installs bluetape-core only",
-        size=20,
-        fill="#58677D",
-        anchor="start",
-    )
-    extras_title = svg_text(
-        1110,
-        704,
-        "extras open heavier capabilities explicitly",
-        size=22,
-        fill="#42526A",
-        family=FONT_TITLE,
-    )
-    extras_note = svg_text(
-        1110,
-        746,
-        "bluetape[logging] / bluetape[testing] / future adapters",
-        size=18,
-        fill="#58677D",
-    )
-
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"
-  viewBox="0 0 1600 900">
-{defs()}
-  {bg}
-  <g filter="url(#soft-shadow)">
-    {panel}
-  </g>
-  {title}
-  {subtitle}
-  {bullets}
-  {install_box}
-  {install_title}
-  {install_note}
-  {line(720, 584, 938, 584, stroke="#57708F", width=4)}
-  <g>
-    {"".join(module_cards)}
-  </g>
-  {extras_title}
-  {extras_note}
-</svg>
-"""
-
-
 def architecture_svg() -> str:
     bg = rect(0, 0, 1440, 840, fill="#F8FAFC", stroke="#D9E2EF", rx=0, sw=0)
     title = svg_text(
@@ -382,7 +268,6 @@ def architecture_svg() -> str:
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
     DIAGRAMS.mkdir(parents=True, exist_ok=True)
-    (ASSETS / "bluetape-py-hero.svg").write_text(hero_svg(), encoding="utf-8")
     (DIAGRAMS / "bluetape-py-workspace-overview.svg").write_text(
         architecture_svg(),
         encoding="utf-8",
