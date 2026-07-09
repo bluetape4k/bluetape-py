@@ -21,10 +21,11 @@ distribution model:
 - The repository is a Python 3.13+ `uv` workspace with focused packages under
   `packages/`.
 - `develop` is the integration branch and `main` is release-only.
-- Issues #1 through #5 track the `0.1.0` foundation, documentation, and release
-  preflight scope.
-- PR #35 implements the remaining `0.1.0` issue scope for #1, #2, #3, and #5.
-  The issues stay open until that PR is merged into `develop`.
+- Issues #1 through #5 are closed for the `0.1.0` foundation, documentation,
+  and release preflight scope.
+- PR #35 merged the remaining `0.1.0` implementation scope into `develop`.
+- PyPI publication remains on HOLD until project ownership and trusted
+  publishing are confirmed outside this repository.
 - Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34 after the
   foundation is released.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
@@ -55,7 +56,7 @@ Branch policy:
 
 Before `v0.1.0`:
 
-1. Close issues #1 through #5.
+1. Close issues #1 through #5. Done.
 2. Confirm `README.md`, `README.ko.md`, package READMEs, `WIP.md`, and
    `CHANGELOG.md` describe the same release scope.
 3. Run `uv sync --all-packages`.
@@ -64,9 +65,12 @@ Before `v0.1.0`:
 6. Run `uv run ruff check .`.
 7. Run `uv run ruff format --check .`.
 8. Verify GitHub Actions CI on `develop`.
-9. Promote `develop` to `main` through a release PR.
-10. Tag `v0.1.0` on `main`.
-11. Publish distributions only after release preflight issue #5 is closed.
+9. Close milestone `0.1.0`.
+10. Promote `develop` to `main` through a release PR.
+11. Tag `v0.1.0` on `main`.
+12. Create GitHub Release `v0.1.0`.
+13. Publish distributions only after PyPI ownership and trusted publishing are
+    confirmed.
 
 ## Milestone Roadmap
 

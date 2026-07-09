@@ -7,6 +7,10 @@ and this project uses semantic versioning once the first tag is published.
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+## [v0.1.0] - 2026-07-10
+
 ### Added
 
 - Initial Python-native workspace documentation for the thin `bluetape` meta
