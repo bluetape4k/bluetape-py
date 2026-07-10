@@ -15,7 +15,7 @@ historical proof.
   `ContentTypeMismatchError` public contract.
 - Current GREEN command:
   `uv run pytest packages/bluetape-serde/tests/test_contracts.py -q`
-- Current GREEN result: exit 0, `140 passed`.
+- Current GREEN result: exit 0, `144 passed`.
 
 ## Task 3 bounded JSON encoding
 
@@ -31,7 +31,7 @@ historical proof.
 - Historical GREEN result at `6cf73dc`: exit 0, `63 passed, 2 deselected`.
 - Current non-overlapping encode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_serialize or encode) and not (json_deserialize or decode)'`
-- Current non-overlapping encode result: exit 0, `63 passed, 87 deselected`.
+- Current non-overlapping encode result: exit 0, `89 passed, 112 deselected`.
 
 ## Task 4 strict bounded JSON decoding
 
@@ -51,15 +51,15 @@ historical proof.
   INPUT_LIMIT retained payload/data and NESTING_LIMIT retained
   payload/data/text plus the scanner frame.
 - Current traceback-retention GREEN result for the same command: exit 0,
-  `2 passed, 148 deselected`.
+  `2 passed, 199 deselected`.
 - Current disjoint decode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_deserialize or decode)'`
-- Current disjoint decode result: exit 0, `85 passed, 65 deselected`.
+- Current disjoint decode result: exit 0, `110 passed, 91 deselected`.
 - Current encode-depth-only command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'depth and not (json_deserialize or decode)'`
-- Current encode-depth-only result: exit 0, `9 passed, 141 deselected`.
-- Current aggregate Task 4 selector result: exit 0, `94 passed, 56 deselected`,
-  composed of 85 decode cases plus 9 encode-depth cases.
+- Current encode-depth-only result: exit 0, `9 passed, 192 deselected`.
+- Current aggregate Task 4 selector result: exit 0, `119 passed, 82 deselected`,
+  composed of 110 decode cases plus 9 encode-depth cases.
 - Review-gap fixture command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_valid_escaped_string'`
 - Review-gap fixture result: exit 0, `1 passed, 149 deselected`; the prebuilt
@@ -67,7 +67,7 @@ historical proof.
   structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
   `uv run pytest packages/bluetape-serde/tests -q`
-- Current full serde result: exit 0, `290 passed`.
+- Current full serde result: exit 0, `345 passed`.
 
 ## Baseline reproducibility check
 
@@ -86,7 +86,39 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `290 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `345 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
+
+## Step 6-R corrective TDD
+
+- Traceback and high-chunk allocation RED command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'high_chunk_count or metadata_errors_do_not_retain or preflight_errors_do_not_retain or circular_error_does_not_retain or accepts_exact_output_limit or translates_encoder_failures'`
+- RED result: exit 1, `15 failed, 146 deselected`. The 200,001-byte
+  high-chunk output peaked at 12,503,354 traced bytes, and every reviewed
+  metadata/preflight/output/translated traceback retained prohibited caller or
+  derived locals.
+- GREEN result for the same command after incremental `bytearray` assembly and
+  fresh type/code error cloning: exit 0, `15 passed, 146 deselected`.
+- Integer public-contract RED command:
+  `uv run pytest packages/bluetape-serde/tests/test_contracts.py packages/bluetape-serde/tests/test_json.py -q -k 'public_contract or contract_enums or integer'`
+- Initial RED result: exit 2 with two collection errors because
+  `MAX_JSON_INTEGER_DIGITS` was not exported.
+- After staging only the constant/code surface, the behavior RED result was
+  exit 1, `13 failed, 18 passed, 298 deselected`: 641-digit encode reached the
+  encoder, and decode either accepted the value or returned `INVALID_JSON`
+  depending on CPython's global integer-string setting.
+- GREEN result after arithmetic encode preflight and the bounded `parse_int`
+  hook, including CPython limit settings 640/default/disabled for both paths:
+  exit 0, `43 passed, 302 deselected`.
+- Full serde GREEN after complementary metadata traceback cases: exit 0,
+  `345 passed`.
+- Final exact performance selector: exit 0, `3 passed, 198 deselected` for
+  preflight O(depth), high-chunk encode allocation, and decode scanner constant
+  auxiliary-state tests.
+- Final workspace GREEN: exit 0, `491 passed`.
+- Final static/build gates: `uv lock --check`, locked all-package sync, Ruff
+  check, Ruff format check, all-package build, branch/current diff checks,
+  focused-wheel isolated roundtrip, 21-export/17-code assertion, four README
+  wheel-snippet checks, and regex scan all exited 0.

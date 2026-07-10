@@ -112,6 +112,18 @@ uv sync --all-packages
 uv run --package bluetape-serde python -c "import bluetape.serde"
 ```
 
+Build the current focused wheel, install it into an isolated environment, and
+run a strict JSON roundtrip:
+
+```bash
+tmp_dir="$(mktemp -d)"
+uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
+uv venv "$tmp_dir/venv"
+uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serde-*.whl
+"$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"order_id": 42}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"order_id": 42}'
+rm -rf "$tmp_dir"
+```
+
 Only the local workspace and local-wheel paths are runnable today. The `pip`
 commands above, including the future `serde` extra, remain unavailable from
 PyPI until publication is enabled.
@@ -229,9 +241,12 @@ assert json_deserialize(payload, expected_metadata=consumer_policy) == {"order_i
 boundary with an authenticated and authorized producer; network location and
 payload claims are insufficient. Both profiles enforce identical strict UTF-8
 JSON, exact metadata, duplicate-key/non-finite-number rejection, 16 MiB default
-input/output limits, depth 100 by default, and a hard depth ceiling of 256.
+input/output limits, depth 100 by default, a hard depth ceiling of 256, and a
+fixed 640-decimal-digit integer limit on both encode and decode.
 These byte limits are not a fixed process-memory guarantee. See the package
 README for error handling and versioned rollout/rollback guidance.
+`SerdeError` covers stable serde domain failures; caller type and configuration
+mistakes remain native `TypeError` or `ValueError`.
 
 ## Package Documentation
 

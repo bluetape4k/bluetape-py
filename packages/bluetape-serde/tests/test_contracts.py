@@ -5,6 +5,7 @@ from bluetape.serde import (
     DEFAULT_MAX_INPUT_SIZE,
     DEFAULT_MAX_NESTING_DEPTH,
     DEFAULT_MAX_OUTPUT_SIZE,
+    MAX_JSON_INTEGER_DIGITS,
     MAX_SUPPORTED_NESTING_DEPTH,
     ContentTypeMismatchError,
     FormatMismatchError,
@@ -29,6 +30,7 @@ EXPECTED_EXPORTS = [
     "DEFAULT_MAX_OUTPUT_SIZE",
     "DEFAULT_MAX_NESTING_DEPTH",
     "MAX_SUPPORTED_NESTING_DEPTH",
+    "MAX_JSON_INTEGER_DIGITS",
     "ContentTypeMismatchError",
     "FormatMismatchError",
     "InvalidMetadataError",
@@ -51,6 +53,7 @@ EXPECTED_EXPORT_VALUES = [
     DEFAULT_MAX_OUTPUT_SIZE,
     DEFAULT_MAX_NESTING_DEPTH,
     MAX_SUPPORTED_NESTING_DEPTH,
+    MAX_JSON_INTEGER_DIGITS,
     ContentTypeMismatchError,
     FormatMismatchError,
     InvalidMetadataError,
@@ -87,6 +90,10 @@ ERROR_CASES = [
     (SerdeErrorCode.INPUT_LIMIT, "serialized payload exceeds max_input_size"),
     (SerdeErrorCode.OUTPUT_LIMIT, "serialized output exceeds max_output_size"),
     (SerdeErrorCode.NESTING_LIMIT, "JSON nesting exceeds max_nesting_depth"),
+    (
+        SerdeErrorCode.INTEGER_DIGIT_LIMIT,
+        "JSON integer exceeds MAX_JSON_INTEGER_DIGITS",
+    ),
     (SerdeErrorCode.INVALID_UTF8, "payload is not valid UTF-8"),
     (SerdeErrorCode.DUPLICATE_KEY, "JSON object contains a duplicate key"),
     (
@@ -158,6 +165,7 @@ def test_contract_enums_have_exact_public_values() -> None:
         "input_limit",
         "output_limit",
         "nesting_limit",
+        "integer_digit_limit",
         "invalid_utf8",
         "duplicate_key",
         "decode_non_finite_number",
@@ -447,6 +455,11 @@ VARIABLE_ERROR_CASES = [
         SerdeErrorCode.NESTING_LIMIT,
         "JSON nesting exceeds max_nesting_depth",
     ),
+    (
+        PayloadLimitError,
+        SerdeErrorCode.INTEGER_DIGIT_LIMIT,
+        "JSON integer exceeds MAX_JSON_INTEGER_DIGITS",
+    ),
     (MalformedPayloadError, SerdeErrorCode.INVALID_UTF8, "payload is not valid UTF-8"),
     (
         MalformedPayloadError,
@@ -487,6 +500,7 @@ VARIABLE_ERROR_ALLOWED_CODES = {
             SerdeErrorCode.INPUT_LIMIT,
             SerdeErrorCode.OUTPUT_LIMIT,
             SerdeErrorCode.NESTING_LIMIT,
+            SerdeErrorCode.INTEGER_DIGIT_LIMIT,
         }
     ),
     MalformedPayloadError: frozenset(

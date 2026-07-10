@@ -12,6 +12,7 @@ from bluetape.serde import (
     DEFAULT_MAX_INPUT_SIZE,
     DEFAULT_MAX_NESTING_DEPTH,
     DEFAULT_MAX_OUTPUT_SIZE,
+    MAX_JSON_INTEGER_DIGITS,
     MAX_SUPPORTED_NESTING_DEPTH,
     ContentTypeMismatchError,
     FormatMismatchError,
@@ -37,6 +38,7 @@ EXPECTED_EXPORTS = [
     "DEFAULT_MAX_OUTPUT_SIZE",
     "DEFAULT_MAX_NESTING_DEPTH",
     "MAX_SUPPORTED_NESTING_DEPTH",
+    "MAX_JSON_INTEGER_DIGITS",
     "ContentTypeMismatchError",
     "FormatMismatchError",
     "InvalidMetadataError",
@@ -59,6 +61,7 @@ DIRECT_EXPORTS = [
     DEFAULT_MAX_OUTPUT_SIZE,
     DEFAULT_MAX_NESTING_DEPTH,
     MAX_SUPPORTED_NESTING_DEPTH,
+    MAX_JSON_INTEGER_DIGITS,
     ContentTypeMismatchError,
     FormatMismatchError,
     InvalidMetadataError,
@@ -88,6 +91,14 @@ _LARGE_VALID_JSON_PADDING_SIZE = (
 LARGE_VALID_JSON_PAYLOAD = (
     _LARGE_VALID_JSON_PREFIX + b"x" * _LARGE_VALID_JSON_PADDING_SIZE + _LARGE_VALID_JSON_SUFFIX
 )
+if hasattr(sys, "set_int_max_str_digits"):
+    _INTEGER_DIGIT_SETTINGS = [
+        pytest.param(sys.int_info.default_max_str_digits, id="default"),
+        pytest.param(sys.int_info.str_digits_check_threshold, id="minimum"),
+        pytest.param(0, id="disabled"),
+    ]
+else:
+    _INTEGER_DIGIT_SETTINGS = [pytest.param(None, id="unavailable")]
 
 
 def metadata(
@@ -122,22 +133,27 @@ def assert_error(
     assert error.__context__ is None
 
 
-def assert_decode_traceback_does_not_retain_source(
+def assert_traceback_does_not_retain_source(
     error: Exception,
     *,
+    forbidden_local_names: frozenset[str] = frozenset(),
+    source_values: tuple[object, ...] = (),
+    source_keys: frozenset[str] = frozenset(),
     raw_source: bytes | None = None,
     text_source: str | None = None,
 ) -> None:
+    assert error.__cause__ is None
+    assert error.__context__ is None
     traceback = error.__traceback__
     while traceback is not None:
         frame = traceback.tb_frame
         if frame.f_code.co_filename.endswith("/bluetape/serde/_json.py"):
-            assert frame.f_code.co_name != "_preflight_json_text"
-            if frame.f_code.co_name == "json_deserialize":
-                assert "payload" not in frame.f_locals
-                assert "data" not in frame.f_locals
-                assert "text" not in frame.f_locals
+            assert frame.f_code.co_name in {"json_deserialize", "json_serialize"}
+            assert forbidden_local_names.isdisjoint(frame.f_locals)
             for value in frame.f_locals.values():
+                assert all(value is not source for source in source_values)
+                if type(value) is str:
+                    assert value not in source_keys
                 if raw_source is not None:
                     if type(value) is bytes:
                         assert value != raw_source
@@ -146,6 +162,20 @@ def assert_decode_traceback_does_not_retain_source(
                 if text_source is not None and type(value) is str:
                     assert value != text_source
         traceback = traceback.tb_next
+
+
+def assert_decode_traceback_does_not_retain_source(
+    error: Exception,
+    *,
+    raw_source: bytes | None = None,
+    text_source: str | None = None,
+) -> None:
+    assert_traceback_does_not_retain_source(
+        error,
+        forbidden_local_names=frozenset({"payload", "data", "text"}),
+        raw_source=raw_source,
+        text_source=text_source,
+    )
 
 
 def nested_list(depth: int) -> JsonValue:
@@ -175,6 +205,9 @@ def test_json_public_contract_has_exact_exports_constants_and_signature() -> Non
     assert DEFAULT_MAX_OUTPUT_SIZE == 16 * 1024 * 1024
     assert DEFAULT_MAX_NESTING_DEPTH == 100
     assert MAX_SUPPORTED_NESTING_DEPTH == 256
+    assert MAX_JSON_INTEGER_DIGITS == 640
+    assert "MAX_JSON_INTEGER_DIGITS" in (json_serialize.__doc__ or "")
+    assert "MAX_JSON_INTEGER_DIGITS" in (json_deserialize.__doc__ or "")
 
     signature = inspect.signature(json_serialize)
     assert list(signature.parameters) == [
@@ -459,6 +492,73 @@ def test_json_serialize_rejects_non_finite_numbers(value: float) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        10**639,
+        -(10**639),
+        {"nested": [10**639]},
+    ],
+)
+@pytest.mark.parametrize("setting", _INTEGER_DIGIT_SETTINGS)
+def test_json_serialize_accepts_integers_at_640_decimal_digits(
+    value: JsonValue,
+    setting: int | None,
+) -> None:
+    original = sys.get_int_max_str_digits() if setting is not None else None
+    try:
+        if setting is not None:
+            sys.set_int_max_str_digits(setting)
+        payload = json_serialize(value, metadata=metadata())
+    finally:
+        if original is not None:
+            sys.set_int_max_str_digits(original)
+
+    assert json_deserialize(payload, expected_metadata=metadata()) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        10**640,
+        -(10**640),
+        {"nested": [10**640]},
+    ],
+)
+@pytest.mark.parametrize("setting", _INTEGER_DIGIT_SETTINGS)
+def test_json_serialize_rejects_integers_over_640_digits_before_encoder(
+    monkeypatch: pytest.MonkeyPatch,
+    value: JsonValue,
+    setting: int | None,
+) -> None:
+    monkeypatch.setattr(
+        "bluetape.serde._json.json.JSONEncoder",
+        lambda **_options: pytest.fail("encoder was constructed"),
+    )
+
+    original = sys.get_int_max_str_digits() if setting is not None else None
+    try:
+        if setting is not None:
+            sys.set_int_max_str_digits(setting)
+        with pytest.raises(PayloadLimitError) as caught:
+            json_serialize(value, metadata=metadata())
+    finally:
+        if original is not None:
+            sys.set_int_max_str_digits(original)
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.INTEGER_DIGIT_LIMIT,
+        message="JSON integer exceeds MAX_JSON_INTEGER_DIGITS",
+    )
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(value,),
+    )
+
+
 def test_json_serialize_rejects_cycles_but_allows_shared_references() -> None:
     cyclic: list[JsonValue] = []
     cyclic.append(cyclic)
@@ -555,6 +655,81 @@ def test_preflight_auxiliary_memory_does_not_scale_with_wide_sibling_count() -> 
     assert wide_peak - narrow_peak < 64 * 1024
 
 
+def test_json_serialize_high_chunk_count_uses_bounded_adapter_allocation() -> None:
+    value: JsonValue = [0] * 100_000
+
+    tracemalloc.start()
+    payload = json_serialize(value, metadata=metadata())
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert payload.data == b"[" + b"0," * 99_999 + b"0]"
+    assert peak < len(payload.data) * 4 + 64 * 1024
+
+
+@pytest.mark.parametrize(
+    ("payload_metadata", "error_type"),
+    [
+        (metadata(format_name="msgpack"), FormatMismatchError),
+        (metadata(content_type="text/plain"), ContentTypeMismatchError),
+        (metadata(version=2), UnsupportedVersionError),
+    ],
+)
+def test_json_serialize_metadata_errors_do_not_retain_caller_value(
+    payload_metadata: PayloadMetadata,
+    error_type: type[SerdeError],
+) -> None:
+    value: JsonValue = {"ENCODE_METADATA_PRIVATE_KEY": "private value"}
+
+    with pytest.raises(error_type) as caught:
+        json_serialize(value, metadata=payload_metadata)
+
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(value, payload_metadata),
+        source_keys=frozenset({"ENCODE_METADATA_PRIVATE_KEY"}),
+    )
+
+
+@pytest.mark.parametrize(
+    ("value_factory", "error_type"),
+    [
+        (lambda: object(), SerdeEncodeError),
+        (lambda: math.nan, SerdeEncodeError),
+        (lambda: nested_list(2), PayloadLimitError),
+    ],
+)
+def test_json_serialize_preflight_errors_do_not_retain_traversal_state(
+    value_factory: object,
+    error_type: type[SerdeError],
+) -> None:
+    value = value_factory()  # type: ignore[operator]
+
+    with pytest.raises(error_type) as caught:
+        json_serialize(value, metadata=metadata(), max_nesting_depth=1)  # type: ignore[arg-type]
+
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(value,),
+    )
+
+
+def test_json_serialize_circular_error_does_not_retain_traversal_state() -> None:
+    value: list[JsonValue] = []
+    value.append(value)
+
+    with pytest.raises(SerdeEncodeError) as caught:
+        json_serialize(value, metadata=metadata())
+
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(value,),
+    )
+
+
 def test_json_serialize_accepts_exact_output_limit_and_stops_at_first_excess_chunk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -591,8 +766,9 @@ def test_json_serialize_accepts_exact_output_limit_and_stops_at_first_excess_chu
 
     requested.clear()
     monkeypatch.setattr("bluetape.serde._json.json.JSONEncoder", ExcessEncoder)
+    source_value: JsonValue = {"OUTPUT_LIMIT_PRIVATE_KEY": "private value"}
     with pytest.raises(PayloadLimitError) as caught:
-        json_serialize(None, metadata=metadata(), max_output_size=2)
+        json_serialize(source_value, metadata=metadata(), max_output_size=2)
 
     assert requested == ["first", "second"]
     assert_error(
@@ -600,6 +776,22 @@ def test_json_serialize_accepts_exact_output_limit_and_stops_at_first_excess_chu
         error_type=PayloadLimitError,
         code=SerdeErrorCode.OUTPUT_LIMIT,
         message="serialized output exceeds max_output_size",
+    )
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset(
+            {
+                "value",
+                "metadata",
+                "output",
+                "chunks",
+                "chunk",
+                "encoded_chunk",
+                "encoder",
+            }
+        ),
+        source_values=(source_value,),
+        source_keys=frozenset({"OUTPUT_LIMIT_PRIVATE_KEY"}),
     )
 
 
@@ -638,12 +830,29 @@ def test_json_serialize_translates_encoder_failures_without_chaining_or_marker(
             yield "unreachable"
 
     monkeypatch.setattr("bluetape.serde._json.json.JSONEncoder", FailingEncoder)
+    source_value: JsonValue = {"ENCODER_FAILURE_PRIVATE_KEY": "private value"}
 
     with pytest.raises(SerdeEncodeError) as caught:
-        json_serialize(None, metadata=metadata())
+        json_serialize(source_value, metadata=metadata())
 
     assert_error(caught, error_type=SerdeEncodeError, code=code, message=message)
     assert "private marker" not in repr(caught.value)
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset(
+            {
+                "value",
+                "metadata",
+                "output",
+                "chunks",
+                "chunk",
+                "encoded_chunk",
+                "encoder",
+            }
+        ),
+        source_values=(source_value,),
+        source_keys=frozenset({"ENCODER_FAILURE_PRIVATE_KEY"}),
+    )
 
 
 @pytest.mark.parametrize("fatal_error", [MemoryError(), KeyboardInterrupt(), SystemExit()])
@@ -691,6 +900,62 @@ def test_json_deserialize_decodes_strict_json_identically_for_both_profiles(
         )
         == expected
     )
+
+
+@pytest.mark.parametrize("setting", _INTEGER_DIGIT_SETTINGS)
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        (b"9" * 640, 10**640 - 1),
+        (b"-" + b"9" * 640, -(10**640 - 1)),
+        (b'{"nested":[' + b"9" * 640 + b"]}", {"nested": [10**640 - 1]}),
+    ],
+)
+def test_json_deserialize_accepts_640_digit_integers_independent_of_global_limit(
+    setting: int | None,
+    data: bytes,
+    expected: JsonValue,
+) -> None:
+    original = sys.get_int_max_str_digits() if setting is not None else None
+    try:
+        if setting is not None:
+            sys.set_int_max_str_digits(setting)
+        assert json_deserialize(serialized(data), expected_metadata=metadata()) == expected
+    finally:
+        if original is not None:
+            sys.set_int_max_str_digits(original)
+
+
+@pytest.mark.parametrize("setting", _INTEGER_DIGIT_SETTINGS)
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"9" * 641,
+        b"-" + b"9" * 641,
+        b'{"nested":[' + b"9" * 641 + b"]}",
+    ],
+)
+def test_json_deserialize_rejects_641_digit_integers_independent_of_global_limit(
+    setting: int | None,
+    data: bytes,
+) -> None:
+    original = sys.get_int_max_str_digits() if setting is not None else None
+    try:
+        if setting is not None:
+            sys.set_int_max_str_digits(setting)
+        with pytest.raises(PayloadLimitError) as caught:
+            json_deserialize(serialized(data), expected_metadata=metadata())
+    finally:
+        if original is not None:
+            sys.set_int_max_str_digits(original)
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.INTEGER_DIGIT_LIMIT,
+        message="JSON integer exceeds MAX_JSON_INTEGER_DIGITS",
+    )
+    assert_decode_traceback_does_not_retain_source(caught.value, raw_source=data)
 
 
 class HostilePayload:
@@ -925,6 +1190,43 @@ def test_json_deserialize_compares_actual_metadata_in_deterministic_order(
         )
 
     assert_error(caught, error_type=error_type, code=code, message=message)
+
+
+@pytest.mark.parametrize(
+    ("actual", "expected", "error_type"),
+    [
+        (metadata(format_name="msgpack"), metadata(), FormatMismatchError),
+        (metadata(content_type="text/plain"), metadata(), ContentTypeMismatchError),
+        (metadata(version=2), metadata(), UnsupportedVersionError),
+        (
+            metadata(trust_profile=TrustProfile.TRUSTED_INTERNAL),
+            metadata(),
+            TrustProfileMismatchError,
+        ),
+        (metadata(), metadata(format_name="msgpack"), FormatMismatchError),
+        (metadata(), metadata(content_type="text/plain"), ContentTypeMismatchError),
+        (metadata(), metadata(version=2), UnsupportedVersionError),
+    ],
+)
+def test_json_deserialize_metadata_errors_do_not_retain_caller_payload(
+    actual: PayloadMetadata,
+    expected: PayloadMetadata,
+    error_type: type[SerdeError],
+) -> None:
+    payload = serialized(
+        b'{"DECODE_METADATA_PRIVATE_KEY":"private value"}',
+        payload_metadata=actual,
+    )
+
+    with pytest.raises(error_type) as caught:
+        json_deserialize(payload, expected_metadata=expected)
+
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"payload", "expected_metadata", "data", "text"}),
+        source_values=(payload, actual, expected),
+        source_keys=frozenset({"DECODE_METADATA_PRIVATE_KEY"}),
+    )
 
 
 def test_json_deserialize_enforces_exact_byte_input_limit_before_decode_or_parse(

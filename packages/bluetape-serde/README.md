@@ -18,7 +18,18 @@ uv build --package bluetape-serde
 ```
 
 After building, the generated wheel can be installed into an isolated local
-environment. PyPI commands such as these are intentionally unavailable today:
+environment and exercised end to end:
+
+```bash
+tmp_dir="$(mktemp -d)"
+uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
+uv venv "$tmp_dir/venv"
+uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serde-*.whl
+"$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"order_id": 42}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"order_id": 42}'
+rm -rf "$tmp_dir"
+```
+
+PyPI commands such as these are intentionally unavailable today:
 
 ```bash
 pip install bluetape-serde
@@ -38,11 +49,15 @@ Import the public surface from `bluetape.serde`:
   `JsonValue`;
 - operations: `json_serialize` and `json_deserialize`;
 - limits: `DEFAULT_MAX_INPUT_SIZE`, `DEFAULT_MAX_OUTPUT_SIZE`,
-  `DEFAULT_MAX_NESTING_DEPTH`, and `MAX_SUPPORTED_NESTING_DEPTH`;
+  `DEFAULT_MAX_NESTING_DEPTH`, `MAX_SUPPORTED_NESTING_DEPTH`, and
+  `MAX_JSON_INTEGER_DIGITS`;
 - failures: `SerdeError`, `InvalidMetadataError`, `FormatMismatchError`,
   `ContentTypeMismatchError`, `UnsupportedVersionError`,
   `TrustProfileMismatchError`, `PayloadLimitError`, `MalformedPayloadError`,
   `SerdeEncodeError`, and `SerdeErrorCode`.
+
+The ordered public surface contains 21 exports and `SerdeErrorCode` contains
+17 fixed codes.
 
 `PayloadMetadata` and `SerializedPayload` are frozen, slotted, keyword-only
 dataclasses. `SerializedPayload.data` accepts exact immutable `bytes`.
@@ -163,6 +178,9 @@ limits. There is no permissive trusted decoder.
   `DEFAULT_MAX_INPUT_SIZE == DEFAULT_MAX_OUTPUT_SIZE == 16 * 1024 * 1024`.
 - Default nesting depth is `DEFAULT_MAX_NESTING_DEPTH == 100`; callers may
   lower it, but the hard ceiling is `MAX_SUPPORTED_NESTING_DEPTH == 256`.
+- Every exact JSON integer is limited to
+  `MAX_JSON_INTEGER_DIGITS == 640` decimal digits. The boundary is identical
+  for encode and decode and does not depend on `sys.set_int_max_str_digits`.
 - Decode requires strict UTF-8, exact JSON syntax, unique object keys, and
   finite numbers. `NaN`, `Infinity`, duplicate keys, malformed text, and
   invalid UTF-8 are rejected.
@@ -173,6 +191,9 @@ limits. There is no permissive trusted decoder.
 - Metadata comparison is exact. Wrong format, content type, version, or trust
   profile is a hard typed failure. Unsupported versions never fall back.
 
+Encode extends one `bytearray` with accepted UTF-8 chunks and converts it to
+`bytes` once; it does not retain a list of per-chunk byte objects.
+
 The 16 MiB limits bound accepted input bytes and emitted output bytes. They do
 not guarantee a fixed process-memory ceiling: Python decoding, strings, object
 graphs, and encoder chunks can require additional memory. Set smaller limits
@@ -181,9 +202,11 @@ required.
 
 ## Stable Errors
 
-All serde failures inherit from `SerdeError`, expose an immutable `.code`, and
-use fixed payload-free messages. Catch the narrow class when recovery differs,
-or catch `SerdeError` and switch on `SerdeErrorCode`:
+All serde domain failures inherit from `SerdeError`, expose an immutable
+`.code`, and use fixed payload-free messages. Caller type and configuration
+mistakes remain native `TypeError` or `ValueError`; they are not wrapped as
+`SerdeError`. Catch the narrow domain class when recovery differs, or catch
+`SerdeError` and switch on `SerdeErrorCode`:
 
 | Error class | Codes |
 |---|---|
@@ -192,7 +215,7 @@ or catch `SerdeError` and switch on `SerdeErrorCode`:
 | `ContentTypeMismatchError` | `CONTENT_TYPE_MISMATCH` |
 | `UnsupportedVersionError` | `UNSUPPORTED_VERSION` |
 | `TrustProfileMismatchError` | `TRUST_PROFILE_MISMATCH` |
-| `PayloadLimitError` | `INPUT_LIMIT`, `OUTPUT_LIMIT`, `NESTING_LIMIT` |
+| `PayloadLimitError` | `INPUT_LIMIT`, `OUTPUT_LIMIT`, `NESTING_LIMIT`, `INTEGER_DIGIT_LIMIT` |
 | `MalformedPayloadError` | `INVALID_UTF8`, `DUPLICATE_KEY`, `DECODE_NON_FINITE_NUMBER`, `INVALID_JSON` |
 | `SerdeEncodeError` | `UNSUPPORTED_VALUE`, `CIRCULAR_REFERENCE`, `ENCODE_NON_FINITE_NUMBER`, `ENCODE_RECURSION` |
 

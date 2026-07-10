@@ -110,6 +110,18 @@ uv sync --all-packages
 uv run --package bluetape-serde python -c "import bluetape.serde"
 ```
 
+현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
+실행할 수 있습니다.
+
+```bash
+tmp_dir="$(mktemp -d)"
+uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
+uv venv "$tmp_dir/venv"
+uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serde-*.whl
+"$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"order_id": 42}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"order_id": 42}'
+rm -rf "$tmp_dir"
+```
+
 현재 실행 가능한 경로는 로컬 workspace와 로컬 wheel뿐입니다. 위 `pip` 명령과
 향후 `serde` extra는 PyPI 배포가 활성화되기 전에는 registry에서 사용할 수 없습니다.
 
@@ -225,8 +237,12 @@ assert json_deserialize(payload, expected_metadata=consumer_policy) == {"order_i
 인가된 폐쇄 경계에서만 허용하며, 네트워크 위치나 payload 주장은 충분하지 않습니다.
 두 profile 모두 strict UTF-8 JSON, 정확한 metadata, duplicate key/non-finite number
 거부, 기본 input/output 16 MiB, 기본 depth 100, hard ceiling 256을 동일하게 적용합니다.
+Encode와 decode의 JSON 정수는 전역 CPython 설정과 무관하게 최대 640자리로
+제한됩니다.
 Byte 제한만으로 process memory 상한이 보장되지는 않습니다. 오류 처리와 버전별
 rollout/rollback은 package README를 참고하십시오.
+`SerdeError`는 안정된 serde domain failure를 나타내며, 호출자의 type/configuration
+오류는 native `TypeError` 또는 `ValueError`로 유지됩니다.
 
 ## 패키지 문서
 

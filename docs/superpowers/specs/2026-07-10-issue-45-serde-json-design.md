@@ -1,7 +1,7 @@
 # Issue #45 Strict Serde JSON Design
 
 Date: 2026-07-10
-Status: Approved; Step 2-R reviewed, P0=0 P1=0
+Status: Approved; Step 6-R reviewed contract corrections integrated
 Scope: issue #45, milestone `0.2.0`, `bluetape-serde`
 
 ## Problem
@@ -105,7 +105,7 @@ install unchanged.
 
 ## Public Contract
 
-The package exposes only the following public concepts in the first slice:
+The package exposes exactly 21 ordered public names in the first slice:
 
 ```python
 from bluetape.serde import (
@@ -113,6 +113,7 @@ from bluetape.serde import (
     DEFAULT_MAX_OUTPUT_SIZE,
     DEFAULT_MAX_NESTING_DEPTH,
     MAX_SUPPORTED_NESTING_DEPTH,
+    MAX_JSON_INTEGER_DIGITS,
     ContentTypeMismatchError,
     FormatMismatchError,
     InvalidMetadataError,
@@ -249,13 +250,17 @@ record the public replacement inside the `except` block and raise it only after
 leaving that block. The resulting public error must have both `__cause__ is
 None` and `__context__ is None`; `raise ... from None` inside the handler is
 insufficient because it retains payload-bearing exceptions in `__context__`.
+Public adapter errors cross a narrow cloning boundary as type/code only. The
+caller `payload`/`value` and derived data, text, traversal, encoder, chunk, and
+output-buffer locals are cleared before a fresh public error is raised; no
+`_json.py` helper traceback frame may retain traversal state.
 `MemoryError`, `KeyboardInterrupt`, and `SystemExit` remain native.
 
 Every `SerdeError` exposes a stable `code: SerdeErrorCode` rather than requiring
-message parsing. `SerdeErrorCode` is a `StrEnum` with these first-slice values:
+message parsing. `SerdeErrorCode` is a `StrEnum` with these 17 first-slice values:
 `invalid_metadata`, `format_mismatch`, `content_type_mismatch`,
 `unsupported_version`, `trust_profile_mismatch`, `input_limit`,
-`output_limit`, `nesting_limit`, `invalid_utf8`, `duplicate_key`,
+`output_limit`, `nesting_limit`, `integer_digit_limit`, `invalid_utf8`, `duplicate_key`,
 `decode_non_finite_number`, `invalid_json`, `unsupported_value`,
 `circular_reference`, `encode_non_finite_number`, and `encode_recursion`.
 Messages and concrete classes are fixed by this matrix:
@@ -270,6 +275,7 @@ Messages and concrete classes are fixed by this matrix:
 | `PayloadLimitError` | `input_limit` | `serialized payload exceeds max_input_size` |
 | `PayloadLimitError` | `output_limit` | `serialized output exceeds max_output_size` |
 | `PayloadLimitError` | `nesting_limit` | `JSON nesting exceeds max_nesting_depth` |
+| `PayloadLimitError` | `integer_digit_limit` | `JSON integer exceeds MAX_JSON_INTEGER_DIGITS` |
 | `MalformedPayloadError` | `invalid_utf8` | `payload is not valid UTF-8` |
 | `MalformedPayloadError` | `duplicate_key` | `JSON object contains a duplicate key` |
 | `MalformedPayloadError` | `decode_non_finite_number` | `JSON payload contains a non-finite number` |
@@ -333,7 +339,10 @@ The decode sequence is fixed:
    regex, slicing, recursion, or backtracking, keep only constant scanner state,
    and fail immediately when open-container depth is greater than
    `max_nesting_depth`.
-6. Parse with strict constant and duplicate-key hooks. Translate
+6. Parse with strict constant, integer, and duplicate-key hooks. The integer
+   hook rejects more than `MAX_JSON_INTEGER_DIGITS` decimal digits before
+   calling `int()`, so behavior is independent of CPython's process-global
+   integer-string digit setting. Translate
    `json.JSONDecodeError`, strict hook failures, and `RecursionError` to fixed,
    payload-free `MalformedPayloadError` only after leaving the handler so no
    payload-bearing context is retained; decode `RecursionError` uses the
@@ -346,19 +355,22 @@ custom objects, non-string keys, non-finite numbers, cycles, and container depth
 over the configured limit. An active-container identity set distinguishes
 cycles from repeated shared references. This prevents key coercion such as
 `{1: "a", "1": "b"}` from producing duplicate wire keys and prevents hidden
-user-defined conversion hooks.
+user-defined conversion hooks. Exact integers whose absolute value has more
+than `MAX_JSON_INTEGER_DIGITS` decimal digits are rejected by arithmetic
+comparison without decimal string conversion.
 
 Encode uses a compact `json.JSONEncoder(...).iterencode()` stream with
-`allow_nan=False`. It UTF-8 encodes each emitted text chunk, maintains one
-remaining byte budget, and stops consuming encoder output as soon as the next
-chunk would exceed `max_output_size`. Only accepted chunks are joined into the
-final `bytes`, so an oversized result is not first assembled as one complete
-`str` and then copied to a complete `bytes` value. A single stdlib encoder
+`allow_nan=False`. It UTF-8 encodes each emitted text chunk, compares it with
+the remaining byte budget, and stops consuming encoder output as soon as the
+next chunk would exceed `max_output_size`. Accepted chunks extend one
+`bytearray` immediately, and the completed buffer is converted to `bytes`
+exactly once. A single stdlib encoder
 chunk may still be larger than the remaining budget, and the caller already
 owns the source object graph; the limit bounds accepted aggregate adapter
 output, not peak process memory.
 
-Defaults are explicit constants: 16 MiB for input and output and depth 100.
+Defaults are explicit constants: 16 MiB for input and output, depth 100, and
+`MAX_JSON_INTEGER_DIGITS == 640` for every exact JSON integer.
 The JSON default is deliberately lower than compression's 64 MiB returned-byte
 default because decoding JSON creates a Python object tree with substantially
 more overhead than the UTF-8 payload.
@@ -397,7 +409,9 @@ must pass Python/Go/Rust/Kotlin conformance fixtures before release.
 | Stdlib JSON accepts attacker-controlled duplicate keys or non-finite values. | Configure duplicate-key and constant rejection in every decode path and test both profiles. |
 | Brackets inside quoted or escaped strings falsely consume depth budget. | Implement a byte/character scanner that tracks quote and escape state; test bracket and backslash fixtures. |
 | A large encode result allocates before the output limit check. | Consume `JSONEncoder.iterencode()` incrementally, account UTF-8 bytes per chunk, stop before final assembly, and test that later encoder chunks are not consumed after the limit fails. |
-| Raw input appears in exceptions. | Use fixed reason categories and suppress upstream payload-carrying messages; assert recognizable payload markers are absent. |
+| High chunk counts retain one allocation per encoder chunk. | Extend one bounded `bytearray`, convert once, and use a prebuilt high-chunk-count `tracemalloc` regression with a stable small output multiple. |
+| Raw input appears in exceptions or tracebacks. | Clone only public error type/code across a narrow boundary, clear caller and derived locals before raising a fresh error, and assert no `_json.py` helper frame or source identity remains. |
+| Integer acceptance varies with `sys.set_int_max_str_digits`. | Enforce the fixed 640-digit contract before encode string conversion and through a decode `parse_int` hook before `int()`. |
 | The optional package leaks into default installation. | Inspect built wheel metadata and create an isolated meta-wheel smoke test proving only core is installed by default. |
 | Future Fory work bypasses this boundary. | Keep Fory out of this package and retain #46's explicit trusted-only and conformance gates. |
 
@@ -439,7 +453,7 @@ relationship.
    `"{[]}"`; depth-boundary and near-input-limit adversarial fixtures prove
    linear work and constant extra state.
 6. Encode rejects result bytes over the output limit while consuming
-   `iterencode()` output and does not consume later chunks after failure;
+   `iterencode()` output, uses one incremental `bytearray`, and does not consume later chunks after failure;
    unsupported and circular values become fixed, payload-free
    `SerdeEncodeError`; configured depth excess becomes `PayloadLimitError` with
    `nesting_limit`, while an unexpected encoder `RecursionError` becomes
@@ -447,7 +461,9 @@ relationship.
    limit argument shapes before consuming data. Encode also rejects non-string
    object keys, key-coercion collisions, cycles, non-native value types, and
    container depth over the configured bound. The error class/code/message
-   matrix is exhaustively tested.
+   matrix is exhaustively tested. Integers at 640 decimal digits succeed and
+   641-digit integers fail identically on encode and decode regardless of the
+   available CPython global integer-string digit setting.
 7. Deployment docs specify reader-first rollout, versioned coexistence,
    rollback write-stop/order, and hard-reject version recovery. The #46 handoff
    preserves the envelope, trust, finite-limit, no-dynamic-type-loading, and

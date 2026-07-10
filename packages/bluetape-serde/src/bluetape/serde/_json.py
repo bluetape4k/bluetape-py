@@ -23,10 +23,13 @@ DEFAULT_MAX_INPUT_SIZE = 16 * 1024 * 1024
 DEFAULT_MAX_OUTPUT_SIZE = 16 * 1024 * 1024
 DEFAULT_MAX_NESTING_DEPTH = 100
 MAX_SUPPORTED_NESTING_DEPTH = 256
+MAX_JSON_INTEGER_DIGITS = 640
+_MAX_JSON_INTEGER_MAGNITUDE = 10**MAX_JSON_INTEGER_DIGITS
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 type _TraversalFrame = tuple[int, Iterator[object]]
+type _SerdeErrorSpec = tuple[type[SerdeError], SerdeErrorCode]
 
 
 class _DuplicateKeyError(ValueError):
@@ -41,8 +44,29 @@ class _NestingLimitError(ValueError):
     pass
 
 
+class _IntegerDigitLimitError(ValueError):
+    pass
+
+
 def _unsupported_value_error() -> SerdeEncodeError:
     return SerdeEncodeError(code=SerdeErrorCode.UNSUPPORTED_VALUE)
+
+
+def _error_spec(error: SerdeError) -> _SerdeErrorSpec:
+    return type(error), error.code
+
+
+def _fresh_serde_error(spec: _SerdeErrorSpec) -> SerdeError:
+    error_type, code = spec
+    if error_type is FormatMismatchError:
+        return FormatMismatchError()
+    if error_type is ContentTypeMismatchError:
+        return ContentTypeMismatchError()
+    if error_type is UnsupportedVersionError:
+        return UnsupportedVersionError()
+    if error_type is TrustProfileMismatchError:
+        return TrustProfileMismatchError()
+    return error_type(code=code)  # type: ignore[call-arg]
 
 
 def _dict_values(value: dict[str, JsonValue]) -> Iterator[JsonValue]:
@@ -62,7 +86,10 @@ def _preflight_json_value(value: object, *, max_nesting_depth: int) -> None:
         current_type = type(current)
         if current is None or current_type is bool:
             pass
-        elif current_type is int or current_type is str:
+        elif current_type is int:
+            if current >= _MAX_JSON_INTEGER_MAGNITUDE or current <= -_MAX_JSON_INTEGER_MAGNITUDE:
+                raise PayloadLimitError(code=SerdeErrorCode.INTEGER_DIGIT_LIMIT)
+        elif current_type is str:
             pass
         elif current_type is float:
             if not math.isfinite(current):
@@ -212,6 +239,13 @@ def _parse_finite_float(value: str) -> float:
     return parsed
 
 
+def _parse_limited_int(value: str) -> int:
+    digit_count = len(value) - (value.startswith("-"))
+    if digit_count > MAX_JSON_INTEGER_DIGITS:
+        raise _IntegerDigitLimitError
+    return int(value)
+
+
 def json_deserialize(
     payload: SerializedPayload,
     *,
@@ -219,23 +253,31 @@ def json_deserialize(
     max_input_size: int = DEFAULT_MAX_INPUT_SIZE,
     max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
 ) -> JsonValue:
-    """Deserialize strict UTF-8 JSON under caller metadata and resource limits."""
+    """Deserialize strict UTF-8 JSON with at most MAX_JSON_INTEGER_DIGITS per integer."""
     _validate_deserialize_configuration(
         payload=payload,
         expected_metadata=expected_metadata,
         max_input_size=max_input_size,
         max_nesting_depth=max_nesting_depth,
     )
-    _validate_json_metadata(expected_metadata)
-    _validate_actual_metadata(payload.metadata, expected=expected_metadata)
+    metadata_error: _SerdeErrorSpec | None = None
+    try:
+        _validate_json_metadata(expected_metadata)
+        _validate_actual_metadata(payload.metadata, expected=expected_metadata)
+    except SerdeError as error:
+        metadata_error = _error_spec(error)
+
+    if metadata_error is not None:
+        del payload, expected_metadata
+        raise _fresh_serde_error(metadata_error)
 
     data = _payload_data(payload)
     if len(data) > max_input_size:
-        input_limit = PayloadLimitError(code=SerdeErrorCode.INPUT_LIMIT)
-        del payload, data
-        raise input_limit
+        error_spec: _SerdeErrorSpec = (PayloadLimitError, SerdeErrorCode.INPUT_LIMIT)
+        del payload, expected_metadata, data
+        raise _fresh_serde_error(error_spec)
 
-    replacement: MalformedPayloadError | None = None
+    replacement: SerdeError | None = None
     text: str | None = None
     try:
         text = _decode_utf8(data)
@@ -243,8 +285,9 @@ def json_deserialize(
         replacement = MalformedPayloadError(code=SerdeErrorCode.INVALID_UTF8)
 
     if replacement is not None:
-        del payload, data, text
-        raise replacement
+        error_spec = _error_spec(replacement)
+        del payload, expected_metadata, data, text, replacement
+        raise _fresh_serde_error(error_spec)
     if text is None:
         raise AssertionError("UTF-8 decoder returned no text")
 
@@ -255,8 +298,9 @@ def json_deserialize(
         nesting_limit = PayloadLimitError(code=SerdeErrorCode.NESTING_LIMIT)
 
     if nesting_limit is not None:
-        del payload, data, text
-        raise nesting_limit
+        error_spec = _error_spec(nesting_limit)
+        del payload, expected_metadata, data, text, nesting_limit
+        raise _fresh_serde_error(error_spec)
 
     result: JsonValue | None = None
     try:
@@ -265,19 +309,23 @@ def json_deserialize(
             object_pairs_hook=_reject_duplicate_keys,
             parse_constant=_reject_non_finite_constant,
             parse_float=_parse_finite_float,
+            parse_int=_parse_limited_int,
         )
     except _DuplicateKeyError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.DUPLICATE_KEY)
     except _NonFiniteNumberError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.DECODE_NON_FINITE_NUMBER)
+    except _IntegerDigitLimitError:
+        replacement = PayloadLimitError(code=SerdeErrorCode.INTEGER_DIGIT_LIMIT)
     except json.JSONDecodeError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.INVALID_JSON)
     except (ValueError, RecursionError):
         replacement = MalformedPayloadError(code=SerdeErrorCode.INVALID_JSON)
 
     if replacement is not None:
-        del payload, data, text
-        raise replacement
+        error_spec = _error_spec(replacement)
+        del payload, expected_metadata, data, text, result, replacement
+        raise _fresh_serde_error(error_spec)
     return result
 
 
@@ -288,18 +336,28 @@ def json_serialize(
     max_output_size: int = DEFAULT_MAX_OUTPUT_SIZE,
     max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
 ) -> SerializedPayload:
-    """Serialize an exact JSON value to compact UTF-8 within configured limits."""
+    """Serialize exact JSON with at most MAX_JSON_INTEGER_DIGITS per integer."""
     _validate_configuration(
         metadata=metadata,
         max_output_size=max_output_size,
         max_nesting_depth=max_nesting_depth,
     )
-    _validate_json_metadata(metadata)
-    _preflight_json_value(value, max_nesting_depth=max_nesting_depth)
+    preflight_error: _SerdeErrorSpec | None = None
+    try:
+        _validate_json_metadata(metadata)
+        _preflight_json_value(value, max_nesting_depth=max_nesting_depth)
+    except SerdeError as error:
+        preflight_error = _error_spec(error)
 
-    chunks: list[bytes] = []
-    output_size = 0
-    replacement: SerdeError | None = None
+    if preflight_error is not None:
+        del value, metadata
+        raise _fresh_serde_error(preflight_error)
+
+    output = bytearray()
+    encoder: json.JSONEncoder | None = None
+    chunk: str | None = None
+    encoded_chunk: bytes | None = None
+    replacement: _SerdeErrorSpec | None = None
     try:
         encoder = json.JSONEncoder(
             ensure_ascii=False,
@@ -309,17 +367,17 @@ def json_serialize(
         )
         for chunk in encoder.iterencode(value):
             encoded_chunk = chunk.encode("utf-8")
-            output_size += len(encoded_chunk)
-            if output_size > max_output_size:
-                replacement = PayloadLimitError(code=SerdeErrorCode.OUTPUT_LIMIT)
+            if len(encoded_chunk) > max_output_size - len(output):
+                replacement = (PayloadLimitError, SerdeErrorCode.OUTPUT_LIMIT)
                 break
-            chunks.append(encoded_chunk)
+            output.extend(encoded_chunk)
     except RecursionError:
-        replacement = SerdeEncodeError(code=SerdeErrorCode.ENCODE_RECURSION)
+        replacement = (SerdeEncodeError, SerdeErrorCode.ENCODE_RECURSION)
     except (TypeError, ValueError):
-        replacement = _unsupported_value_error()
+        replacement = (SerdeEncodeError, SerdeErrorCode.UNSUPPORTED_VALUE)
 
     if replacement is not None:
-        raise replacement
+        del value, metadata, output, encoder, chunk, encoded_chunk
+        raise _fresh_serde_error(replacement)
 
-    return SerializedPayload(metadata=metadata, data=b"".join(chunks))
+    return SerializedPayload(metadata=metadata, data=bytes(output))

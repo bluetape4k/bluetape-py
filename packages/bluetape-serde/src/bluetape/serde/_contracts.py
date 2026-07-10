@@ -23,6 +23,7 @@ class SerdeErrorCode(StrEnum):
     INPUT_LIMIT = "input_limit"
     OUTPUT_LIMIT = "output_limit"
     NESTING_LIMIT = "nesting_limit"
+    INTEGER_DIGIT_LIMIT = "integer_digit_limit"
     INVALID_UTF8 = "invalid_utf8"
     DUPLICATE_KEY = "duplicate_key"
     DECODE_NON_FINITE_NUMBER = "decode_non_finite_number"
@@ -44,6 +45,7 @@ _ERROR_MESSAGES: dict[SerdeErrorCode, str] = {
     SerdeErrorCode.INPUT_LIMIT: "serialized payload exceeds max_input_size",
     SerdeErrorCode.OUTPUT_LIMIT: "serialized output exceeds max_output_size",
     SerdeErrorCode.NESTING_LIMIT: "JSON nesting exceeds max_nesting_depth",
+    SerdeErrorCode.INTEGER_DIGIT_LIMIT: "JSON integer exceeds MAX_JSON_INTEGER_DIGITS",
     SerdeErrorCode.INVALID_UTF8: "payload is not valid UTF-8",
     SerdeErrorCode.DUPLICATE_KEY: "JSON object contains a duplicate key",
     SerdeErrorCode.DECODE_NON_FINITE_NUMBER: ("JSON payload contains a non-finite number"),
@@ -124,6 +126,7 @@ class PayloadLimitError(_RestrictedSerdeError):
             SerdeErrorCode.INPUT_LIMIT,
             SerdeErrorCode.OUTPUT_LIMIT,
             SerdeErrorCode.NESTING_LIMIT,
+            SerdeErrorCode.INTEGER_DIGIT_LIMIT,
         }
     )
 
