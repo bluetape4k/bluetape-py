@@ -37,6 +37,10 @@ class _NonFiniteNumberError(ValueError):
     pass
 
 
+class _NestingLimitError(ValueError):
+    pass
+
+
 def _unsupported_value_error() -> SerdeEncodeError:
     return SerdeEncodeError(code=SerdeErrorCode.UNSUPPORTED_VALUE)
 
@@ -183,7 +187,7 @@ def _preflight_json_text(text: str, *, max_nesting_depth: int) -> None:
         elif character == "[" or character == "{":
             depth += 1
             if depth > max_nesting_depth:
-                raise PayloadLimitError(code=SerdeErrorCode.NESTING_LIMIT)
+                raise _NestingLimitError
         elif (character == "]" or character == "}") and depth > 0:
             depth -= 1
 
@@ -227,7 +231,9 @@ def json_deserialize(
 
     data = _payload_data(payload)
     if len(data) > max_input_size:
-        raise PayloadLimitError(code=SerdeErrorCode.INPUT_LIMIT)
+        input_limit = PayloadLimitError(code=SerdeErrorCode.INPUT_LIMIT)
+        del payload, data
+        raise input_limit
 
     replacement: MalformedPayloadError | None = None
     text: str | None = None
@@ -242,7 +248,15 @@ def json_deserialize(
     if text is None:
         raise AssertionError("UTF-8 decoder returned no text")
 
-    _preflight_json_text(text, max_nesting_depth=max_nesting_depth)
+    nesting_limit: PayloadLimitError | None = None
+    try:
+        _preflight_json_text(text, max_nesting_depth=max_nesting_depth)
+    except _NestingLimitError:
+        nesting_limit = PayloadLimitError(code=SerdeErrorCode.NESTING_LIMIT)
+
+    if nesting_limit is not None:
+        del payload, data, text
+        raise nesting_limit
 
     result: JsonValue | None = None
     try:

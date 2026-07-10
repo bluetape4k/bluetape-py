@@ -31,7 +31,7 @@ historical proof.
 - Historical GREEN result at `5577ad8`: exit 0, `63 passed, 2 deselected`.
 - Current non-overlapping encode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_serialize or encode) and not (json_deserialize or decode)'`
-- Current non-overlapping encode result: exit 0, `63 passed, 85 deselected`.
+- Current non-overlapping encode result: exit 0, `63 passed, 87 deselected`.
 
 ## Task 4 strict bounded JSON decoding
 
@@ -41,9 +41,25 @@ historical proof.
   `json_deserialize` API was absent before production implementation. Pytest
   reported one collection error with `ImportError: cannot import name
   'json_deserialize' from 'bluetape.serde'`.
-- GREEN command:
+- Historical pre-retention-fix GREEN selector at `27d3fce`:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'deserialize or decode or depth'`
-- Current GREEN result: exit 0, `92 passed, 56 deselected`.
+- Historical selector result: exit 0, `92 passed, 56 deselected`, composed of
+  83 decode cases plus 9 encode-depth cases.
+- Traceback-retention RED command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'input_limit_traceback or nesting_limit_traceback'`
+- Captured traceback-retention RED result: exit 1, `2 failed, 148 deselected`;
+  INPUT_LIMIT retained payload/data and NESTING_LIMIT retained
+  payload/data/text plus the scanner frame.
+- Current traceback-retention GREEN result for the same command: exit 0,
+  `2 passed, 148 deselected`.
+- Current disjoint decode command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_deserialize or decode)'`
+- Current disjoint decode result: exit 0, `85 passed, 65 deselected`.
+- Current encode-depth-only command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'depth and not (json_deserialize or decode)'`
+- Current encode-depth-only result: exit 0, `9 passed, 141 deselected`.
+- Current aggregate Task 4 selector result: exit 0, `94 passed, 56 deselected`,
+  composed of 85 decode cases plus 9 encode-depth cases.
 - Review-gap fixture command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_valid_escaped_string'`
 - Review-gap fixture result: exit 0, `1 passed, 147 deselected`; the prebuilt
@@ -51,7 +67,7 @@ historical proof.
   structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
   `uv run pytest packages/bluetape-serde/tests -q`
-- Current full serde result: exit 0, `288 passed`.
+- Current full serde result: exit 0, `290 passed`.
 
 ## Baseline reproducibility check
 
@@ -70,7 +86,7 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `288 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `290 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
