@@ -203,7 +203,7 @@ async def _identity(value: int) -> int:
 
 @pytest.mark.parametrize(
     ("limit", "error"),
-    [(True, TypeError), (False, TypeError), (1.5, TypeError), (0, ValueError), (-1, ValueError)],
+    [(True, TypeError), (False, TypeError), (1.5, TypeError), (0, ValueError), (-1, ValueError), (1025, ValueError)],
 )
 async def test_map_bounded_validates_limit_before_consuming(
     limit: object,
@@ -641,11 +641,16 @@ class _InvocationCancelled(Exception):
     """Private task-group signal for a non-external cancellation."""
 
 
+_MAX_LIMIT = 1024
+
+
 def _require_limit(limit: int) -> None:
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise TypeError("limit must be an integer")
     if limit <= 0:
         raise ValueError("limit must be greater than 0")
+    if limit > _MAX_LIMIT:
+        raise ValueError(f"limit must be less than or equal to {_MAX_LIMIT}")
 
 
 def _require_mapper[T, R](
@@ -824,7 +829,12 @@ async def fetch_order(order_id: int) -> str:
     return f"order-{order_id}"
 
 
-orders = await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0)
+async def main() -> None:
+    orders = await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0)
+    print(orders)
+
+
+asyncio.run(main())
 ```
 
 State that source-workspace use is available now, PyPI publication remains on
@@ -832,7 +842,12 @@ hold, results preserve input order, mapper and iterator work must cooperate
 with the event loop, timeout is total, direct mapper cancellation terminates
 the invocation, and unsupported mapper self-cancellation fails closed without
 partial results. State that `limit` controls the number of call-scoped workers,
-so callers must choose a resource-appropriate positive value.
+so callers must choose a value from 1 through 1024. Add a Failure and
+Cancellation section: invalid inputs raise `TypeError`/`ValueError` before
+consumption; timeout raises `TimeoutError`; external and direct mapper
+cancellation raise `CancelledError`; ordinary mapper/iterator failures may be
+`ExceptionGroup`; and concurrent races intentionally preserve native, non-single
+exception shapes.
 
 - [ ] **Step 2: Align meta and root documentation.**
 
@@ -899,9 +914,11 @@ assert any(
     for item in requirements
 )
 PY
-python -m venv /tmp/bluetape-async-wheel-smoke
-/tmp/bluetape-async-wheel-smoke/bin/pip install dist/bluetape_async-0.1.0-py3-none-any.whl
-/tmp/bluetape-async-wheel-smoke/bin/python -c "from bluetape.asyncio import map_bounded; print(map_bounded.__name__)"`
+wheel_smoke=$(mktemp -d)
+trap 'rm -rf "$wheel_smoke"' EXIT
+python -m venv "$wheel_smoke"
+"$wheel_smoke/bin/pip" install dist/bluetape_async-0.1.0-py3-none-any.whl
+"$wheel_smoke/bin/python" -c "from bluetape.asyncio import map_bounded; print(map_bounded.__name__)"`
 
 Expected: all distributions build, the built meta-wheel keeps only core as its
 default requirement while its async dependency is extra-gated, and the isolated
@@ -920,11 +937,15 @@ async def fetch_order(order_id: int) -> str:
     return f"order-{order_id}"
 
 
-assert asyncio.run(map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0)) == [
-    "order-1",
-    "order-2",
-    "order-3",
-]
+async def main() -> None:
+    assert await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0) == [
+        "order-1",
+        "order-2",
+        "order-3",
+    ]
+
+
+asyncio.run(main())
 PY`
 
 Expected: the README bounded-map example completes with ordered results.

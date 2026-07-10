@@ -92,9 +92,10 @@ excluded async collection helpers and assigned that scope to this issue.
   and no later item is admitted. An iterator-raised `CancelledError` without a
   pending caller cancellation fails closed as invocation `CancelledError` after
   the same cleanup; an externally delivered cancellation remains unchanged.
-- `limit` must be an `int` other than `bool` and greater than zero. Invalid
-  limits raise `TypeError` or `ValueError` before consuming `items` or invoking
-  `mapper`.
+- `limit` must be an `int` other than `bool` between 1 and 1024 inclusive.
+  Invalid limits raise `TypeError` or `ValueError` before consuming `items` or
+  invoking `mapper`. The finite bound prevents task allocation from exceeding a
+  call-scoped resource budget before the timeout context can yield.
 - `mapper` must be callable. A non-callable mapper raises
   `TypeError("mapper must be callable")` before consuming `items`.
 - A callable mapper must return an `Awaitable`. A non-awaitable result fails
