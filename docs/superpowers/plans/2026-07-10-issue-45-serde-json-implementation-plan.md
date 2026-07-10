@@ -1,7 +1,7 @@
 # Issue #45 Strict Serde JSON Implementation Plan
 
 Date: 2026-07-10
-Status: Approved; Step 3-R reviewed, P0=0 P1=0; implementation in progress
+Status: Approved; Step 6-R contract corrections integrated; implementation in progress
 Scope: issue #45, milestone `0.2.0`, `bluetape-serde`
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
@@ -11,6 +11,13 @@ Scope: issue #45, milestone `0.2.0`, `bluetape-serde`
 
 **Goal:** Deliver a dependency-free `bluetape-serde` distribution with immutable
 payload contracts and a strict, bounded UTF-8 JSON bytes adapter.
+
+**Step 6-R correction rationale:** The initial implementation retained every
+encoded `bytes` chunk, inherited CPython's process-global integer-string limit,
+and left caller/traversal objects reachable from public exception tracebacks.
+The reviewed contract therefore requires one incremental `bytearray`, a fixed
+640-digit integer boundary on both paths, and a narrow type/code cloning
+boundary that raises fresh public errors only after source locals are cleared.
 
 **Architecture:** `bluetape.serde._contracts` owns immutable values, trust
 profiles, stable error codes, and the normative error matrix.
@@ -285,6 +292,8 @@ Parametrize every reviewed class/code/message row:
          "serialized payload exceeds max_input_size"),
         (PayloadLimitError, SerdeErrorCode.OUTPUT_LIMIT,
          "serialized output exceeds max_output_size"),
+        (PayloadLimitError, SerdeErrorCode.INTEGER_DIGIT_LIMIT,
+         "JSON integer exceeds MAX_JSON_INTEGER_DIGITS"),
         (MalformedPayloadError, SerdeErrorCode.INVALID_UTF8,
          "payload is not valid UTF-8"),
         (SerdeEncodeError, SerdeErrorCode.CIRCULAR_REFERENCE,
@@ -332,6 +341,7 @@ class PayloadLimitError(SerdeError):
             SerdeErrorCode.INPUT_LIMIT,
             SerdeErrorCode.OUTPUT_LIMIT,
             SerdeErrorCode.NESTING_LIMIT,
+            SerdeErrorCode.INTEGER_DIGIT_LIMIT,
         }
     )
 
@@ -341,8 +351,8 @@ class PayloadLimitError(SerdeError):
         super().__init__(code=code)
 ```
 
-Give fixed-code subclasses zero-argument constructors. Implement the complete
-matrix exactly as the spec states; no error stores source exceptions, payload
+Give fixed-code subclasses zero-argument constructors. Implement all 17 codes
+and the complete matrix exactly as the spec states; no error stores source exceptions, payload
 bytes, decoded text, or custom messages.
 
 - [ ] **Step 6: Export and verify the contract**
@@ -351,7 +361,7 @@ At this stage export and test exact ordered equality for contract-layer names
 only: `PayloadMetadata`, `SerializedPayload`, `SerdeError`, `SerdeErrorCode`,
 all eight concrete errors, and `TrustProfile`. Directly import every staged
 name. Task 3 adds JSON constants, `JsonValue`, and `json_serialize`; Task 4
-installs and verifies this complete final order:
+installs and verifies this complete final order of 21 exports:
 
 ```python
 __all__ = [
@@ -359,6 +369,7 @@ __all__ = [
     "DEFAULT_MAX_OUTPUT_SIZE",
     "DEFAULT_MAX_NESTING_DEPTH",
     "MAX_SUPPORTED_NESTING_DEPTH",
+    "MAX_JSON_INTEGER_DIGITS",
     "ContentTypeMismatchError",
     "FormatMismatchError",
     "InvalidMetadataError",
@@ -517,7 +528,9 @@ the value.
 Use iterator/cursor frames plus active container ids so the explicit stack and
 active set retain only the current traversal path and remain O(depth), rather
 than enqueueing all siblings. Scalars must be exact builtins; booleans are
-checked before integers; floats must be finite; dict keys must be exact `str`;
+checked before integers; exact integers at more than 640 decimal digits must be
+rejected by arithmetic comparison without string conversion; floats must be
+finite; dict keys must be exact `str`;
 tuples/subclasses/custom objects are rejected. On configured depth overflow
 raise `PayloadLimitError(code=NESTING_LIMIT)`. Repeated shared references are
 accepted after the first branch leaves the active set; cycles raise
@@ -533,16 +546,17 @@ at a time. Translate encoder `TypeError` and `ValueError` to
 `SerdeEncodeError(ENCODE_RECURSION)`; circular input is classified by the
 preflight, not by parsing exception text. Instrument each unexpected encoder
 failure independently and assert its fixed class/code/message and empty
-cause/context. Store the public replacement inside the handler, leave the
-handler, and then raise it so `__context__` is `None`. UTF-8 encode each chunk,
-check it against the remaining budget, append only accepted bytes, and never
-request the next chunk after failure. Join accepted chunks only after the
-iterator ends.
+cause/context. Capture only public error type/code, leave the handler, clear
+caller values plus output/encoder/chunk locals, construct a fresh public error,
+and raise it so helper traversal frames and source context are unreachable.
+UTF-8 encode each chunk, check it against the remaining budget, extend one
+`bytearray` only for accepted bytes, and never request the next chunk after
+failure. Convert the completed buffer to `bytes` exactly once.
 
 Return:
 
 ```python
-SerializedPayload(metadata=metadata, data=b"".join(chunks))
+SerializedPayload(metadata=metadata, data=bytes(output))
 ```
 
 - [ ] **Step 8: Run focused encode verification**
@@ -632,7 +646,11 @@ that the loop is one forward traversal and builds no input-sized collection.
 Cover duplicate keys at root and nested objects, `NaN`, `Infinity`,
 `-Infinity`, overflowing finite syntax (`1e309`, `-1e309`, and nested/object
 variants), malformed syntax, parser `ValueError`, deep-parser `RecursionError`,
-and both trust profiles. For every translated failure, including invalid UTF-8,
+and both trust profiles. Add a `parse_int` boundary proving positive, negative,
+and nested 640-digit integers succeed while 641-digit integers raise
+`PayloadLimitError(INTEGER_DIGIT_LIMIT)` under CPython default, minimum 640,
+and disabled global digit settings, restoring the original process setting in
+`finally`. For every translated failure, including invalid UTF-8,
 assert fixed code/message, payload marker absence, `__cause__ is None`, and
 `__context__ is None`. Direct regressions must prove the underlying
 `UnicodeDecodeError` bytes/decoder state and `JSONDecodeError.doc` are not
@@ -795,7 +813,7 @@ Commit with Lore intent `docs: make serde trust policy usable without fallback`.
 uv lock --check
 uv sync --all-packages --locked
 uv run pytest packages/bluetape-serde/tests
-uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'auxiliary_memory or linear_scan'
+uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'preflight_auxiliary_memory_does_not_scale_with_wide_sibling_count or json_serialize_high_chunk_count_uses_bounded_adapter_allocation or decode_depth_scanner_linear_scan_uses_constant_auxiliary_state'
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .

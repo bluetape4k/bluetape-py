@@ -20,7 +20,9 @@ and this project uses semantic versioning once the first tag is published.
   zlib-wrapped, and raw-DEFLATE helpers under `bluetape.compression`.
 - `bluetape-serde` source workspace package with immutable payload contracts,
   caller-owned trust policy, fixed typed errors, and strict bounded JSON v1
-  serialization under `bluetape.serde`.
+  serialization under `bluetape.serde`, including bounded `bytearray` output
+  assembly, source-free public error tracebacks, and a deterministic 640-digit
+  JSON integer limit.
 
 ## [v0.1.0] - 2026-07-10
 

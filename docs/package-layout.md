@@ -38,7 +38,9 @@ Compression packages must document wire formats, output bounds,
 malformed-input errors, and optional-backend availability.
 
 `bluetape-serde` is stdlib-only for its current strict JSON v1 contract. Its
-public surface is imported from `bluetape.serde`. The Apache Fory adapter and a
+public surface is imported from `bluetape.serde` and is fixed at 21 ordered
+exports plus 17 stable `SerdeErrorCode` values for this slice. JSON integers
+are limited to 640 decimal digits on encode and decode. The Apache Fory adapter and a
 future `fory` extra remain separate follow-up work in issue #46; they must not
 leak into the default meta distribution or become an implicit decoder fallback.
 
