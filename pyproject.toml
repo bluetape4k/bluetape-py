@@ -11,6 +11,7 @@ dependencies = [
     "bluetape-compression==0.1.0",
     "bluetape-core==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-serde==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 
@@ -31,6 +32,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-serde = { workspace = true }
 bluetape-testing = { workspace = true }
 
 [tool.uv.workspace]
@@ -42,6 +44,7 @@ members = [
     "packages/bluetape-compression",
     "packages/bluetape-core",
     "packages/bluetape-logging",
+    "packages/bluetape-serde",
     "packages/bluetape-testing",
 ]
 

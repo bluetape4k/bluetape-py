@@ -12,6 +12,7 @@ members = [
     "bluetape-core",
     "bluetape-logging",
     "bluetape-py-workspace",
+    "bluetape-serde",
     "bluetape-testing",
 ]
 
@@ -30,6 +31,7 @@ all = [
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
     { name = "bluetape-logging" },
+    { name = "bluetape-serde" },
     { name = "bluetape-testing" },
 ]
 asyncio = [
@@ -50,10 +52,14 @@ dev = [
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
     { name = "bluetape-logging" },
+    { name = "bluetape-serde" },
     { name = "bluetape-testing" },
 ]
 logging = [
     { name = "bluetape-logging" },
+]
+serde = [
+    { name = "bluetape-serde" },
 ]
 testing = [
     { name = "bluetape-testing" },
@@ -77,11 +83,14 @@ requires-dist = [
     { name = "bluetape-logging", marker = "extra == 'all'", editable = "packages/bluetape-logging" },
     { name = "bluetape-logging", marker = "extra == 'dev'", editable = "packages/bluetape-logging" },
     { name = "bluetape-logging", marker = "extra == 'logging'", editable = "packages/bluetape-logging" },
+    { name = "bluetape-serde", marker = "extra == 'all'", editable = "packages/bluetape-serde" },
+    { name = "bluetape-serde", marker = "extra == 'dev'", editable = "packages/bluetape-serde" },
+    { name = "bluetape-serde", marker = "extra == 'serde'", editable = "packages/bluetape-serde" },
     { name = "bluetape-testing", marker = "extra == 'all'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "testing", "dev", "all"]
+provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "testing", "dev", "all"]
 
 [[package]]
 name = "bluetape-async"
@@ -124,6 +133,7 @@ dependencies = [
     { name = "bluetape-compression" },
     { name = "bluetape-core" },
     { name = "bluetape-logging" },
+    { name = "bluetape-serde" },
     { name = "bluetape-testing" },
 ]
 
@@ -142,6 +152,7 @@ requires-dist = [
     { name = "bluetape-compression", editable = "packages/bluetape-compression" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-logging", editable = "packages/bluetape-logging" },
+    { name = "bluetape-serde", editable = "packages/bluetape-serde" },
     { name = "bluetape-testing", editable = "packages/bluetape-testing" },
 ]
 
@@ -151,6 +162,11 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "ruff", specifier = ">=0.12.0" },
 ]
+
+[[package]]
+name = "bluetape-serde"
+version = "0.1.0"
+source = { editable = "packages/bluetape-serde" }
 
 [[package]]
 name = "bluetape-testing"
