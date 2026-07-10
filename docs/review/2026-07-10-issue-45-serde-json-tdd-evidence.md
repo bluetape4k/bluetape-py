@@ -142,9 +142,23 @@ verbatim record of the original RED run.
   passed, 231 deselected`; the private preflight lacked the output visit bound,
   the encoder was reached for a tiny shared-DAG budget, and the distinct-wide-
   sibling memory case could not exercise the approved contract.
-- GREEN design: active container IDs and iterator frames retain only the
+- Intermediate GREEN design: active container IDs and iterator frames retain only the
   current path. A scalar counter raises `OUTPUT_LIMIT` once validated value
   occurrences exceed `max_output_size`; current-node unsupported, cycle, and
   depth validation runs before the guard.
 - GREEN results: the exact selector passed `6 passed, 231 deselected`; the full
   serde suite passed `381 passed`; the full workspace passed `527 passed`.
+
+## Post-PR shared-value scan correction
+
+- RED selector:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_shared or string_lower_bound'`
+- RED result against the one-byte occurrence guard: exit 1, `2 failed, 6
+  passed, 237 deselected`; the same 1,024-scalar shared string was validated 12
+  times and the same 4,096-character shared dict key was validated 8 times.
+- GREEN design: accumulate a conservative encoded-byte lower bound. String
+  validation returns two quotes plus UTF-8 scalar widths; dict iteration adds
+  key lower bounds plus a colon lazily. Containers and other scalars retain a
+  safe one-byte minimum, and current-node validation still precedes the guard.
+- GREEN results: the exact selector passed `8 passed, 237 deselected`; the full
+  serde suite passed `389 passed`; the full workspace passed `535 passed`.

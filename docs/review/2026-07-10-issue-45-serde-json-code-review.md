@@ -64,14 +64,18 @@ Commit `5f3774c21538792c32d597b8c7724443dac36242` resolved both findings. Comple
 container memoization initially bounded repeated-DAG work but introduced
 O(unique containers) auxiliary state, violating the approved O(depth) design.
 The follow-up correction restores active-path-only cycle state and uses the
-output budget as a conservative validated-occurrence bound; current-node type,
-cycle, and depth errors still precede that guard.
+output budget as a conservative encoded-byte lower bound; current-node type,
+cycle, and depth errors still precede that guard. Strings contribute two
+quotes plus UTF-8 scalar widths during their existing validation scan, and dict
+keys plus colons are charged lazily without retained sibling state.
 Strings now require Unicode scalar values; decode normalizes valid escaped
 surrogate pairs and rejects unpaired surrogates before returning a value.
 Deterministic bounded-visit, distinct-sibling memory, validation-order,
 Unicode, duplicate-key, and source-retention regressions cover the corrected
-contracts. The performance rerun at exact PR head
-`05845fc` found the completed-memo O(unique containers) P1; after the
-active-path/output-budget correction, targeted tests passed `6 passed, 231
-deselected`, the serde suite passed `381 passed`, and the workspace passed `527
+contracts. The performance rerun at exact PR head `05845fc` found the
+completed-memo O(unique containers) P1. A third rerun at exact head `b4e7eda`
+found that the intermediate one-byte occurrence guard could rescan large
+shared strings and keys. Deterministic large-value counters now cover that
+case without wall-clock thresholds. The exact selector passed `8 passed, 237
+deselected`, the serde suite passed `389 passed`, and the workspace passed `535
 passed`. Final rerun status: `P0=0 P1=0 P2=0 P3=0`.

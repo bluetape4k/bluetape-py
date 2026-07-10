@@ -778,7 +778,7 @@ def test_json_serialize_tiny_output_budget_stops_shared_dag_preflight_early(
     original_dict_values = serde_json_module._dict_values
     visits = 0
 
-    def counted_dict_values(value: dict[str, JsonValue]) -> Iterator[JsonValue]:
+    def counted_dict_values(value: dict[str, JsonValue]) -> Iterator[tuple[object, int]]:
         nonlocal visits
         visits += 1
         return original_dict_values(value)
@@ -803,13 +803,121 @@ def test_json_serialize_tiny_output_budget_stops_shared_dag_preflight_early(
             max_nesting_depth=unique_container_count,
         )
 
-    assert visits == 8
+    assert visits == 1
     assert_error(
         caught,
         error_type=PayloadLimitError,
         code=SerdeErrorCode.OUTPUT_LIMIT,
         message="serialized output exceeds max_output_size",
     )
+
+
+def test_json_serialize_charges_large_shared_string_bytes_on_first_dag_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bluetape.serde._json as serde_json_module
+
+    large_string = "😀" * 1024
+    original_validation = serde_json_module._validate_unicode_scalar_string
+    large_string_validations = 0
+
+    def counted_validation(value: str) -> int:
+        nonlocal large_string_validations
+        if value == large_string:
+            large_string_validations += 1
+        return original_validation(value)
+
+    monkeypatch.setattr(
+        serde_json_module,
+        "_validate_unicode_scalar_string",
+        counted_validation,
+    )
+    shared: JsonValue = large_string
+    for _ in range(12):
+        shared = [shared, shared]
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_serialize(
+            shared,
+            metadata=metadata(),
+            max_output_size=32,
+            max_nesting_depth=12,
+        )
+
+    assert large_string_validations == 1
+    assert caught.value.code is SerdeErrorCode.OUTPUT_LIMIT
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(shared, large_string),
+    )
+
+
+def test_json_serialize_charges_large_shared_dict_key_on_first_dag_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bluetape.serde._json as serde_json_module
+
+    large_key = "k" * 4096
+    original_validation = serde_json_module._validate_unicode_scalar_string
+    large_key_validations = 0
+
+    def counted_validation(value: str) -> int:
+        nonlocal large_key_validations
+        if value == large_key:
+            large_key_validations += 1
+        return original_validation(value)
+
+    monkeypatch.setattr(
+        serde_json_module,
+        "_validate_unicode_scalar_string",
+        counted_validation,
+    )
+    shared: JsonValue = {large_key: None}
+    for _ in range(12):
+        shared = [shared, shared]
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_serialize(
+            shared,
+            metadata=metadata(),
+            max_output_size=32,
+            max_nesting_depth=13,
+        )
+
+    assert large_key_validations == 1
+    assert caught.value.code is SerdeErrorCode.OUTPUT_LIMIT
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(shared, large_key),
+        source_keys=frozenset({large_key}),
+    )
+
+
+@pytest.mark.parametrize("value", ["", '"', "\\", "\x00", "é", "😀"])
+def test_json_serialize_string_lower_bound_preserves_exact_output_acceptance(
+    value: str,
+) -> None:
+    expected = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+
+    assert (
+        json_serialize(
+            value,
+            metadata=metadata(),
+            max_output_size=len(expected),
+        ).data
+        == expected
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_serialize(
+            value,
+            metadata=metadata(),
+            max_output_size=len(expected) - 1,
+        )
+
+    assert caught.value.code is SerdeErrorCode.OUTPUT_LIMIT
 
 
 @pytest.mark.parametrize(
@@ -975,7 +1083,7 @@ def test_json_serialize_accepts_exact_output_limit_and_stops_at_first_excess_chu
 
     requested.clear()
     monkeypatch.setattr("bluetape.serde._json.json.JSONEncoder", ExcessEncoder)
-    source_value: JsonValue = {"OUTPUT_LIMIT_PRIVATE_KEY": "private value"}
+    source_value: JsonValue = []
     with pytest.raises(PayloadLimitError) as caught:
         json_serialize(source_value, metadata=metadata(), max_output_size=2)
 
@@ -1000,7 +1108,6 @@ def test_json_serialize_accepts_exact_output_limit_and_stops_at_first_excess_chu
             }
         ),
         source_values=(source_value,),
-        source_keys=frozenset({"OUTPUT_LIMIT_PRIVATE_KEY"}),
     )
 
 

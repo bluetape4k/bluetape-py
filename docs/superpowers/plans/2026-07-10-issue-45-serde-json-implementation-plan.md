@@ -540,11 +540,13 @@ accepted after the first branch leaves the active set; cycles raise
 `SerdeEncodeError(code=CIRCULAR_REFERENCE)`. Add a wide-container `tracemalloc`
 regression showing preflight bookkeeping does not scale with sibling count.
 Do not memoize completed containers because that makes auxiliary state
-O(unique containers). Instead count validated value occurrences and stop with
-`PayloadLimitError(code=OUTPUT_LIMIT)` once the count exceeds
-`max_output_size`; every JSON value occurrence requires at least one output
-byte, so this is a conservative lower-bound guard against repeated-DAG
-expansion while retaining O(depth) traversal state.
+O(unique containers). Instead accumulate a conservative encoded-byte lower
+bound and stop with `PayloadLimitError(code=OUTPUT_LIMIT)` once it exceeds
+`max_output_size`. Charge strings during the Unicode-scalar validation scan as
+two quotes plus each scalar's UTF-8 width; escaping can only increase the real
+size. Charge dict keys plus the colon lazily when their item is visited.
+Containers and other scalars may use a safe one-byte lower bound. This bounds
+repeated-DAG work while retaining O(depth) traversal state.
 
 - [ ] **Step 7: Implement incremental encoding without retained context**
 

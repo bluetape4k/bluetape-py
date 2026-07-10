@@ -29,9 +29,9 @@ performance, stability, security, operator, developer, and user perspectives.
   conformance contracts established here.
 - Keep graph preflight state O(depth); a completed-container memo fixes repeated
   DAG traversal but grows O(unique containers). Bound repeated expansion with
-  the output budget instead: every validated JSON value occurrence requires at
-  least one encoded byte, so exceeding `max_output_size` is already a certain
-  `output_limit` failure.
+  a conservative encoded-byte lower bound instead. Charge strings in the
+  Unicode validation scan and dict keys lazily; a one-byte occurrence counter
+  alone can still rescan the same large shared value on many DAG paths.
 - Treat JSON strings as Unicode scalar values. Python's decoder accepts escaped
   surrogate code points, so normalize valid pairs to non-BMP scalars and reject
   unpaired surrogates explicitly to keep decode output re-encodable.
@@ -50,7 +50,9 @@ and isolated installation smoke tests passed locally before publication.
 - Test shared-reference graphs with deterministic visit counters; wall-clock
   thresholds are too noisy to prove traversal complexity. Pair that with a
   wide set of distinct sibling containers so complexity fixes cannot silently
-  trade bounded CPU for O(unique containers) auxiliary memory.
+  trade bounded CPU for O(unique containers) auxiliary memory. Include large
+  shared string values and keys so a node counter cannot hide repeated scan
+  work.
 - Never delegate bounded numeric behavior to mutable interpreter-global
   settings when the format contract must be portable.
 - Re-run commands copied into plans or review artifacts exactly as written.
