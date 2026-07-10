@@ -40,7 +40,8 @@ focused distribution model:
   and release preflight scope.
 - PyPI publication remains on HOLD until project ownership and trusted
   publishing are confirmed outside this repository.
-- Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34.
+- Milestone `0.2.0` tracks ecosystem issues #7 through #34 plus serialization
+  follow-ups #45 and #46; issues #35 through #44 are not implied by this range.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
 - Issue #45 strict JSON serde is implemented in the current PR preparation
@@ -91,7 +92,7 @@ Branch policy:
 | Milestone | Theme | Notes |
 |---|---|---|
 | `v0.1.0` | Released core helpers, logging, testing, docs, and release preflight | Kept the default install thin and the APIs Python-native. |
-| `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34; research-first work gates broad adapters. |
+| `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34 plus serialization follow-ups #45/#46; research-first work gates broad adapters. |
 | `0.3.0` | First implementation wave after research gates | Candidate scope depends on accepted research decisions from #10, #14, #16, #21, #23, #31, and #34. |
 
 ## Task Queue

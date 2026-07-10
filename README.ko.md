@@ -22,7 +22,7 @@ collections, codec, compression, serde 패키지는 source workspace에서 사�
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
-#7-#34 이슈로 ecosystem backlog를 확장합니다. 자세한 계획은
+Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니다. 자세한 계획은
 [`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
 
@@ -247,7 +247,7 @@ rollout/rollback은 package README를 참고하십시오.
 | 트랙 | 계획 |
 |---|---|
 | `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
-| `0.2.0` | #7-#34로 ecosystem package planning을 추적하고, broad adapter는 research gate를 먼저 둡니다. |
+| `0.2.0` | Ecosystem 이슈 #7-#34와 serialization 후속 #45/#46을 추적하며, broad adapter는 research gate를 먼저 둡니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.
