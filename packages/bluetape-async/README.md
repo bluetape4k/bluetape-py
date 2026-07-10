@@ -37,6 +37,10 @@ Use synchronous iteration when each operation is local or blocking and simple
 sequential ownership is the clearest choice:
 
 ```python
+def fetch_order_sync(order_id: int) -> str:
+    return f"order-{order_id}"
+
+
 orders = [fetch_order_sync(order_id) for order_id in [1, 2, 3]]
 ```
 
