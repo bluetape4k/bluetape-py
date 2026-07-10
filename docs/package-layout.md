@@ -22,6 +22,7 @@ Current public distributions:
 - `bluetape-compression`
 - `bluetape-core`
 - `bluetape-logging`
+- `bluetape-serde`
 - `bluetape-testing`
 
 The `bluetape` distribution is a meta package. It should not create a root
@@ -29,10 +30,17 @@ The `bluetape` distribution is a meta package. It should not create a root
 such as `bluetape.core`, `bluetape.logging`, and `bluetape.testing`.
 The async package owns `bluetape.asyncio`, codec owns `bluetape.codec`,
 collections owns `bluetape.collections`, and compression owns
-`bluetape.compression`. Async packages must document cooperative ownership,
-cancellation, timeout, and cleanup behavior. Compression packages must document
-wire formats, output bounds, malformed-input errors, and optional-backend
-availability.
+`bluetape.compression`. Serde owns `bluetape.serde` and is available only from
+the focused `bluetape-serde` distribution or the explicit future `serde` meta
+extra; it is never part of the core-only default install. Async packages must
+document cooperative ownership, cancellation, timeout, and cleanup behavior.
+Compression packages must document wire formats, output bounds,
+malformed-input errors, and optional-backend availability.
+
+`bluetape-serde` is stdlib-only for its current strict JSON v1 contract. Its
+public surface is imported from `bluetape.serde`. The Apache Fory adapter and a
+future `fory` extra remain separate follow-up work in issue #46; they must not
+leak into the default meta distribution or become an implicit decoder fallback.
 
 ## Future Packages
 
