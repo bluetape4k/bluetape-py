@@ -81,11 +81,16 @@ excluded async collection helpers and assigned that scope to this issue.
   incrementally, with no more than `limit` items admitted ahead of completed
   work. This non-streaming helper retains `O(n)` result slots and is not
   suitable for unbounded input.
+- The helper obtains `iter(items)` before consuming an item. A non-iterable
+  input therefore raises its native `TypeError` before mapper invocation.
 - `limit` must be an `int` other than `bool` and greater than zero. Invalid
   limits raise `TypeError` or `ValueError` before consuming `items` or invoking
   `mapper`.
 - `mapper` must be callable. A non-callable mapper raises
   `TypeError("mapper must be callable")` before consuming `items`.
+- A callable mapper must return an `Awaitable`. A non-awaitable result fails
+  inside the call-scoped task group with native `TypeError`/`ExceptionGroup`
+  behavior; no later item is admitted after that terminal failure is observed.
 - `timeout` must be `None` or a finite, non-negative `int` or `float` other
   than `bool`. A non-numeric or boolean value raises `TypeError`; a negative,
   NaN, or infinite value raises `ValueError`, each before input consumption.
@@ -110,12 +115,19 @@ excluded async collection helpers and assigned that scope to this issue.
   `map_bounded` invocation: the helper stops new admission, cancels active
   siblings, awaits cooperative cleanup, and raises `CancelledError` rather
   than returning partial result slots.
+- To distinguish that case from external caller cancellation, the private task
+  runner checks its task's `cancelling()` state. It re-raises externally
+  delivered cancellation unchanged; only a mapper-raised cancellation with no
+  pending task cancellation becomes an internal terminal signal that cancels
+  siblings. The parent never calls `uncancel()`, and the implementation must
+  preserve external cancellation counts.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.
 - Simultaneous timeout, external cancellation, and mapper failure keep the
   native `TaskGroup`/`asyncio.timeout()` outcome; the helper does not promise a
-  single exception type for these races.
+  single exception type for these races. A race that includes external caller
+  cancellation must keep caller cancellation observable and preserve its count.
 - The public API does not catch broad exceptions in a way that changes these
   observable exception contracts.
 
@@ -178,6 +190,7 @@ streaming workload.
 | Broad exception handling swallows `CancelledError` or reports partial slots. | P1 | Preserve native external cancellation; make mapper-originated cancellation terminate the invocation; use `finally` tests. |
 | Blocking iterator/mapper work defeats timeout and cancellation. | P1 | Document the cooperative boundary and test timeout only with cooperative suspension. |
 | Invalid mapper or timeout values consume caller input. | P1 | Validate all public inputs before iterator advancement and test every invalid class. |
+| Mapper self-cancellation is confused with external task cancellation. | P1 | Use `Task.cancelling()` only to preserve external cancellation; do not call `uncancel()`, and test self-cancellation plus external-cancellation races. |
 | Result order, iterator admission, exception races, or `timeout=None` drifts from the intended contract. | P2 | Add iterator-probe, exception-race, and focused contract tests. |
 | `bluetape[asyncio]` could be confused with the stdlib module. | P3 | Document the focused distribution and import path explicitly; keep the default install unchanged. |
 
@@ -200,18 +213,21 @@ streaming workload.
 1. The package builds as `bluetape-async` and imports as `bluetape.asyncio`.
 2. `map_bounded` rejects invalid limits before input consumption.
 3. It rejects a non-callable mapper and invalid timeout before input consumption.
-4. It never runs more than `limit` mappers at once, admits items incrementally,
+4. A non-iterable input fails with native `TypeError` before mapper invocation;
+   a callable that returns a non-awaitable fails with native task-group error
+   aggregation and stops further admission.
+5. It never runs more than `limit` mappers at once, admits items incrementally,
    stops admission after every terminal path, and preserves result order.
-5. Empty input returns an empty list without mapper calls.
-6. Ordinary mapper failure retains native task-group `ExceptionGroup` behavior;
+6. Empty input returns an empty list without mapper calls.
+7. Ordinary mapper failure retains native task-group `ExceptionGroup` behavior;
    mapper-originated and external cancellation do not return partial results.
-7. Cooperative mapper failure, external cancellation, and total timeout preserve
+8. Cooperative mapper failure, external cancellation, and total timeout preserve
    their caller-visible exception contracts while all started mappers finish
    cleanup. Concurrent failure races retain native asyncio outcomes.
-8. Tests prove no helper-owned orphan tasks remain after success, failure,
+9. Tests prove no helper-owned orphan tasks remain after success, failure,
    cancellation, and timeout paths.
-9. The default `bluetape` dependency set remains exactly `bluetape-core`.
-10. Package/root README claims, extras, workspace metadata, and user-facing
+10. The default `bluetape` dependency set remains exactly `bluetape-core`.
+11. Package/root README claims, extras, workspace metadata, and user-facing
    status are source-backed and aligned.
 
 ## Verification and DoD
@@ -219,9 +235,10 @@ streaming workload.
 - Targeted pytest covers success, empty input, ordering, invalid limits,
   invalid mapper and timeout values, bounded active work, iterator-probe
   admission/replenishment, terminal-path admission stop, `O(n)` result-memory
-  documentation, ordinary mapper `ExceptionGroup`, mapper-originated
-  cancellation, external cancellation, timeout, concurrent failure races,
-  cleanup, and orphan-task absence.
+  documentation, non-iterable and non-awaitable protocol violations, ordinary
+  mapper `ExceptionGroup`, mapper-originated cancellation, external
+  cancellation-count preservation, timeout, concurrent failure races, cleanup,
+  and orphan-task absence.
 - Run `uv sync --all-packages`, `uv lock --check`, targeted and full
   `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`,
   `uv build --all-packages`, and `git diff --check`.
