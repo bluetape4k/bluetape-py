@@ -117,11 +117,11 @@ run a strict JSON roundtrip:
 
 ```bash
 tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
 uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
 uv venv "$tmp_dir/venv"
 uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serde-*.whl
 "$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"order_id": 42}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"order_id": 42}'
-rm -rf "$tmp_dir"
 ```
 
 Only the local workspace and local-wheel paths are runnable today. The `pip`
