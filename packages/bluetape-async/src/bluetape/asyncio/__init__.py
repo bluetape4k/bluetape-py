@@ -8,8 +8,8 @@ from typing import cast
 _MAX_LIMIT = 1024
 
 
-class _MapperCancelledError(Exception):
-    """Private TaskGroup signal for direct mapper cancellation."""
+class _InvocationCancelledError(Exception):
+    """Private TaskGroup signal for non-external cancellation."""
 
 
 def _require_limit(limit: int) -> None:
@@ -30,14 +30,39 @@ def _require_timeout(timeout: float | None) -> None:
         raise ValueError("timeout must be a finite non-negative number")
 
 
-async def _invoke_mapper[T, R](mapper: Callable[[T], Awaitable[R]], item: T) -> R:
+def _raise_if_worker_cancelled(
+    owner: asyncio.Task[object],
+    owner_cancellation_baseline: int,
+    terminal: asyncio.Event,
+) -> None:
+    worker = asyncio.current_task()
+    if worker is None or not worker.cancelling():
+        return
+    if owner.cancelling() > owner_cancellation_baseline:
+        raise asyncio.CancelledError
+    terminal.set()
+    raise _InvocationCancelledError
+
+
+async def _invoke_mapper[T, R](
+    mapper: Callable[[T], Awaitable[R]],
+    item: T,
+    owner: asyncio.Task[object],
+    owner_cancellation_baseline: int,
+    terminal: asyncio.Event,
+) -> R:
     try:
-        return await mapper(item)
+        result = await mapper(item)
     except asyncio.CancelledError:
-        task = asyncio.current_task()
-        if task is not None and task.cancelling():
+        if owner.cancelling() > owner_cancellation_baseline:
             raise
-        raise _MapperCancelledError from None
+        terminal.set()
+        raise _InvocationCancelledError from None
+    except BaseException:
+        terminal.set()
+        raise
+    _raise_if_worker_cancelled(owner, owner_cancellation_baseline, terminal)
+    return result
 
 
 async def map_bounded[T, R](
@@ -52,23 +77,51 @@ async def map_bounded[T, R](
     if not callable(mapper):
         raise TypeError("mapper must be callable")
     _require_timeout(timeout)
+    owner = asyncio.current_task()
+    if owner is None:
+        raise RuntimeError("map_bounded requires an active asyncio task")
+    owner_cancellation_baseline = owner.cancelling()
     iterator = iter(items)
+    if owner.cancelling() > owner_cancellation_baseline:
+        raise asyncio.CancelledError
     results: list[R | None] = []
+    terminal = asyncio.Event()
 
     async def worker() -> None:
         while True:
+            if terminal.is_set():
+                return
             try:
                 item = next(iterator)
             except StopIteration:
+                _raise_if_worker_cancelled(owner, owner_cancellation_baseline, terminal)
                 return
+            except asyncio.CancelledError:
+                if owner.cancelling() > owner_cancellation_baseline:
+                    raise
+                terminal.set()
+                raise _InvocationCancelledError from None
+            except BaseException:
+                terminal.set()
+                raise
+            _raise_if_worker_cancelled(owner, owner_cancellation_baseline, terminal)
             index = len(results)
             results.append(None)
-            results[index] = await _invoke_mapper(mapper, item)
+            results[index] = await _invoke_mapper(
+                mapper,
+                item,
+                owner,
+                owner_cancellation_baseline,
+                terminal,
+            )
 
     async def run_workers() -> None:
         async with asyncio.TaskGroup() as task_group:
-            for _ in range(limit):
-                task_group.create_task(worker())
+            for worker_index in range(limit):
+                task_group.create_task(
+                    worker(),
+                    name=f"bluetape.map_bounded.{worker_index}",
+                )
 
     try:
         if timeout is None:
@@ -76,7 +129,7 @@ async def map_bounded[T, R](
         else:
             async with asyncio.timeout(timeout):
                 await run_workers()
-    except* _MapperCancelledError:
+    except* _InvocationCancelledError:
         raise asyncio.CancelledError from None
     return cast(list[R], results)
 

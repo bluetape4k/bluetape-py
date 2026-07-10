@@ -128,3 +128,108 @@ async def test_map_bounded_preserves_external_cancellation_and_cleanup() -> None
     with pytest.raises(asyncio.CancelledError):
         await task
     assert cleaned.is_set()
+
+
+async def test_map_bounded_fails_closed_when_mapper_self_cancels_then_returns() -> None:
+    admitted: list[int] = []
+
+    async def mapper(value: int) -> int:
+        admitted.append(value)
+        asyncio.current_task().cancel()  # type: ignore[union-attr]
+        return value
+
+    with pytest.raises(asyncio.CancelledError):
+        await map_bounded([1, 2, 3], mapper, limit=1)
+    assert admitted == [1]
+
+
+async def test_map_bounded_fails_closed_when_iterator_self_cancels() -> None:
+    admitted: list[int] = []
+
+    class SelfCancellingItems:
+        def __iter__(self) -> Iterator[int]:
+            asyncio.current_task().cancel()  # type: ignore[union-attr]
+            return iter([1, 2])
+
+    async def mapper(value: int) -> int:
+        admitted.append(value)
+        return value
+
+    task = asyncio.create_task(map_bounded(SelfCancellingItems(), mapper, limit=1))
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert admitted == []
+
+
+async def test_map_bounded_propagates_iterator_cancellation() -> None:
+    class CancelledItems:
+        def __iter__(self) -> Iterator[int]:
+            return self
+
+        def __next__(self) -> int:
+            raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await map_bounded(CancelledItems(), _identity, limit=1)
+
+
+async def test_map_bounded_cleans_up_after_iterator_failure() -> None:
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    class FailingItems:
+        def __iter__(self) -> Iterator[int]:
+            yield 0
+            started.set()
+            raise RuntimeError("iterator failed")
+
+    async def mapper(_: int) -> int:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    with pytest.raises(ExceptionGroup) as error:
+        await map_bounded(FailingItems(), mapper, limit=2)
+    assert any(isinstance(item, RuntimeError) for item in error.value.exceptions)
+    assert cleaned.is_set()
+
+
+async def test_map_bounded_uses_a_total_cooperative_timeout_budget() -> None:
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def mapper(value: int) -> int:
+        if value == 0:
+            return value
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    with pytest.raises(TimeoutError):
+        await map_bounded([0, 1], mapper, limit=1, timeout=0.01)
+    assert started.is_set()
+    assert cleaned.is_set()
+
+
+async def test_map_bounded_leaves_no_named_worker_tasks_after_cancellation() -> None:
+    started = asyncio.Event()
+
+    async def mapper(_: int) -> int:
+        started.set()
+        await asyncio.Event().wait()
+        return 0
+
+    task = asyncio.create_task(map_bounded([1], mapper, limit=1))
+    await started.wait()
+    task.cancel()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert not any(
+        task.get_name().startswith("bluetape.map_bounded.")
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task()
+    )
