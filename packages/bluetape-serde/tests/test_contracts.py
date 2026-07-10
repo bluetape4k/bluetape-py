@@ -2,9 +2,14 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 from bluetape.serde import (
+    DEFAULT_MAX_INPUT_SIZE,
+    DEFAULT_MAX_NESTING_DEPTH,
+    DEFAULT_MAX_OUTPUT_SIZE,
+    MAX_SUPPORTED_NESTING_DEPTH,
     ContentTypeMismatchError,
     FormatMismatchError,
     InvalidMetadataError,
+    JsonValue,
     MalformedPayloadError,
     PayloadLimitError,
     PayloadMetadata,
@@ -15,12 +20,18 @@ from bluetape.serde import (
     TrustProfile,
     TrustProfileMismatchError,
     UnsupportedVersionError,
+    json_serialize,
 )
 
 EXPECTED_EXPORTS = [
+    "DEFAULT_MAX_INPUT_SIZE",
+    "DEFAULT_MAX_OUTPUT_SIZE",
+    "DEFAULT_MAX_NESTING_DEPTH",
+    "MAX_SUPPORTED_NESTING_DEPTH",
     "ContentTypeMismatchError",
     "FormatMismatchError",
     "InvalidMetadataError",
+    "JsonValue",
     "MalformedPayloadError",
     "PayloadLimitError",
     "PayloadMetadata",
@@ -31,6 +42,28 @@ EXPECTED_EXPORTS = [
     "TrustProfile",
     "TrustProfileMismatchError",
     "UnsupportedVersionError",
+    "json_serialize",
+]
+EXPECTED_EXPORT_VALUES = [
+    DEFAULT_MAX_INPUT_SIZE,
+    DEFAULT_MAX_OUTPUT_SIZE,
+    DEFAULT_MAX_NESTING_DEPTH,
+    MAX_SUPPORTED_NESTING_DEPTH,
+    ContentTypeMismatchError,
+    FormatMismatchError,
+    InvalidMetadataError,
+    JsonValue,
+    MalformedPayloadError,
+    PayloadLimitError,
+    PayloadMetadata,
+    SerializedPayload,
+    SerdeError,
+    SerdeErrorCode,
+    SerdeEncodeError,
+    TrustProfile,
+    TrustProfileMismatchError,
+    UnsupportedVersionError,
+    json_serialize,
 ]
 
 ERROR_CASES = [
@@ -102,7 +135,10 @@ def test_public_contract_exports_are_staged_in_deterministic_order() -> None:
     import bluetape.serde as serde
 
     assert serde.__all__ == EXPECTED_EXPORTS
-    assert all(getattr(serde, name) is globals()[name] for name in EXPECTED_EXPORTS)
+    assert all(
+        getattr(serde, name) is exported
+        for name, exported in zip(EXPECTED_EXPORTS, EXPECTED_EXPORT_VALUES, strict=True)
+    )
 
 
 def test_contract_enums_have_exact_public_values() -> None:

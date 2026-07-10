@@ -15,11 +15,24 @@ from ._contracts import (
     TrustProfileMismatchError,
     UnsupportedVersionError,
 )
+from ._json import (
+    DEFAULT_MAX_INPUT_SIZE,
+    DEFAULT_MAX_NESTING_DEPTH,
+    DEFAULT_MAX_OUTPUT_SIZE,
+    MAX_SUPPORTED_NESTING_DEPTH,
+    JsonValue,
+    json_serialize,
+)
 
 __all__ = [  # noqa: RUF022 - staged public contract order is intentional
+    "DEFAULT_MAX_INPUT_SIZE",
+    "DEFAULT_MAX_OUTPUT_SIZE",
+    "DEFAULT_MAX_NESTING_DEPTH",
+    "MAX_SUPPORTED_NESTING_DEPTH",
     "ContentTypeMismatchError",
     "FormatMismatchError",
     "InvalidMetadataError",
+    "JsonValue",
     "MalformedPayloadError",
     "PayloadLimitError",
     "PayloadMetadata",
@@ -30,4 +43,5 @@ __all__ = [  # noqa: RUF022 - staged public contract order is intentional
     "TrustProfile",
     "TrustProfileMismatchError",
     "UnsupportedVersionError",
+    "json_serialize",
 ]
