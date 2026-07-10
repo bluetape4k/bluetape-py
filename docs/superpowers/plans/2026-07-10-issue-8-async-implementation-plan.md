@@ -321,15 +321,23 @@ async def test_map_bounded_propagates_direct_mapper_cancellation_after_cleanup()
 
 
 async def test_map_bounded_self_cancellation_fails_closed() -> None:
-    async def mapper(_: int) -> int:
+    admitted = 0
+
+    def items() -> Iterator[int]:
+        nonlocal admitted
+        for value in range(3):
+            admitted += 1
+            yield value
+
+    async def mapper(value: int) -> int:
         task = asyncio.current_task()
         assert task is not None
         task.cancel()
-        await asyncio.sleep(0)
-        return 1
+        return value
 
     with pytest.raises(asyncio.CancelledError):
-        await map_bounded([1], mapper, limit=1)
+        await map_bounded(items(), mapper, limit=1)
+    assert admitted == 1
     _assert_no_helper_tasks()
 
 
@@ -502,7 +510,7 @@ async def _invoke_mapper[T, R](
     terminal: asyncio.Event,
 ) -> R:
     try:
-        return await mapper(item)
+        result = await mapper(item)
     except asyncio.CancelledError:
         if owner.cancelling():
             raise
@@ -511,6 +519,12 @@ async def _invoke_mapper[T, R](
     except BaseException:
         terminal.set()
         raise
+
+    task = asyncio.current_task()
+    if task is not None and task.cancelling() and not owner.cancelling():
+        terminal.set()
+        raise _InvocationCancelled
+    return result
 
 
 async def map_bounded[T, R](
