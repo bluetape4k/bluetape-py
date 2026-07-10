@@ -31,6 +31,13 @@ which avoids promising a distinction Python task cancellation cannot provide.
 An exception from `next(iterator)` now has a native propagation and task-group
 cleanup contract, with focused test coverage required.
 
+The follow-up cancellation probe found that treating a self-cancelled child as
+ordinary TaskGroup cancellation could return an uninitialized result slot. The
+updated contract therefore uses the invocation-owner cancellation state to
+preserve external cancellation and requires unsupported self-cancellation to
+fail closed after cleanup. Stability and developer reruns for commit `cf9e9c7`
+both reported P0=0 and P1=0.
+
 ## Non-blocking note
 
 Combined invalid arguments intentionally have no specified validation precedence;
