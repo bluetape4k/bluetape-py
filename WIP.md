@@ -109,7 +109,9 @@ Historical release scope; all items are closed.
 - #9 - Codec and compression packages. Implemented by `bluetape-codec` and
   `bluetape-compression` in the source workspace; PyPI publication remains on
   HOLD.
-- #10 - Serialization strategy research.
+- #10 - Serialization strategy research. Decision recorded in
+  `docs/research/2026-07-10-issue-10-serialization-strategy.md`; follow-ups
+  are #45 (contracts/strict JSON) and #46 (Apache Fory adapter).
 - #11 - Cache and Redis coordination packages.
 - #12 - Resilience policies.
 - #13 - ID, measure, and money value packages.
