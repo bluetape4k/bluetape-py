@@ -62,7 +62,7 @@ historical proof.
   composed of 85 decode cases plus 9 encode-depth cases.
 - Review-gap fixture command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_valid_escaped_string'`
-- Review-gap fixture result: exit 0, `1 passed, 147 deselected`; the prebuilt
+- Review-gap fixture result: exit 0, `1 passed, 149 deselected`; the prebuilt
   1 MiB valid JSON payload decoded at its exact byte limit with quoted
   structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
