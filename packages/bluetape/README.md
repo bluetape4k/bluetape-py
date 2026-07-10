@@ -45,11 +45,11 @@ directly.
 
 ```bash
 tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
 uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
 uv venv "$tmp_dir/venv"
 uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serde-*.whl
 "$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"ok": True}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"ok": True}'
-rm -rf "$tmp_dir"
 ```
 
 The serde surface has 21 ordered exports and 17 stable domain error codes,

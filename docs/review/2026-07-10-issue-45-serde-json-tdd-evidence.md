@@ -67,7 +67,7 @@ historical proof.
   structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
   `uv run pytest packages/bluetape-serde/tests -q`
-- Current full serde result: exit 0, `362 passed`.
+- Current full serde result: exit 0, `389 passed`.
 
 ## Baseline reproducibility check
 
@@ -86,7 +86,7 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `362 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `389 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
@@ -123,12 +123,12 @@ verbatim record of the original RED run.
 - Combined security/configuration selector: exit 0,
   `51 passed, 167 deselected`, including native fatal-exception identity
   preservation on both adapter paths.
-- Full serde GREEN after complementary metadata traceback cases: exit 0,
+- Historical Step 6-R serde GREEN after complementary metadata traceback cases: exit 0,
   `362 passed`.
-- Final exact performance selector: exit 0, `3 passed, 215 deselected` for
+- Historical Step 6-R performance selector: exit 0, `3 passed, 215 deselected` for
   preflight O(depth), high-chunk encode allocation, and decode scanner constant
   auxiliary-state tests.
-- Final workspace GREEN: exit 0, `508 passed`.
+- Historical Step 6-R workspace GREEN: exit 0, `508 passed`.
 - Final static/build gates: `uv lock --check`, locked all-package sync, Ruff
   check, Ruff format check, all-package build, branch/current diff checks,
   focused-wheel isolated roundtrip, 21-export/17-code assertion, four README
