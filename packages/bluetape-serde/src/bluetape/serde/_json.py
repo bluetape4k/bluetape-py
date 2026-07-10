@@ -28,7 +28,7 @@ _MAX_JSON_INTEGER_MAGNITUDE = 10**MAX_JSON_INTEGER_DIGITS
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
-type _TraversalFrame = tuple[int, Iterator[object]]
+type _TraversalFrame = tuple[int, int, Iterator[object]]
 type _SerdeErrorSpec = tuple[type[SerdeError], SerdeErrorCode]
 type _NativeConfigurationErrorSpec = tuple[type[TypeError] | type[ValueError], str]
 
@@ -46,6 +46,10 @@ class _NestingLimitError(ValueError):
 
 
 class _IntegerDigitLimitError(ValueError):
+    pass
+
+
+class _UnpairedSurrogateError(ValueError):
     pass
 
 
@@ -74,12 +78,19 @@ def _dict_values(value: dict[str, JsonValue]) -> Iterator[JsonValue]:
     for key, item in value.items():
         if type(key) is not str:
             raise _unsupported_value_error()
+        _validate_unicode_scalar_string(key)
         yield item
 
 
+def _validate_unicode_scalar_string(value: str) -> None:
+    if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+        raise _unsupported_value_error()
+
+
 def _preflight_json_value(value: object, *, max_nesting_depth: int) -> None:
-    """Validate a JSON value graph while retaining only its active path."""
+    """Validate a JSON graph with active-path cycle and completed-depth state."""
     active_container_ids: set[int] = set()
+    completed_container_depths: dict[int, int] = {}
     stack: list[_TraversalFrame] = []
     current = value
 
@@ -91,34 +102,40 @@ def _preflight_json_value(value: object, *, max_nesting_depth: int) -> None:
             if current >= _MAX_JSON_INTEGER_MAGNITUDE or current <= -_MAX_JSON_INTEGER_MAGNITUDE:
                 raise PayloadLimitError(code=SerdeErrorCode.INTEGER_DIGIT_LIMIT)
         elif current_type is str:
-            pass
+            _validate_unicode_scalar_string(current)
         elif current_type is float:
             if not math.isfinite(current):
                 raise SerdeEncodeError(code=SerdeErrorCode.ENCODE_NON_FINITE_NUMBER)
         elif current_type is list or current_type is dict:
-            if len(stack) + 1 > max_nesting_depth:
+            entry_depth = len(stack) + 1
+            if entry_depth > max_nesting_depth:
                 raise PayloadLimitError(code=SerdeErrorCode.NESTING_LIMIT)
 
             container_id = id(current)
             if container_id in active_container_ids:
                 raise SerdeEncodeError(code=SerdeErrorCode.CIRCULAR_REFERENCE)
 
-            active_container_ids.add(container_id)
-            if current_type is list:
-                iterator: Iterator[object] = iter(current)
-            else:
-                iterator = _dict_values(current)
-            stack.append((container_id, iterator))
+            if completed_container_depths.get(container_id, -1) < entry_depth:
+                active_container_ids.add(container_id)
+                if current_type is list:
+                    iterator: Iterator[object] = iter(current)
+                else:
+                    iterator = _dict_values(current)
+                stack.append((container_id, entry_depth, iterator))
         else:
             raise _unsupported_value_error()
 
         while stack:
-            container_id, iterator = stack[-1]
+            container_id, entry_depth, iterator = stack[-1]
             try:
                 current = next(iterator)
             except StopIteration:
                 stack.pop()
                 active_container_ids.remove(container_id)
+                completed_container_depths[container_id] = max(
+                    completed_container_depths.get(container_id, -1),
+                    entry_depth,
+                )
                 continue
             break
         else:
@@ -247,6 +264,53 @@ def _parse_limited_int(value: str) -> int:
     return int(value)
 
 
+def _normalize_unicode_scalar_string(value: str) -> str:
+    normalized: list[str] | None = None
+    index = 0
+    while index < len(value):
+        code_point = ord(value[index])
+        if 0xD800 <= code_point <= 0xDBFF:
+            if index + 1 >= len(value):
+                raise _UnpairedSurrogateError
+            low_surrogate = ord(value[index + 1])
+            if not 0xDC00 <= low_surrogate <= 0xDFFF:
+                raise _UnpairedSurrogateError
+            if normalized is None:
+                normalized = [value[:index]]
+            normalized.append(chr(0x10000 + ((code_point - 0xD800) << 10) + low_surrogate - 0xDC00))
+            index += 2
+            continue
+        if 0xDC00 <= code_point <= 0xDFFF:
+            raise _UnpairedSurrogateError
+        if normalized is not None:
+            normalized.append(value[index])
+        index += 1
+    return value if normalized is None else "".join(normalized)
+
+
+def _normalize_decoded_strings(value: JsonValue) -> JsonValue:
+    value_type = type(value)
+    if value_type is str:
+        return _normalize_unicode_scalar_string(value)
+    if value_type is list:
+        for index, item in enumerate(value):
+            value[index] = _normalize_decoded_strings(item)
+        return value
+    if value_type is dict:
+        key_updates: list[tuple[str, str]] = []
+        for key, item in value.items():
+            value[key] = _normalize_decoded_strings(item)
+            normalized_key = _normalize_unicode_scalar_string(key)
+            if normalized_key != key:
+                if normalized_key in value:
+                    raise _DuplicateKeyError
+                key_updates.append((key, normalized_key))
+        for key, normalized_key in key_updates:
+            value[normalized_key] = value.pop(key)
+        return value
+    return value
+
+
 def json_deserialize(
     payload: SerializedPayload,
     *,
@@ -322,12 +386,15 @@ def json_deserialize(
             parse_float=_parse_finite_float,
             parse_int=_parse_limited_int,
         )
+        result = _normalize_decoded_strings(result)
     except _DuplicateKeyError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.DUPLICATE_KEY)
     except _NonFiniteNumberError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.DECODE_NON_FINITE_NUMBER)
     except _IntegerDigitLimitError:
         replacement = PayloadLimitError(code=SerdeErrorCode.INTEGER_DIGIT_LIMIT)
+    except _UnpairedSurrogateError:
+        replacement = MalformedPayloadError(code=SerdeErrorCode.INVALID_JSON)
     except json.JSONDecodeError:
         replacement = MalformedPayloadError(code=SerdeErrorCode.INVALID_JSON)
     except (ValueError, RecursionError):

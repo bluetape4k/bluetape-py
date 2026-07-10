@@ -242,7 +242,9 @@ boundary with an authenticated and authorized producer; network location and
 payload claims are insufficient. Both profiles enforce identical strict UTF-8
 JSON, exact metadata, duplicate-key/non-finite-number rejection, 16 MiB default
 input/output limits, depth 100 by default, a hard depth ceiling of 256, and a
-fixed 640-decimal-digit integer limit on both encode and decode.
+fixed 640-decimal-digit integer limit on both encode and decode. Strings must
+contain Unicode scalar values; decode normalizes valid escaped surrogate pairs
+to their non-BMP scalar and rejects unpaired surrogates.
 These byte limits are not a fixed process-memory guarantee. See the package
 README for error handling and versioned rollout/rollback guidance.
 `SerdeError` covers stable serde domain failures; caller type and configuration

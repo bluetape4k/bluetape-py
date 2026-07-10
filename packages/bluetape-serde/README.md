@@ -183,11 +183,13 @@ limits. There is no permissive trusted decoder.
   for encode and decode and does not depend on `sys.set_int_max_str_digits`.
 - Decode requires strict UTF-8, exact JSON syntax, unique object keys, and
   finite numbers. `NaN`, `Infinity`, duplicate keys, malformed text, and
-  invalid UTF-8 are rejected.
+  invalid UTF-8 are rejected. Valid escaped UTF-16 surrogate pairs are
+  normalized to their non-BMP Unicode scalar; unpaired surrogates are invalid
+  JSON.
 - Encode accepts only exact JSON values and exact key types: `None`, `bool`,
   `int`, finite `float`, `str`, `list`, and `dict[str, JsonValue]`. Subclasses,
   unsupported values, non-string keys, circular references, non-finite
-  numbers, and excess recursion fail.
+  numbers, surrogate code points, and excess recursion fail.
 - Metadata comparison is exact. Wrong format, content type, version, or trust
   profile is a hard typed failure. Unsupported versions never fall back.
 

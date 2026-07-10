@@ -238,7 +238,9 @@ assert json_deserialize(payload, expected_metadata=consumer_policy) == {"order_i
 두 profile 모두 strict UTF-8 JSON, 정확한 metadata, duplicate key/non-finite number
 거부, 기본 input/output 16 MiB, 기본 depth 100, hard ceiling 256을 동일하게 적용합니다.
 Encode와 decode의 JSON 정수는 전역 CPython 설정과 무관하게 최대 640자리로
-제한됩니다.
+제한됩니다. 문자열은 Unicode scalar value로 구성되어야 합니다. Decode는 올바른
+escaped surrogate pair를 non-BMP scalar로 정규화하고, 짝이 없는 surrogate는
+거부합니다.
 Byte 제한만으로 process memory 상한이 보장되지는 않습니다. 오류 처리와 버전별
 rollout/rollback은 package README를 참고하십시오.
 `SerdeError`는 안정된 serde domain failure를 나타내며, 호출자의 type/configuration
