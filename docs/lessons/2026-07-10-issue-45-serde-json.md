@@ -27,6 +27,13 @@ performance, stability, security, operator, developer, and user perspectives.
 - Keep Apache Fory outside Issue #45. Issue #46 owns binary serialization and
   must reuse the payload, error, limit, trust, schema-ID, and cross-language
   conformance contracts established here.
+- Memoize completed container validation by the greatest entry depth, not only
+  by identity. This prevents exponential path expansion for shared-reference
+  DAGs while still revisiting a shared subtree when a deeper placement could
+  violate the nesting limit.
+- Treat JSON strings as Unicode scalar values. Python's decoder accepts escaped
+  surrogate code points, so normalize valid pairs to non-BMP scalars and reject
+  unpaired surrogates explicitly to keep decode output re-encodable.
 
 ## Outcome
 
@@ -39,6 +46,8 @@ and isolated installation smoke tests passed locally before publication.
 - When a failure path handles untrusted or large data, inspect the complete
   traceback and context graph instead of checking only exception messages.
 - Measure adversarial chunk sizes and allocation peaks for streaming adapters.
+- Test shared-reference graphs with deterministic visit counters; wall-clock
+  thresholds are too noisy to prove traversal complexity.
 - Never delegate bounded numeric behavior to mutable interpreter-global
   settings when the format contract must be portable.
 - Re-run commands copied into plans or review artifacts exactly as written.
