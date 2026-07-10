@@ -127,14 +127,14 @@ excluded async collection helpers and assigned that scope to this issue.
   cleanup, and raises `CancelledError` rather than returning partial result
   slots. Self-cancellation remains unsupported except for this fail-closed
   safety behavior.
-- To distinguish external caller cancellation, the private runner also checks
-  the invocation-owner task's `cancelling()` state. It re-raises cancellation
-  while the owner has a pending external request; otherwise a mapper
-  cancellation becomes an internal terminal signal that cancels siblings. A
-  direct mapper raise has the specified contract above; mapper self-cancellation
-  only receives the fail-closed no-partial-result behavior. The parent never
-  calls `uncancel()`, and the implementation must preserve external cancellation
-  counts.
+- On entry, the helper captures the invocation-owner task's cancellation count.
+  The private runner treats only a later count increase as a cancellation-race
+  propagation guard; it does not claim that a nonzero count identifies the
+  cancellation source. With no increase, mapper cancellation becomes an
+  internal terminal signal that cancels siblings. Exact-source cancellation
+  races, including timeout and task-group wake-up cancellation, retain native
+  outcomes. The parent never calls `uncancel()`, and a new caller cancellation
+  must remain observable with its count preserved.
 - Before raising any non-external terminal mapper or iterator signal, a worker
   records call-scoped terminal state. Every worker checks that state immediately
   before its next `next(iterator)` call, so no item is admitted after terminal
@@ -144,6 +144,10 @@ excluded async collection helpers and assigned that scope to this issue.
   but the worker does, it records terminal state and raises the private terminal
   signal before recording a result or advancing the iterator. Tests cover both
   self-cancel delivery at the mapper's next `await` and immediate mapper return.
+- A worker performs the same check after every `next(iterator)` outcome, before
+  mapper invocation or normal exhaustion. Therefore iterator self-cancellation
+  followed by a yield or `StopIteration` also fails closed before any mapper
+  call, result return, or later admission.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.

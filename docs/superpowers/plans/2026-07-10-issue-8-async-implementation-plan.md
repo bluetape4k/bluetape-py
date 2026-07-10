@@ -287,8 +287,9 @@ async def test_map_bounded_cleans_up_after_iterator_and_mapper_failures() -> Non
         finally:
             cleaned.set()
 
-    with pytest.raises(ExceptionGroup, match="iterator boom"):
+    with pytest.raises(ExceptionGroup) as iterator_error:
         await map_bounded(failing_items(), waiting_mapper, limit=2)
+    assert iterator_error.group_contains(RuntimeError, match="iterator boom")
     assert admitted == 1
     assert cleaned.is_set()
     _assert_no_helper_tasks()
@@ -313,8 +314,9 @@ async def test_map_bounded_cleans_up_after_iterator_and_mapper_failures() -> Non
         await sibling_started.wait()
         raise RuntimeError("mapper boom")
 
-    with pytest.raises(ExceptionGroup, match="mapper boom"):
+    with pytest.raises(ExceptionGroup) as mapper_error:
         await map_bounded(mapper_items(), broken_mapper, limit=2)
+    assert mapper_error.group_contains(RuntimeError, match="mapper boom")
     assert admitted == 2
     assert sibling_cleaned.is_set()
     _assert_no_helper_tasks()
@@ -343,6 +345,31 @@ async def test_map_bounded_iterator_cancellation_fails_closed_after_cleanup() ->
         await map_bounded(cancelled_items(), waiting_mapper, limit=2)
     assert admitted == 1
     assert cleaned.is_set()
+    _assert_no_helper_tasks()
+
+
+async def test_map_bounded_iterator_self_cancellation_fails_before_mapper() -> None:
+    class SelfCancellingIterator:
+        def __init__(self) -> None:
+            self._first = True
+
+        def __iter__(self) -> "SelfCancellingIterator":
+            return self
+
+        def __next__(self) -> int:
+            task = asyncio.current_task()
+            assert task is not None
+            task.cancel()
+            if self._first:
+                self._first = False
+                return 1
+            raise StopIteration
+
+    async def mapper(_: int) -> int:
+        raise AssertionError("mapper must not be called")
+
+    with pytest.raises(asyncio.CancelledError):
+        await map_bounded(SelfCancellingIterator(), mapper, limit=1)
     _assert_no_helper_tasks()
 
 
@@ -409,23 +436,35 @@ async def test_map_bounded_self_cancellation_at_await_fails_closed() -> None:
 
 
 async def test_map_bounded_preserves_external_cancellation_and_cleanup() -> None:
-    started = asyncio.Event()
+    started = 0
+    both_started = asyncio.Event()
     cleaned = asyncio.Event()
+    admitted = 0
+
+    def items() -> Iterator[int]:
+        nonlocal admitted
+        for value in range(3):
+            admitted += 1
+            yield value
 
     async def mapper(_: int) -> int:
-        started.set()
+        nonlocal started
+        started += 1
+        if started == 2:
+            both_started.set()
         try:
             await asyncio.Event().wait()
         finally:
             cleaned.set()
 
-    task = asyncio.create_task(map_bounded([1], mapper, limit=1))
-    await started.wait()
+    task = asyncio.create_task(map_bounded(items(), mapper, limit=2))
+    await both_started.wait()
     task.cancel()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
     assert task.cancelling() == 2
+    assert admitted == 2
     assert cleaned.is_set()
     _assert_no_helper_tasks()
 
@@ -592,16 +631,31 @@ def _require_timeout(timeout: float | None) -> None:
         raise ValueError("timeout must be a finite non-negative number")
 
 
+def _raise_if_worker_cancellation(
+    owner: asyncio.Task[object],
+    owner_cancellation_baseline: int,
+    terminal: asyncio.Event,
+) -> None:
+    worker = asyncio.current_task()
+    if worker is None or not worker.cancelling():
+        return
+    if owner.cancelling() > owner_cancellation_baseline:
+        raise asyncio.CancelledError
+    terminal.set()
+    raise _InvocationCancelled
+
+
 async def _invoke_mapper[T, R](
     mapper: Callable[[T], Awaitable[R]],
     item: T,
     owner: asyncio.Task[object],
+    owner_cancellation_baseline: int,
     terminal: asyncio.Event,
 ) -> R:
     try:
         result = await mapper(item)
     except asyncio.CancelledError:
-        if owner.cancelling():
+        if owner.cancelling() > owner_cancellation_baseline:
             raise
         terminal.set()
         raise _InvocationCancelled from None
@@ -609,10 +663,7 @@ async def _invoke_mapper[T, R](
         terminal.set()
         raise
 
-    task = asyncio.current_task()
-    if task is not None and task.cancelling() and not owner.cancelling():
-        terminal.set()
-        raise _InvocationCancelled
+    _raise_if_worker_cancellation(owner, owner_cancellation_baseline, terminal)
     return result
 
 
@@ -637,6 +688,7 @@ async def map_bounded[T, R](
     owner = asyncio.current_task()
     if owner is None:
         raise RuntimeError("map_bounded requires a running task")
+    owner_cancellation_baseline = owner.cancelling()
     results: list[R | None] = []
     terminal = asyncio.Event()
 
@@ -647,18 +699,26 @@ async def map_bounded[T, R](
             try:
                 item = next(iterator)
             except StopIteration:
+                _raise_if_worker_cancellation(owner, owner_cancellation_baseline, terminal)
                 return
             except asyncio.CancelledError:
-                if owner.cancelling():
+                if owner.cancelling() > owner_cancellation_baseline:
                     raise
                 terminal.set()
                 raise _InvocationCancelled from None
             except BaseException:
                 terminal.set()
                 raise
+            _raise_if_worker_cancellation(owner, owner_cancellation_baseline, terminal)
             index = len(results)
             results.append(None)
-            results[index] = await _invoke_mapper(mapper_fn, item, owner, terminal)
+            results[index] = await _invoke_mapper(
+                mapper_fn,
+                item,
+                owner,
+                owner_cancellation_baseline,
+                terminal,
+            )
 
     async def run_workers() -> None:
         async with asyncio.TaskGroup() as task_group:
