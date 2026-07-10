@@ -748,21 +748,29 @@ def test_json_serialize_accepts_nonzero_depth_n_and_rejects_n_plus_one(
 
 
 def test_preflight_auxiliary_memory_does_not_scale_with_wide_sibling_count() -> None:
-    narrow = [None] * 10
-    wide = [None] * 100_000
+    narrow: list[JsonValue] = [[] for _ in range(10)]
+    wide: list[JsonValue] = [[] for _ in range(100_000)]
 
     tracemalloc.start()
-    _preflight_json_value(narrow, max_nesting_depth=1)
+    _preflight_json_value(
+        narrow,
+        max_nesting_depth=2,
+        max_output_size=sys.maxsize - 1,
+    )
     _, narrow_peak = tracemalloc.get_traced_memory()
     tracemalloc.reset_peak()
-    _preflight_json_value(wide, max_nesting_depth=1)
+    _preflight_json_value(
+        wide,
+        max_nesting_depth=2,
+        max_output_size=sys.maxsize - 1,
+    )
     _, wide_peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
     assert wide_peak - narrow_peak < 64 * 1024
 
 
-def test_preflight_visits_each_completed_shared_dag_container_once(
+def test_json_serialize_tiny_output_budget_stops_shared_dag_preflight_early(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import bluetape.serde._json as serde_json_module
@@ -782,16 +790,71 @@ def test_preflight_visits_each_completed_shared_dag_container_once(
         shared = {"left": shared, "right": shared}
         unique_container_count += 1
 
-    _preflight_json_value(shared, max_nesting_depth=unique_container_count)
+    monkeypatch.setattr(
+        serde_json_module.json,
+        "JSONEncoder",
+        lambda **_options: pytest.fail("encoder was constructed"),
+    )
+    with pytest.raises(PayloadLimitError) as caught:
+        json_serialize(
+            shared,
+            metadata=metadata(),
+            max_output_size=8,
+            max_nesting_depth=unique_container_count,
+        )
 
-    assert visits == unique_container_count
+    assert visits == 8
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.OUTPUT_LIMIT,
+        message="serialized output exceeds max_output_size",
+    )
+
+
+@pytest.mark.parametrize(
+    ("case", "max_nesting_depth", "error_type", "code"),
+    [
+        ("unsupported", 2, SerdeEncodeError, SerdeErrorCode.UNSUPPORTED_VALUE),
+        ("circular", 2, SerdeEncodeError, SerdeErrorCode.CIRCULAR_REFERENCE),
+        ("depth", 1, PayloadLimitError, SerdeErrorCode.NESTING_LIMIT),
+    ],
+)
+def test_json_serialize_current_node_validation_precedes_output_visit_guard(
+    case: str,
+    max_nesting_depth: int,
+    error_type: type[SerdeError],
+    code: SerdeErrorCode,
+) -> None:
+    if case == "unsupported":
+        value: object = [object()]
+    elif case == "circular":
+        cyclic: list[JsonValue] = []
+        cyclic.append(cyclic)
+        value = cyclic
+    else:
+        value = [[None]]
+
+    with pytest.raises(error_type) as caught:
+        json_serialize(
+            value,  # type: ignore[arg-type]
+            metadata=metadata(),
+            max_output_size=1,
+            max_nesting_depth=max_nesting_depth,
+        )
+
+    assert caught.value.code is code
 
 
 def test_preflight_revisits_shared_container_when_entered_at_greater_depth() -> None:
     shared: JsonValue = [[None]]
 
     with pytest.raises(PayloadLimitError) as caught:
-        _preflight_json_value([shared, [shared]], max_nesting_depth=3)
+        _preflight_json_value(
+            [shared, [shared]],
+            max_nesting_depth=3,
+            max_output_size=sys.maxsize - 1,
+        )
 
     assert_error(
         caught,

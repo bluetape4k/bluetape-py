@@ -539,6 +539,12 @@ raise `PayloadLimitError(code=NESTING_LIMIT)`. Repeated shared references are
 accepted after the first branch leaves the active set; cycles raise
 `SerdeEncodeError(code=CIRCULAR_REFERENCE)`. Add a wide-container `tracemalloc`
 regression showing preflight bookkeeping does not scale with sibling count.
+Do not memoize completed containers because that makes auxiliary state
+O(unique containers). Instead count validated value occurrences and stop with
+`PayloadLimitError(code=OUTPUT_LIMIT)` once the count exceeds
+`max_output_size`; every JSON value occurrence requires at least one output
+byte, so this is a conservative lower-bound guard against repeated-DAG
+expansion while retaining O(depth) traversal state.
 
 - [ ] **Step 7: Implement incremental encoding without retained context**
 
