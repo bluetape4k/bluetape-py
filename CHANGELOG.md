@@ -14,6 +14,10 @@ and this project uses semantic versioning once the first tag is published.
 - `bluetape-collections` source workspace package with eager stdlib-only
   helpers under `bluetape.collections` for chunking, grouping, distinct,
   partitioning, and exception-transparent map/filter transforms.
+- `bluetape-codec` source workspace package with strict canonical URL-safe
+  Base64 and hexadecimal helpers under `bluetape.codec`.
+- `bluetape-compression` source workspace package with bounded gzip,
+  zlib-wrapped, and raw-DEFLATE helpers under `bluetape.compression`.
 
 ## [v0.1.0] - 2026-07-10
 

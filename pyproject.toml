@@ -6,7 +6,9 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "bluetape-async==0.1.0",
+    "bluetape-codec==0.1.0",
     "bluetape-collections==0.1.0",
+    "bluetape-compression==0.1.0",
     "bluetape-core==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-testing==0.1.0",
@@ -24,7 +26,9 @@ package = false
 
 [tool.uv.sources]
 bluetape-async = { workspace = true }
+bluetape-codec = { workspace = true }
 bluetape-collections = { workspace = true }
+bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
 bluetape-testing = { workspace = true }
@@ -33,7 +37,9 @@ bluetape-testing = { workspace = true }
 members = [
     "packages/bluetape",
     "packages/bluetape-async",
+    "packages/bluetape-codec",
     "packages/bluetape-collections",
+    "packages/bluetape-compression",
     "packages/bluetape-core",
     "packages/bluetape-logging",
     "packages/bluetape-testing",

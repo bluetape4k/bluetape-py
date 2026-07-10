@@ -164,8 +164,12 @@ READMEs; modify root `pyproject.toml`, `packages/bluetape/pyproject.toml`, and
    `wbits`: gzip (`16 + MAX_WBITS`), zlib wrapper (`MAX_WBITS`), raw DEFLATE
    (`-MAX_WBITS`). Do not auto-detect decode formats.
 4. Implement one shared private bounded decode routine. Treat source as a
-   byte-view and feed at most 64 KiB at a time; keep a list of emitted chunks
-   and one operation-wide remaining-output counter. Each call must use
+   byte-view and feed source chunks of at most 64 KiB; when a gzip member leaves
+   `unused_data`, first probe a minimum-size gzip member, then advance that tail
+   through exponentially growing memory-view slices capped at 64 KiB. This keeps
+   many small members from reprocessing a growing suffix or incurring one call
+   per byte. Keep a list of emitted chunks and one operation-wide remaining-
+   output counter. Each call must use
    `decompress(input, remaining + 1)`: if it returns more than remaining, raise
    `DecompressionLimitError` before appending.
 5. Drive decompressor state deterministically: re-feed `unconsumed_tail` first;

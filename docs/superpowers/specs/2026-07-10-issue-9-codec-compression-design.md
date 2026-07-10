@@ -87,18 +87,22 @@ def deflate_decompress(data: bytes | bytearray | memoryview, *, max_output_size:
 - Compression delegates valid levels to the matching stdlib primitive.
 - Invalid `level` types or values retain the matching native stdlib `TypeError`
   or `ValueError`; this package does not translate them.
-- Decompression uses a fixed 64 KiB compressed-input chunk size and one
-  operation-wide remaining-output counter. Every `decompress()` call receives
+- Decompression uses source chunks of at most 64 KiB and one operation-wide
+  remaining-output counter. Every `decompress()` call receives
   `max_length=remaining + 1`; the implementation drains `unconsumed_tail` and
   empty-input pending output only through further bounded `decompress()` calls.
-  The state machine first re-feeds `unconsumed_tail`; when an empty-input probe
-  yields no output, no tail, and no `eof`, it feeds the next source chunk when
-  one remains, otherwise raises `CompressionError` for truncation and never
-  retries that no-progress state. It never calls `Decompress.flush()`, because
-  its length argument is not a hard output cap. The implementation raises
-  `DecompressionLimitError` before appending an over-limit result and avoids
-  proportional preallocation. No public helper calls an unbounded one-shot
-  decompressor.
+  The state machine first re-feeds `unconsumed_tail`; when a gzip member leaves
+  `unused_data`, it first probes a minimum-size gzip member and then advances
+  the tail through exponentially growing memory-view slices capped at 64 KiB
+  for the next member. This prevents repeated large-tail reprocessing without
+  one-call-per-byte amplification. When an empty-input probe yields no output,
+  no tail, and no
+  `eof`, it feeds the next source chunk when one remains, otherwise raises
+  `CompressionError` for truncation and never retries that no-progress state.
+  It never calls `Decompress.flush()`, because its length argument is not a hard
+  output cap. The implementation raises `DecompressionLimitError` before
+  appending an over-limit result and avoids proportional preallocation. No
+  public helper calls an unbounded one-shot decompressor.
 - `max_output_size` is a non-boolean integer from zero through
   `sys.maxsize - 1`; a zero limit permits only an empty decompressed payload.
   Larger values raise `ValueError` before they can overflow the `remaining + 1`
@@ -162,7 +166,7 @@ unchanged: no tag or PyPI publication is part of this issue; rollback is a
 | Risk | Mitigation |
 |---|---|
 | Permissive Base64 accepts attacker-controlled junk. | Enforce ASCII and stdlib strict validation; test malformed alphabet, padding, and length. |
-| Small compressed input expands beyond the returned-payload limit. | Use 64 KiB input chunks, `remaining + 1` output caps, bounded `decompress()` draining without `flush()`, and a bomb test. |
+| Small compressed input expands beyond the returned-payload limit. | Use source chunks of at most 64 KiB, linear gzip-tail handling, `remaining + 1` output caps, bounded `decompress()` draining without `flush()`, and a bomb test. |
 | Format confusion accepts trailing bytes. | Require `eof` per member; accept only complete concatenated gzip members and reject trailing zlib/raw-deflate data. |
 | New packages leak into the thin default install. | Inspect built meta-wheel metadata and run isolated wheel smoke tests. |
 | A Python build omits optional `zlib`. | Lazy-load compression backends; keep package importable and raise a fixed `CompressionError` only when a helper is called. |

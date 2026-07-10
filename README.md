@@ -17,9 +17,9 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed. The new collections package is available from the source
-workspace; registry install commands describe the intended post-publication
-shape only.
+are confirmed. The collections, codec, and compression packages are available
+from the source workspace; registry install commands describe the intended
+post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It expands
@@ -46,7 +46,9 @@ only `bluetape-core` by default.
 | `bluetape` | none | yes | active | Thin meta distribution that depends on `bluetape-core`. |
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | Stdlib-only bounded structured-concurrency helpers. |
+| `bluetape-codec` | `bluetape.codec` | no | active, source workspace | Strict URL-safe Base64 and hexadecimal helpers. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
+| `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Bounded gzip, zlib, and raw-DEFLATE byte helpers. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | planned | Serialization boundary helpers after core APIs settle. |
@@ -77,7 +79,9 @@ The public install shape after the first PyPI release is:
 ```bash
 pip install bluetape
 pip install "bluetape[asyncio]"
+pip install "bluetape[codec]"
 pip install "bluetape[collections]"
+pip install "bluetape[compression]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
@@ -89,7 +93,9 @@ Focused distributions can also be installed directly:
 ```bash
 pip install bluetape-core
 pip install bluetape-async
+pip install bluetape-codec
 pip install bluetape-collections
+pip install bluetape-compression
 pip install bluetape-logging
 pip install bluetape-testing
 ```
@@ -141,6 +147,21 @@ chunks = chunked(range(5), 2)
 by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 ```
 
+### Codec and compression
+
+```python
+from bluetape.codec import base64url_encode
+from bluetape.compression import gzip_compress, gzip_decompress
+
+token = base64url_encode(b"order:42")
+assert gzip_decompress(gzip_compress(token.encode("ascii"))) == token.encode("ascii")
+```
+
+`bluetape.codec` decodes only canonical URL-safe Base64 and strict hex text.
+`bluetape.compression` defaults to a 64 MiB logical returned-payload limit;
+gzip accepts complete concatenated members, while zlib/raw-DEFLATE reject
+trailing bytes. Neither package is part of the default `bluetape` install.
+
 ### Bounded asyncio work
 
 ```python
@@ -171,7 +192,9 @@ input iterable can grow and the caller must set a cooperative concurrency cap.
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
+| `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |
