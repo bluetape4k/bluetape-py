@@ -17,8 +17,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression 패키지는 source workspace에서 사용할 수 있으며,
-registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
+collections, codec, compression, serde 패키지는 source workspace에서 사용할 수
+있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
@@ -29,7 +29,7 @@ registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 �
 | 트랙 | 범위 |
 |---|---|
 | `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
-| `0.2.0` | 진행 중인 ecosystem planning과 첫 확장 이슈 #7-#34. |
+| `0.2.0` | 진행 중인 ecosystem planning과 #45의 strict JSON serde를 포함한 첫 확장 작업. |
 | PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
@@ -50,7 +50,7 @@ registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 �
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | 제한된 gzip, zlib, raw-DEFLATE byte 헬퍼. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
-| `bluetape-serde` | `bluetape.serde` | no | planned | core API가 안정화된 뒤 다룰 serialization 경계 헬퍼. |
+| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | 엄격한 payload 계약과 bounded JSON v1 serialization. |
 | `bluetape-cache` | `bluetape.cache` | no | planned | 캐시 추상화와 인메모리 헬퍼. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | cache 계약을 검증한 뒤 추가할 Redis 어댑터. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | 통합 테스트가 많은 패키지를 위한 Testcontainers fixture. |
@@ -67,6 +67,8 @@ registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 �
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
+- 기본 meta 설치는 계속 core-only입니다. Serde는 opt-in이며 Apache Fory는
+  #46의 별도 후속 작업으로 남겨 둡니다.
 
 ## 설치
 
@@ -82,6 +84,7 @@ pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
 pip install "bluetape[logging]"
+pip install "bluetape[serde]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
@@ -96,6 +99,7 @@ pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
 pip install bluetape-logging
+pip install bluetape-serde
 pip install bluetape-testing
 ```
 
@@ -103,7 +107,11 @@ pip install bluetape-testing
 
 ```bash
 uv sync --all-packages
+uv run --package bluetape-serde python -c "import bluetape.serde"
 ```
+
+현재 실행 가능한 경로는 로컬 workspace와 로컬 wheel뿐입니다. 위 `pip` 명령과
+향후 `serde` extra는 PyPI 배포가 활성화되기 전에는 registry에서 사용할 수 없습니다.
 
 ## 사용 예
 
@@ -185,6 +193,41 @@ asyncio.run(main())
 집합에만 `asyncio.gather`를 사용합니다. 입력 iterable이 커질 수 있고 호출자가
 cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합니다.
 
+### Strict JSON serde
+
+```python
+from bluetape.serde import (
+    PayloadMetadata,
+    TrustProfile,
+    json_deserialize,
+    json_serialize,
+)
+
+producer_metadata = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.UNTRUSTED,
+)
+payload = json_serialize({"order_id": 42}, metadata=producer_metadata)
+
+# Consumer policy는 인증된 설정으로 별도 구성하며 payload.metadata에서 복사하지 않습니다.
+consumer_policy = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.UNTRUSTED,
+)
+assert json_deserialize(payload, expected_metadata=consumer_policy) == {"order_id": 42}
+```
+
+권장 기본값은 `UNTRUSTED`입니다. `TRUSTED_INTERNAL`은 producer가 인증되고
+인가된 폐쇄 경계에서만 허용하며, 네트워크 위치나 payload 주장은 충분하지 않습니다.
+두 profile 모두 strict UTF-8 JSON, 정확한 metadata, duplicate key/non-finite number
+거부, 기본 input/output 16 MiB, 기본 depth 100, hard ceiling 256을 동일하게 적용합니다.
+Byte 제한만으로 process memory 상한이 보장되지는 않습니다. 오류 처리와 버전별
+rollout/rollback은 package README를 참고하십시오.
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
@@ -196,6 +239,7 @@ cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합�
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
+| `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |
 
 ## 로드맵

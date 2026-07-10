@@ -17,9 +17,9 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed. The collections, codec, and compression packages are available
-from the source workspace; registry install commands describe the intended
-post-publication shape only.
+are confirmed. The collections, codec, compression, and serde packages are
+available from the source workspace; registry install commands describe the
+intended post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It expands
@@ -30,7 +30,7 @@ the ecosystem backlog from issues #7 through #34. Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem planning and first expansion issues #7-#34. |
+| `0.2.0` | Active ecosystem planning and first expansion work, including strict JSON serde from #45. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -51,7 +51,7 @@ only `bluetape-core` by default.
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Bounded gzip, zlib, and raw-DEFLATE byte helpers. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
-| `bluetape-serde` | `bluetape.serde` | no | planned | Serialization boundary helpers after core APIs settle. |
+| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict payload contracts and bounded JSON v1 serialization. |
 | `bluetape-cache` | `bluetape.cache` | no | planned | Cache abstractions and in-memory helpers. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | Redis-backed adapters once cache contracts are proven. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | Testcontainers fixtures for integration-heavy packages. |
@@ -68,6 +68,8 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
+- The default meta install remains core-only. Serde is opt-in, and Apache Fory
+  remains a separate planned follow-up in issue #46.
 
 ## Install
 
@@ -83,6 +85,7 @@ pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
 pip install "bluetape[logging]"
+pip install "bluetape[serde]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
@@ -97,6 +100,7 @@ pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
 pip install bluetape-logging
+pip install bluetape-serde
 pip install bluetape-testing
 ```
 
@@ -104,7 +108,12 @@ For local development from this repository:
 
 ```bash
 uv sync --all-packages
+uv run --package bluetape-serde python -c "import bluetape.serde"
 ```
+
+Only the local workspace and local-wheel paths are runnable today. The `pip`
+commands above, including the future `serde` extra, remain unavailable from
+PyPI until publication is enabled.
 
 ## Usage
 
@@ -186,6 +195,43 @@ Use a synchronous loop for simple sequential work and `asyncio.gather` only
 when the coroutine set is already small and bounded. Use `map_bounded` when an
 input iterable can grow and the caller must set a cooperative concurrency cap.
 
+### Strict JSON serde
+
+```python
+from bluetape.serde import (
+    PayloadMetadata,
+    TrustProfile,
+    json_deserialize,
+    json_serialize,
+)
+
+producer_metadata = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.UNTRUSTED,
+)
+payload = json_serialize({"order_id": 42}, metadata=producer_metadata)
+
+# Construct consumer policy independently from authenticated configuration;
+# never copy expected policy from payload.metadata.
+consumer_policy = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.UNTRUSTED,
+)
+assert json_deserialize(payload, expected_metadata=consumer_policy) == {"order_id": 42}
+```
+
+`UNTRUSTED` is the recommended default. `TRUSTED_INTERNAL` is only for a closed
+boundary with an authenticated and authorized producer; network location and
+payload claims are insufficient. Both profiles enforce identical strict UTF-8
+JSON, exact metadata, duplicate-key/non-finite-number rejection, 16 MiB default
+input/output limits, depth 100 by default, and a hard depth ceiling of 256.
+These byte limits are not a fixed process-memory guarantee. See the package
+README for error handling and versioned rollout/rollback guidance.
+
 ## Package Documentation
 
 | Package | Documentation |
@@ -197,6 +243,7 @@ input iterable can grow and the caller must set a cooperative concurrency cap.
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
+| `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |
 
 ## Roadmap

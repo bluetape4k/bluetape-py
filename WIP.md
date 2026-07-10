@@ -24,6 +24,9 @@ focused distribution model:
 - `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers, added
   for issue #9 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
+- `bluetape-serde`: stdlib-only immutable payload contracts and strict,
+  bounded JSON v1 serialization, implemented for issue #45 in the source
+  workspace while PyPI publication remains on HOLD.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
 
@@ -40,6 +43,9 @@ focused distribution model:
 - Milestone `0.2.0` tracks ecosystem expansion issues #7 through #34.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
+- Issue #45 strict JSON serde is implemented in the current PR preparation
+  branch. Issue #46 remains the separate Apache Fory follow-up and is blocked
+  by #45 until this contract lands.
 
 ## `0.1.0` Scope
 
@@ -112,6 +118,10 @@ Historical release scope; all items are closed.
 - #10 - Serialization strategy research. Decision recorded in
   `docs/research/2026-07-10-issue-10-serialization-strategy.md`; follow-ups
   are #45 (contracts/strict JSON) and #46 (Apache Fory adapter).
+- #45 - Immutable payload contracts and strict bounded JSON v1 serde.
+  Implemented in the source workspace; current PR preparation is in progress.
+- #46 - Apache Fory adapter and Python/Go/Rust/Kotlin conformance. Separate
+  follow-up blocked by #45; not part of the JSON v1 implementation.
 - #11 - Cache and Redis coordination packages.
 - #12 - Resilience policies.
 - #13 - ID, measure, and money value packages.
