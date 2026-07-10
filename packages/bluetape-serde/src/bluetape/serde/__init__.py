@@ -21,6 +21,7 @@ from ._json import (
     DEFAULT_MAX_OUTPUT_SIZE,
     MAX_SUPPORTED_NESTING_DEPTH,
     JsonValue,
+    json_deserialize,
     json_serialize,
 )
 
@@ -43,5 +44,6 @@ __all__ = [  # noqa: RUF022 - staged public contract order is intentional
     "TrustProfile",
     "TrustProfileMismatchError",
     "UnsupportedVersionError",
+    "json_deserialize",
     "json_serialize",
 ]

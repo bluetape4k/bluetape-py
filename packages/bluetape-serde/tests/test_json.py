@@ -1,4 +1,6 @@
+import ast
 import inspect
+import json
 import math
 import sys
 import tracemalloc
@@ -25,9 +27,10 @@ from bluetape.serde import (
     TrustProfile,
     TrustProfileMismatchError,
     UnsupportedVersionError,
+    json_deserialize,
     json_serialize,
 )
-from bluetape.serde._json import _preflight_json_value
+from bluetape.serde._json import _preflight_json_text, _preflight_json_value
 
 EXPECTED_EXPORTS = [
     "DEFAULT_MAX_INPUT_SIZE",
@@ -48,6 +51,7 @@ EXPECTED_EXPORTS = [
     "TrustProfile",
     "TrustProfileMismatchError",
     "UnsupportedVersionError",
+    "json_deserialize",
     "json_serialize",
 ]
 DIRECT_EXPORTS = [
@@ -69,6 +73,7 @@ DIRECT_EXPORTS = [
     TrustProfile,
     TrustProfileMismatchError,
     UnsupportedVersionError,
+    json_deserialize,
     json_serialize,
 ]
 
@@ -105,11 +110,29 @@ def assert_error(
     assert error.__context__ is None
 
 
+def assert_decode_traceback_does_not_retain_source(error: Exception) -> None:
+    traceback = error.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_name == "json_deserialize":
+            assert "payload" not in traceback.tb_frame.f_locals
+            assert "data" not in traceback.tb_frame.f_locals
+            assert "text" not in traceback.tb_frame.f_locals
+        traceback = traceback.tb_next
+
+
 def nested_list(depth: int) -> JsonValue:
     value: JsonValue = None
     for _ in range(depth):
         value = [value]
     return value
+
+
+def serialized(
+    data: bytes = b"null",
+    *,
+    payload_metadata: PayloadMetadata | None = None,
+) -> SerializedPayload:
+    return SerializedPayload(metadata=payload_metadata or metadata(), data=data)
 
 
 def test_json_public_contract_has_exact_exports_constants_and_signature() -> None:
@@ -145,6 +168,36 @@ def test_json_public_contract_has_exact_exports_constants_and_signature() -> Non
         "max_output_size": int,
         "max_nesting_depth": int,
         "return": SerializedPayload,
+    }
+
+    deserialize_signature = inspect.signature(json_deserialize)
+    assert list(deserialize_signature.parameters) == [
+        "payload",
+        "expected_metadata",
+        "max_input_size",
+        "max_nesting_depth",
+    ]
+    assert (
+        deserialize_signature.parameters["payload"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    )
+    assert (
+        deserialize_signature.parameters["expected_metadata"].kind is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert deserialize_signature.parameters["expected_metadata"].default is inspect.Signature.empty
+    assert deserialize_signature.parameters["max_input_size"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert (
+        deserialize_signature.parameters["max_nesting_depth"].kind is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert deserialize_signature.parameters["max_input_size"].default == (DEFAULT_MAX_INPUT_SIZE)
+    assert deserialize_signature.parameters["max_nesting_depth"].default == (
+        DEFAULT_MAX_NESTING_DEPTH
+    )
+    assert get_type_hints(json_deserialize) == {
+        "payload": SerializedPayload,
+        "expected_metadata": PayloadMetadata,
+        "max_input_size": int,
+        "max_nesting_depth": int,
+        "return": JsonValue,
     }
 
 
@@ -582,3 +635,671 @@ def test_json_serialize_does_not_translate_fatal_encoder_failures(
 
     with pytest.raises(type(fatal_error)):
         json_serialize(None, metadata=metadata())
+
+
+@pytest.mark.parametrize("trust_profile", list(TrustProfile))
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        (b"null", None),
+        (b"false", False),
+        (b"42", 42),
+        (b"-1.25", -1.25),
+        ('"한글 😺"'.encode(), "한글 😺"),
+        (b'[1,true,{"key":"value"}]', [1, True, {"key": "value"}]),
+    ],
+)
+def test_json_deserialize_decodes_strict_json_identically_for_both_profiles(
+    trust_profile: TrustProfile,
+    data: bytes,
+    expected: JsonValue,
+) -> None:
+    policy = metadata(trust_profile=trust_profile)
+
+    assert (
+        json_deserialize(
+            serialized(data, payload_metadata=policy),
+            expected_metadata=policy,
+        )
+        == expected
+    )
+
+
+class HostilePayload:
+    def __getattribute__(self, name: str) -> object:
+        if name in {"metadata", "data"}:
+            raise AssertionError("payload data was accessed")
+        return super().__getattribute__(name)
+
+
+@pytest.mark.parametrize(
+    ("payload_value", "expected_value", "message"),
+    [
+        (object(), metadata(), "payload must be an exact SerializedPayload"),
+        (HostilePayload(), metadata(), "payload must be an exact SerializedPayload"),
+        (serialized(), object(), "expected_metadata must be an exact PayloadMetadata"),
+        (
+            serialized(),
+            MetadataLookalike(
+                format="json",
+                version=1,
+                content_type="application/json",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+            "expected_metadata must be an exact PayloadMetadata",
+        ),
+    ],
+)
+def test_json_deserialize_rejects_inexact_runtime_contract_types_before_data_access(
+    payload_value: object,
+    expected_value: object,
+    message: str,
+) -> None:
+    with pytest.raises(TypeError) as caught:
+        json_deserialize(  # type: ignore[arg-type]
+            payload_value,
+            expected_metadata=expected_value,
+        )
+
+    assert type(caught.value) is TypeError
+    assert str(caught.value) == message
+
+
+@pytest.mark.parametrize(
+    ("changes", "error_type", "message"),
+    [
+        ({"max_input_size": True}, TypeError, "max_input_size must be an exact int"),
+        ({"max_input_size": 1.0}, TypeError, "max_input_size must be an exact int"),
+        (
+            {"max_input_size": IntegerLookalike(1)},
+            TypeError,
+            "max_input_size must be an exact int",
+        ),
+        (
+            {"max_input_size": -1},
+            ValueError,
+            "max_input_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            {"max_input_size": sys.maxsize},
+            ValueError,
+            "max_input_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            {"max_nesting_depth": True},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"max_nesting_depth": 1.0},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"max_nesting_depth": IntegerLookalike(1)},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"max_nesting_depth": -1},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
+        (
+            {"max_nesting_depth": 257},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
+    ],
+)
+def test_json_deserialize_validates_configuration_before_payload_data_access(
+    monkeypatch: pytest.MonkeyPatch,
+    changes: dict[str, object],
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    accessed = False
+
+    def hostile_data(_: SerializedPayload) -> bytes:
+        nonlocal accessed
+        accessed = True
+        raise AssertionError("payload data was accessed")
+
+    monkeypatch.setattr("bluetape.serde._json._payload_data", hostile_data)
+
+    with pytest.raises(error_type) as caught:
+        json_deserialize(
+            serialized(),
+            expected_metadata=metadata(),
+            **changes,  # type: ignore[arg-type]
+        )
+
+    assert type(caught.value) is error_type
+    assert str(caught.value) == message
+    assert accessed is False
+
+
+def test_json_deserialize_accepts_largest_supported_input_and_depth_configuration() -> None:
+    assert (
+        json_deserialize(
+            serialized(),
+            expected_metadata=metadata(),
+            max_input_size=sys.maxsize - 1,
+            max_nesting_depth=MAX_SUPPORTED_NESTING_DEPTH,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("expected", "error_type", "code", "message"),
+    [
+        (
+            metadata(format_name="msgpack", version=999, content_type="text/plain"),
+            FormatMismatchError,
+            SerdeErrorCode.FORMAT_MISMATCH,
+            "payload format does not match expected format",
+        ),
+        (
+            metadata(version=999, content_type="text/plain"),
+            ContentTypeMismatchError,
+            SerdeErrorCode.CONTENT_TYPE_MISMATCH,
+            "payload content type does not match expected content type",
+        ),
+        (
+            metadata(version=999),
+            UnsupportedVersionError,
+            SerdeErrorCode.UNSUPPORTED_VERSION,
+            "payload version is unsupported",
+        ),
+    ],
+)
+def test_json_deserialize_validates_supported_expected_metadata_before_payload_data(
+    monkeypatch: pytest.MonkeyPatch,
+    expected: PayloadMetadata,
+    error_type: type[Exception],
+    code: SerdeErrorCode,
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        "bluetape.serde._json._payload_data",
+        lambda _: pytest.fail("payload data was accessed"),
+    )
+
+    with pytest.raises(error_type) as caught:
+        json_deserialize(serialized(), expected_metadata=expected)
+
+    assert_error(caught, error_type=error_type, code=code, message=message)
+
+
+def test_json_deserialize_rejects_matching_unsupported_versions() -> None:
+    unsupported = metadata(version=999)
+
+    with pytest.raises(UnsupportedVersionError) as caught:
+        json_deserialize(
+            serialized(payload_metadata=unsupported),
+            expected_metadata=unsupported,
+        )
+
+    assert_error(
+        caught,
+        error_type=UnsupportedVersionError,
+        code=SerdeErrorCode.UNSUPPORTED_VERSION,
+        message="payload version is unsupported",
+    )
+
+
+@pytest.mark.parametrize(
+    ("actual", "error_type", "code", "message"),
+    [
+        (
+            metadata(format_name="msgpack", version=999, content_type="text/plain"),
+            FormatMismatchError,
+            SerdeErrorCode.FORMAT_MISMATCH,
+            "payload format does not match expected format",
+        ),
+        (
+            metadata(version=999, content_type="text/plain"),
+            ContentTypeMismatchError,
+            SerdeErrorCode.CONTENT_TYPE_MISMATCH,
+            "payload content type does not match expected content type",
+        ),
+        (
+            metadata(version=999, trust_profile=TrustProfile.TRUSTED_INTERNAL),
+            UnsupportedVersionError,
+            SerdeErrorCode.UNSUPPORTED_VERSION,
+            "payload version is unsupported",
+        ),
+        (
+            metadata(trust_profile=TrustProfile.TRUSTED_INTERNAL),
+            TrustProfileMismatchError,
+            SerdeErrorCode.TRUST_PROFILE_MISMATCH,
+            "payload trust profile does not match caller policy",
+        ),
+    ],
+)
+def test_json_deserialize_compares_actual_metadata_in_deterministic_order(
+    monkeypatch: pytest.MonkeyPatch,
+    actual: PayloadMetadata,
+    error_type: type[Exception],
+    code: SerdeErrorCode,
+    message: str,
+) -> None:
+    monkeypatch.setattr(
+        "bluetape.serde._json._payload_data",
+        lambda _: pytest.fail("payload data was accessed"),
+    )
+
+    with pytest.raises(error_type) as caught:
+        json_deserialize(
+            serialized(payload_metadata=actual),
+            expected_metadata=metadata(),
+        )
+
+    assert_error(caught, error_type=error_type, code=code, message=message)
+
+
+def test_json_deserialize_enforces_exact_byte_input_limit_before_decode_or_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "bluetape.serde._json._decode_utf8",
+        lambda _: calls.append("decode"),
+    )
+    monkeypatch.setattr(
+        "bluetape.serde._json._preflight_json_text",
+        lambda *_args, **_kwargs: calls.append("scan"),
+    )
+    monkeypatch.setattr(
+        "bluetape.serde._json.json.loads",
+        lambda *_args, **_kwargs: calls.append("parse"),
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(b"null"),
+            expected_metadata=metadata(),
+            max_input_size=3,
+        )
+
+    assert calls == []
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.INPUT_LIMIT,
+        message="serialized payload exceeds max_input_size",
+    )
+
+
+def test_json_deserialize_accepts_input_at_exact_byte_limit() -> None:
+    assert (
+        json_deserialize(
+            serialized(b"null"),
+            expected_metadata=metadata(),
+            max_input_size=4,
+        )
+        is None
+    )
+
+
+def test_json_deserialize_zero_input_limit_routes_empty_to_parser_and_rejects_nonempty() -> None:
+    with pytest.raises(MalformedPayloadError) as empty_caught:
+        json_deserialize(
+            serialized(b""),
+            expected_metadata=metadata(),
+            max_input_size=0,
+        )
+    with pytest.raises(PayloadLimitError) as nonempty_caught:
+        json_deserialize(
+            serialized(b"0"),
+            expected_metadata=metadata(),
+            max_input_size=0,
+        )
+
+    assert_error(
+        empty_caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_JSON,
+        message="payload is not valid JSON",
+    )
+    assert_error(
+        nonempty_caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.INPUT_LIMIT,
+        message="serialized payload exceeds max_input_size",
+    )
+
+
+def test_json_deserialize_rejects_invalid_utf8_without_source_retention() -> None:
+    marker = b"private-marker-\xff"
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(marker), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_UTF8,
+        message="payload is not valid UTF-8",
+    )
+    assert marker.decode("latin-1") not in repr(caught.value)
+    assert not hasattr(caught.value, "object")
+    assert_decode_traceback_does_not_retain_source(caught.value)
+
+
+def nested_json_text(depth: int) -> bytes:
+    return ("[" * depth + "null" + "]" * depth).encode()
+
+
+def test_json_deserialize_depth_zero_accepts_scalars_and_rejects_containers() -> None:
+    assert (
+        json_deserialize(
+            serialized(b'"[not structural]"'),
+            expected_metadata=metadata(),
+            max_nesting_depth=0,
+        )
+        == "[not structural]"
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(b"[]"),
+            expected_metadata=metadata(),
+            max_nesting_depth=0,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+@pytest.mark.parametrize("depth", [1, 7, 100])
+def test_json_deserialize_accepts_exact_depth_and_rejects_one_over(depth: int) -> None:
+    assert (
+        json_deserialize(
+            serialized(nested_json_text(depth)),
+            expected_metadata=metadata(),
+            max_nesting_depth=depth,
+        )
+        is not None
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(nested_json_text(depth + 1)),
+            expected_metadata=metadata(),
+            max_nesting_depth=depth,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+def test_json_deserialize_accepts_depth_256_and_rejects_configuration_257() -> None:
+    assert (
+        json_deserialize(
+            serialized(nested_json_text(MAX_SUPPORTED_NESTING_DEPTH)),
+            expected_metadata=metadata(),
+            max_nesting_depth=MAX_SUPPORTED_NESTING_DEPTH,
+        )
+        is not None
+    )
+
+    with pytest.raises(ValueError, match="MAX_SUPPORTED_NESTING_DEPTH"):
+        json_deserialize(
+            serialized(b"null"),
+            expected_metadata=metadata(),
+            max_nesting_depth=MAX_SUPPORTED_NESTING_DEPTH + 1,
+        )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'"[{}]"',
+        b'["escaped quote: \\" [[[]]]"]',
+        b'["odd backslashes: \\\\\\" [[[]]]"]',
+        b'["even backslashes: \\\\\\\\", [[null]]]',
+        b'{"text":"quoted [ { ] }", "value":[{"nested":true}]}',
+    ],
+)
+def test_json_deserialize_depth_scanner_handles_strings_quotes_and_backslash_runs(
+    data: bytes,
+) -> None:
+    assert (
+        json_deserialize(
+            serialized(data),
+            expected_metadata=metadata(),
+            max_nesting_depth=3,
+        )
+        is not None
+    )
+
+
+@pytest.mark.parametrize("closers", [b"]", b"}", b"]}"])
+def test_json_deserialize_unmatched_leading_closers_cannot_hide_later_over_depth(
+    monkeypatch: pytest.MonkeyPatch,
+    closers: bytes,
+) -> None:
+    monkeypatch.setattr(
+        "bluetape.serde._json.json.loads",
+        lambda *_args, **_kwargs: pytest.fail("parser was reached"),
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(closers + b"[[null]]"),
+            expected_metadata=metadata(),
+            max_nesting_depth=1,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+def test_json_deserialize_near_input_limit_adversarial_text_stops_in_scanner() -> None:
+    leading_closers = b"]" * 250_000
+    data = leading_closers + b"[[null]]"
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(data),
+            expected_metadata=metadata(),
+            max_input_size=len(data),
+            max_nesting_depth=1,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+def test_decode_depth_scanner_uses_constant_auxiliary_state() -> None:
+    small = "]" * 10 + '"quoted [brackets]"' + "[null]"
+    large = "]" * 1_000_000 + '"quoted [brackets]"' + "[null]"
+
+    tracemalloc.start()
+    _preflight_json_text(small, max_nesting_depth=1)
+    _, small_peak = tracemalloc.get_traced_memory()
+    tracemalloc.reset_peak()
+    _preflight_json_text(large, max_nesting_depth=1)
+    _, large_peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert large_peak - small_peak < 16 * 1024
+
+    source = inspect.getsource(_preflight_json_text)
+    tree = ast.parse(source)
+    assert "re." not in source
+    assert source.count("_preflight_json_text(") == 1
+    assert not any(
+        isinstance(
+            node,
+            (
+                ast.List,
+                ast.Set,
+                ast.Dict,
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+                ast.Slice,
+            ),
+        )
+        for node in ast.walk(tree)
+    )
+
+
+@pytest.mark.parametrize("trust_profile", list(TrustProfile))
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'{"key":1,"key":2}',
+        b'{"outer":{"key":1,"key":2}}',
+    ],
+)
+def test_json_deserialize_rejects_root_and_nested_duplicate_keys(
+    trust_profile: TrustProfile,
+    data: bytes,
+) -> None:
+    policy = metadata(trust_profile=trust_profile)
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(
+            serialized(data, payload_metadata=policy),
+            expected_metadata=policy,
+        )
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.DUPLICATE_KEY,
+        message="JSON object contains a duplicate key",
+    )
+
+
+@pytest.mark.parametrize("trust_profile", list(TrustProfile))
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"NaN",
+        b"Infinity",
+        b"-Infinity",
+        b"1e309",
+        b"-1e309",
+        b"[1e309]",
+        b'{"value":-1e309}',
+    ],
+)
+def test_json_deserialize_rejects_non_finite_constants_and_float_overflow(
+    trust_profile: TrustProfile,
+    data: bytes,
+) -> None:
+    policy = metadata(trust_profile=trust_profile)
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(
+            serialized(data, payload_metadata=policy),
+            expected_metadata=policy,
+        )
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.DECODE_NON_FINITE_NUMBER,
+        message="JSON payload contains a non-finite number",
+    )
+
+
+@pytest.mark.parametrize("data", [b"", b"[", b'{"key":}', b"true false"])
+def test_json_deserialize_translates_malformed_syntax_without_source_retention(
+    data: bytes,
+) -> None:
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(data), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_JSON,
+        message="payload is not valid JSON",
+    )
+    assert not hasattr(caught.value, "doc")
+    if data:
+        assert data.decode("utf-8", errors="replace") not in repr(caught.value)
+    assert_decode_traceback_does_not_retain_source(caught.value)
+
+
+@pytest.mark.parametrize("source_error", [ValueError("private marker"), RecursionError()])
+def test_json_deserialize_translates_parser_value_and_recursion_errors_narrowly(
+    monkeypatch: pytest.MonkeyPatch,
+    source_error: Exception,
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> JsonValue:
+        raise source_error
+
+    monkeypatch.setattr("bluetape.serde._json.json.loads", fail)
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_JSON,
+        message="payload is not valid JSON",
+    )
+    assert "private marker" not in repr(caught.value)
+
+
+def test_json_deserialize_does_not_retain_json_decode_error_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = json.JSONDecodeError("private marker", "private document marker", 2)
+
+    def fail(*_args: object, **_kwargs: object) -> JsonValue:
+        raise source
+
+    monkeypatch.setattr("bluetape.serde._json.json.loads", fail)
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_JSON,
+        message="payload is not valid JSON",
+    )
+    assert "private document marker" not in repr(caught.value)
+    assert not hasattr(caught.value, "doc")
+    assert_decode_traceback_does_not_retain_source(caught.value)
+
+
+@pytest.mark.parametrize("fatal_error", [MemoryError(), KeyboardInterrupt(), SystemExit()])
+def test_json_deserialize_does_not_translate_fatal_parser_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    fatal_error: BaseException,
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> JsonValue:
+        raise fatal_error
+
+    monkeypatch.setattr("bluetape.serde._json.json.loads", fail)
+
+    with pytest.raises(type(fatal_error)):
+        json_deserialize(serialized(), expected_metadata=metadata())
