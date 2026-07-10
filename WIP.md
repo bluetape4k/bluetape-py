@@ -44,9 +44,9 @@ focused distribution model:
   follow-ups #45 and #46; issues #35 through #44 are not implied by this range.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
-- Issue #45 strict JSON serde is implemented in the current PR preparation
-  branch. Issue #46 remains the separate Apache Fory follow-up and is blocked
-  by #45 until this contract lands.
+- Issue #45 strict JSON serde is implemented and locally verified in its
+  feature branch, pending PR review and merge. Issue #46 remains the separate
+  Apache Fory follow-up and is blocked by #45 until this contract lands.
 
 ## `0.1.0` Scope
 
@@ -120,7 +120,8 @@ Historical release scope; all items are closed.
   `docs/research/2026-07-10-issue-10-serialization-strategy.md`; follow-ups
   are #45 (contracts/strict JSON) and #46 (Apache Fory adapter).
 - #45 - Immutable payload contracts and strict bounded JSON v1 serde.
-  Implemented in the source workspace; current PR preparation is in progress.
+  Implemented and locally verified in the source workspace; PR review and
+  merge are pending.
 - #46 - Apache Fory adapter and Python/Go/Rust/Kotlin conformance. Separate
   follow-up blocked by #45; not part of the JSON v1 implementation.
 - #11 - Cache and Redis coordination packages.
