@@ -12,6 +12,7 @@ codec = ["bluetape-codec==0.1.0"]
 collections = ["bluetape-collections==0.1.0"]
 compression = ["bluetape-compression==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
+serde = ["bluetape-serde==0.1.0"]
 testing = ["bluetape-testing==0.1.0"]
 dev = [
     "bluetape-async==0.1.0",
@@ -19,6 +20,7 @@ dev = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-serde==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 all = [
@@ -27,6 +29,7 @@ all = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-serde==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 
@@ -37,6 +40,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-serde = { workspace = true }
 bluetape-testing = { workspace = true }
 
 [build-system]
