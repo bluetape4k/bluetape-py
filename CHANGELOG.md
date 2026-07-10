@@ -9,6 +9,8 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- `bluetape-async` source workspace package with bounded structured-concurrency
+  helpers under `bluetape.asyncio`, including ordered `map_bounded` execution.
 - `bluetape-collections` source workspace package with eager stdlib-only
   helpers under `bluetape.collections` for chunking, grouping, distinct,
   partitioning, and exception-transparent map/filter transforms.

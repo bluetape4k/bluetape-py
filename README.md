@@ -45,6 +45,7 @@ only `bluetape-core` by default.
 |---|---|---:|---|---|
 | `bluetape` | none | yes | active | Thin meta distribution that depends on `bluetape-core`. |
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
+| `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | Stdlib-only bounded structured-concurrency helpers. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
@@ -75,6 +76,7 @@ The public install shape after the first PyPI release is:
 
 ```bash
 pip install bluetape
+pip install "bluetape[asyncio]"
 pip install "bluetape[collections]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
@@ -86,6 +88,7 @@ Focused distributions can also be installed directly:
 
 ```bash
 pip install bluetape-core
+pip install bluetape-async
 pip install bluetape-collections
 pip install bluetape-logging
 pip install bluetape-testing
@@ -138,11 +141,36 @@ chunks = chunked(range(5), 2)
 by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 ```
 
+### Bounded asyncio work
+
+```python
+import asyncio
+
+from bluetape.asyncio import map_bounded
+
+
+async def fetch_order(order_id: int) -> str:
+    await asyncio.sleep(0.01)
+    return f"order-{order_id}"
+
+
+async def main() -> None:
+    print(await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0))
+
+
+asyncio.run(main())
+```
+
+Use a synchronous loop for simple sequential work and `asyncio.gather` only
+when the coroutine set is already small and bounded. Use `map_bounded` when an
+input iterable can grow and the caller must set a cooperative concurrency cap.
+
 ## Package Documentation
 
 | Package | Documentation |
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
+| `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |

@@ -16,6 +16,7 @@ Distributions live under `packages/` and should map to focused import paths.
 Current public distributions:
 
 - `bluetape`
+- `bluetape-async`
 - `bluetape-collections`
 - `bluetape-core`
 - `bluetape-logging`
@@ -24,7 +25,9 @@ Current public distributions:
 The `bluetape` distribution is a meta package. It should not create a root
 `bluetape/__init__.py` import surface. Focused packages own focused import paths
 such as `bluetape.core`, `bluetape.logging`, and `bluetape.testing`.
-The collections package owns `bluetape.collections`.
+The async package owns `bluetape.asyncio` and the collections package owns
+`bluetape.collections`. Async packages must document cooperative ownership,
+cancellation, timeout, and cleanup behavior.
 
 ## Future Packages
 
