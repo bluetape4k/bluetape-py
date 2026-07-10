@@ -70,6 +70,14 @@ module-name = "bluetape.asyncio"
 __all__: list[str] = []
 ```
 
+```markdown
+<!-- packages/bluetape-async/README.md -->
+# bluetape-async
+
+Stdlib-only bounded asyncio helpers for bluetape-py. The package documentation
+is completed with the public API in Task 4.
+```
+
 - [ ] **Step 2: Register only the intended optional dependency paths.**
 
 Add `bluetape-async==0.1.0` to the root workspace dependencies and
@@ -99,7 +107,7 @@ Expected: `[]`.
 
 - [ ] **Step 5: Commit the package boundary.**
 
-Run: `git add pyproject.toml uv.lock packages/bluetape-async/pyproject.toml packages/bluetape-async/src/bluetape/asyncio/__init__.py packages/bluetape/pyproject.toml && git diff --cached --check`
+Run: `git add pyproject.toml uv.lock packages/bluetape-async/pyproject.toml packages/bluetape-async/README.md packages/bluetape-async/src/bluetape/asyncio/__init__.py packages/bluetape/pyproject.toml && git diff --cached --check`
 
 Commit intent: `build: register focused async package`, with Lore trailers
 recording the default-install constraint and lock validation.
@@ -118,6 +126,15 @@ from collections.abc import Iterator
 import pytest
 
 from bluetape.asyncio import __all__, map_bounded
+
+
+def _assert_no_helper_tasks() -> None:
+    assert not [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task()
+        and task.get_name().startswith("bluetape.map_bounded.")
+    ]
 
 
 def _raising_iterable() -> Iterator[int]:
@@ -176,13 +193,23 @@ async def test_map_bounded_returns_empty_list_without_mapper_call() -> None:
     assert await map_bounded([], mapper, limit=1) == []
 
 
+async def test_map_bounded_accepts_explicit_timeout_none() -> None:
+    assert await map_bounded([1], _identity, limit=1, timeout=None) == [1]
+
+
 async def _identity(value: int) -> int:
     return value
 
 
-@pytest.mark.parametrize("limit", [True, False, 1.5, 0, -1])
-async def test_map_bounded_validates_limit_before_consuming(limit: object) -> None:
-    with pytest.raises((TypeError, ValueError)):
+@pytest.mark.parametrize(
+    ("limit", "error"),
+    [(True, TypeError), (False, TypeError), (1.5, TypeError), (0, ValueError), (-1, ValueError)],
+)
+async def test_map_bounded_validates_limit_before_consuming(
+    limit: object,
+    error: type[Exception],
+) -> None:
+    with pytest.raises(error):
         await map_bounded(_raising_iterable(), _identity, limit=limit)  # type: ignore[arg-type]
 
 
@@ -191,9 +218,22 @@ async def test_map_bounded_rejects_non_callable_mapper_before_consuming() -> Non
         await map_bounded(_raising_iterable(), None, limit=1)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("timeout", [True, False, "1", -0.1, float("nan"), float("inf")])
-async def test_map_bounded_validates_timeout_before_consuming(timeout: object) -> None:
-    with pytest.raises((TypeError, ValueError)):
+@pytest.mark.parametrize(
+    ("timeout", "error"),
+    [
+        (True, TypeError),
+        (False, TypeError),
+        ("1", TypeError),
+        (-0.1, ValueError),
+        (float("nan"), ValueError),
+        (float("inf"), ValueError),
+    ],
+)
+async def test_map_bounded_validates_timeout_before_consuming(
+    timeout: object,
+    error: type[Exception],
+) -> None:
+    with pytest.raises(error):
         await map_bounded(
             _raising_iterable(),
             _identity,
@@ -203,13 +243,29 @@ async def test_map_bounded_validates_timeout_before_consuming(timeout: object) -
 
 
 async def test_map_bounded_preserves_native_non_iterable_and_non_awaitable_failures() -> None:
+    mapper_called = False
+
     async def mapper(value: int) -> int:
+        nonlocal mapper_called
+        mapper_called = True
         return value
 
     with pytest.raises(TypeError):
         await map_bounded(None, mapper, limit=1)  # type: ignore[arg-type]
+    assert not mapper_called
+
+    admitted = 0
+
+    def items() -> Iterator[int]:
+        nonlocal admitted
+        for value in range(3):
+            admitted += 1
+            yield value
+
     with pytest.raises(ExceptionGroup):
-        await map_bounded([1], lambda value: value, limit=1)  # type: ignore[arg-type]
+        await map_bounded(items(), lambda value: value, limit=1)  # type: ignore[arg-type]
+    assert admitted == 1
+    _assert_no_helper_tasks()
 
 
 async def test_map_bounded_cleans_up_after_iterator_and_mapper_failures() -> None:
@@ -238,18 +294,30 @@ async def test_map_bounded_cleans_up_after_iterator_and_mapper_failures() -> Non
 
 async def test_map_bounded_propagates_direct_mapper_cancellation_after_cleanup() -> None:
     cleaned = asyncio.Event()
+    sibling_started = asyncio.Event()
+    admitted = 0
+
+    def items() -> Iterator[int]:
+        nonlocal admitted
+        for value in range(3):
+            admitted += 1
+            yield value
 
     async def mapper(value: int) -> int:
         if value == 0:
-            raise asyncio.CancelledError
-        try:
-            await asyncio.Event().wait()
-        finally:
-            cleaned.set()
+            sibling_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+        await sibling_started.wait()
+        raise asyncio.CancelledError
 
     with pytest.raises(asyncio.CancelledError):
-        await map_bounded([0, 1], mapper, limit=2)
+        await map_bounded(items(), mapper, limit=2)
+    assert admitted == 2
     assert cleaned.is_set()
+    _assert_no_helper_tasks()
 
 
 async def test_map_bounded_self_cancellation_fails_closed() -> None:
@@ -262,6 +330,7 @@ async def test_map_bounded_self_cancellation_fails_closed() -> None:
 
     with pytest.raises(asyncio.CancelledError):
         await map_bounded([1], mapper, limit=1)
+    _assert_no_helper_tasks()
 
 
 async def test_map_bounded_preserves_external_cancellation_and_cleanup() -> None:
@@ -278,10 +347,12 @@ async def test_map_bounded_preserves_external_cancellation_and_cleanup() -> None
     task = asyncio.create_task(map_bounded([1], mapper, limit=1))
     await started.wait()
     task.cancel()
+    task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert task.cancelling() == 1
+    assert task.cancelling() == 2
     assert cleaned.is_set()
+    _assert_no_helper_tasks()
 
 
 async def test_map_bounded_times_out_after_cleanup() -> None:
@@ -296,6 +367,66 @@ async def test_map_bounded_times_out_after_cleanup() -> None:
     with pytest.raises(TimeoutError):
         await map_bounded([1], mapper, limit=1, timeout=0.01)
     assert cleaned.is_set()
+    _assert_no_helper_tasks()
+
+
+async def test_map_bounded_timeout_is_a_total_budget() -> None:
+    cleaned: list[int] = []
+
+    async def mapper(value: int) -> int:
+        try:
+            await asyncio.sleep(0.02)
+            return value
+        finally:
+            cleaned.append(value)
+
+    with pytest.raises(TimeoutError):
+        await map_bounded([1, 2, 3], mapper, limit=1, timeout=0.03)
+    assert cleaned == [1, 2]
+    _assert_no_helper_tasks()
+
+
+async def test_map_bounded_timeout_and_mapper_failure_keep_native_outcomes() -> None:
+    cleaned = asyncio.Event()
+
+    async def mapper(value: int) -> int:
+        if value == 0:
+            await asyncio.sleep(0.01)
+            raise RuntimeError("boom")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    with pytest.raises((TimeoutError, ExceptionGroup)):
+        await map_bounded([0, 1], mapper, limit=2, timeout=0.01)
+    assert cleaned.is_set()
+    _assert_no_helper_tasks()
+
+
+async def test_map_bounded_external_cancellation_race_preserves_count() -> None:
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def mapper(value: int) -> int:
+        started.set()
+        try:
+            if value == 0:
+                await asyncio.sleep(0)
+                raise RuntimeError("boom")
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    task = asyncio.create_task(map_bounded([0, 1], mapper, limit=2))
+    await started.wait()
+    task.cancel()
+    task.cancel()
+    with pytest.raises((asyncio.CancelledError, ExceptionGroup)):
+        await task
+    assert task.cancelling() >= 2
+    assert cleaned.is_set()
+    _assert_no_helper_tasks()
 
 
 async def test_map_bounded_leaves_no_named_worker_tasks() -> None:
@@ -304,12 +435,7 @@ async def test_map_bounded_leaves_no_named_worker_tasks() -> None:
         return value
 
     assert await map_bounded([1, 2], mapper, limit=2) == [1, 2]
-    assert not [
-        task
-        for task in asyncio.all_tasks()
-        if task is not asyncio.current_task()
-        and task.get_name().startswith("bluetape.map_bounded.")
-    ]
+    _assert_no_helper_tasks()
 ```
 
 - [ ] **Step 2: Run the contract tests before implementation.**
@@ -341,8 +467,8 @@ from collections.abc import Awaitable, Callable, Iterable
 from typing import cast
 
 
-class _MapperCancelled(Exception):
-    """Private task-group signal for a direct mapper cancellation."""
+class _InvocationCancelled(Exception):
+    """Private task-group signal for a non-external cancellation."""
 
 
 def _require_limit(limit: int) -> None:
@@ -373,13 +499,18 @@ async def _invoke_mapper[T, R](
     mapper: Callable[[T], Awaitable[R]],
     item: T,
     owner: asyncio.Task[object],
+    terminal: asyncio.Event,
 ) -> R:
     try:
         return await mapper(item)
     except asyncio.CancelledError:
         if owner.cancelling():
             raise
-        raise _MapperCancelled from None
+        terminal.set()
+        raise _InvocationCancelled from None
+    except BaseException:
+        terminal.set()
+        raise
 
 
 async def map_bounded[T, R](
@@ -404,16 +535,27 @@ async def map_bounded[T, R](
     if owner is None:
         raise RuntimeError("map_bounded requires a running task")
     results: list[R | None] = []
+    terminal = asyncio.Event()
 
     async def worker() -> None:
         while True:
+            if terminal.is_set():
+                return
             try:
                 item = next(iterator)
             except StopIteration:
                 return
+            except asyncio.CancelledError:
+                if owner.cancelling():
+                    raise
+                terminal.set()
+                raise _InvocationCancelled from None
+            except BaseException:
+                terminal.set()
+                raise
             index = len(results)
             results.append(None)
-            results[index] = await _invoke_mapper(mapper_fn, item, owner)
+            results[index] = await _invoke_mapper(mapper_fn, item, owner, terminal)
 
     async def run_workers() -> None:
         async with asyncio.TaskGroup() as task_group:
@@ -429,7 +571,7 @@ async def map_bounded[T, R](
         else:
             async with asyncio.timeout(timeout):
                 await run_workers()
-    except* _MapperCancelled:
+    except* _InvocationCancelled:
         raise asyncio.CancelledError from None
 
     return cast(list[R], results)
@@ -492,7 +634,8 @@ State that source-workspace use is available now, PyPI publication remains on
 hold, results preserve input order, mapper and iterator work must cooperate
 with the event loop, timeout is total, direct mapper cancellation terminates
 the invocation, and unsupported mapper self-cancellation fails closed without
-partial results.
+partial results. State that `limit` controls the number of call-scoped workers,
+so callers must choose a resource-appropriate positive value.
 
 - [ ] **Step 2: Align meta and root documentation.**
 
@@ -528,7 +671,7 @@ recording the PyPI-hold and thin-default constraints.
 
 - [ ] **Step 1: Verify package metadata and extras.**
 
-Run: `uv lock --check && uv run python -c "from importlib.metadata import metadata; print(metadata('bluetape-async')['Requires-Python'])" && uv run python -c "from pathlib import Path; text = Path('packages/bluetape/pyproject.toml').read_text(); assert 'dependencies = [\"bluetape-core==0.1.0\"]' in text; assert 'asyncio = [\"bluetape-async==0.1.0\"]' in text"`
+Run: `uv lock --check && uv run python -c "from importlib.metadata import metadata; print(metadata('bluetape-async')['Requires-Python'])"`
 
 Expected: lock is current, the package requires Python `>=3.13`, and the meta
 default remains core-only while the async extra exists.
@@ -539,14 +682,57 @@ Run: `uv sync --all-packages && uv run pytest packages/bluetape-async/tests/test
 
 Expected: all tests and Ruff checks pass.
 
-- [ ] **Step 3: Build every distribution and smoke-test the async wheel.**
+- [ ] **Step 3: Build every distribution and inspect built-wheel metadata.**
 
-Run: `uv build --all-packages && python -m venv /tmp/bluetape-async-wheel-smoke && /tmp/bluetape-async-wheel-smoke/bin/pip install dist/bluetape_async-0.1.0-py3-none-any.whl && /tmp/bluetape-async-wheel-smoke/bin/python -c "from bluetape.asyncio import map_bounded; print(map_bounded.__name__)"`
+Run: `uv build --all-packages && uv run python - <<'PY'
+from email.parser import BytesParser
+from zipfile import ZipFile
 
-Expected: all distributions build, the isolated wheel installs without source
-imports, and prints `map_bounded`.
+with ZipFile("dist/bluetape-0.1.0-py3-none-any.whl") as wheel:
+    metadata_name = next(name for name in wheel.namelist() if name.endswith(".dist-info/METADATA"))
+    metadata = BytesParser().parsebytes(wheel.read(metadata_name))
 
-- [ ] **Step 4: Final diff and review evidence.**
+requirements = metadata.get_all("Requires-Dist", [])
+default_requirements = [item for item in requirements if "extra ==" not in item]
+assert len(default_requirements) == 1
+assert default_requirements[0].startswith("bluetape-core")
+assert not any(item.startswith("bluetape-async") for item in default_requirements)
+assert any(
+    item.startswith("bluetape-async") and "extra == 'asyncio'" in item
+    for item in requirements
+)
+PY
+python -m venv /tmp/bluetape-async-wheel-smoke
+/tmp/bluetape-async-wheel-smoke/bin/pip install dist/bluetape_async-0.1.0-py3-none-any.whl
+/tmp/bluetape-async-wheel-smoke/bin/python -c "from bluetape.asyncio import map_bounded; print(map_bounded.__name__)"`
+
+Expected: all distributions build, the built meta-wheel keeps only core as its
+default requirement while its async dependency is extra-gated, and the isolated
+async wheel installs without source imports and prints `map_bounded`.
+
+- [ ] **Step 4: Execute the documented examples through the workspace.**
+
+Run: `uv run python - <<'PY'
+import asyncio
+
+from bluetape.asyncio import map_bounded
+
+
+async def fetch_order(order_id: int) -> str:
+    await asyncio.sleep(0)
+    return f"order-{order_id}"
+
+
+assert asyncio.run(map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0)) == [
+    "order-1",
+    "order-2",
+    "order-3",
+]
+PY`
+
+Expected: the README bounded-map example completes with ordered results.
+
+- [ ] **Step 5: Final diff and review evidence.**
 
 Run: `git diff develop...HEAD --check && git status --short`
 
