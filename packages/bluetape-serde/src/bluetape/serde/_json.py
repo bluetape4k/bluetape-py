@@ -30,6 +30,7 @@ type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, J
 
 type _TraversalFrame = tuple[int, Iterator[object]]
 type _SerdeErrorSpec = tuple[type[SerdeError], SerdeErrorCode]
+type _NativeConfigurationErrorSpec = tuple[type[TypeError] | type[ValueError], str]
 
 
 class _DuplicateKeyError(ValueError):
@@ -254,12 +255,22 @@ def json_deserialize(
     max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
 ) -> JsonValue:
     """Deserialize strict UTF-8 JSON with at most MAX_JSON_INTEGER_DIGITS per integer."""
-    _validate_deserialize_configuration(
-        payload=payload,
-        expected_metadata=expected_metadata,
-        max_input_size=max_input_size,
-        max_nesting_depth=max_nesting_depth,
-    )
+    configuration_error: _NativeConfigurationErrorSpec | None = None
+    try:
+        _validate_deserialize_configuration(
+            payload=payload,
+            expected_metadata=expected_metadata,
+            max_input_size=max_input_size,
+            max_nesting_depth=max_nesting_depth,
+        )
+    except (TypeError, ValueError) as error:
+        configuration_error = (type(error), str(error))
+
+    if configuration_error is not None:
+        error_type, error_message = configuration_error
+        del payload, expected_metadata, max_input_size, max_nesting_depth, configuration_error
+        raise error_type(error_message)
+
     metadata_error: _SerdeErrorSpec | None = None
     try:
         _validate_json_metadata(expected_metadata)
@@ -337,11 +348,21 @@ def json_serialize(
     max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH,
 ) -> SerializedPayload:
     """Serialize exact JSON with at most MAX_JSON_INTEGER_DIGITS per integer."""
-    _validate_configuration(
-        metadata=metadata,
-        max_output_size=max_output_size,
-        max_nesting_depth=max_nesting_depth,
-    )
+    configuration_error: _NativeConfigurationErrorSpec | None = None
+    try:
+        _validate_configuration(
+            metadata=metadata,
+            max_output_size=max_output_size,
+            max_nesting_depth=max_nesting_depth,
+        )
+    except (TypeError, ValueError) as error:
+        configuration_error = (type(error), str(error))
+
+    if configuration_error is not None:
+        error_type, error_message = configuration_error
+        del value, metadata, max_output_size, max_nesting_depth, configuration_error
+        raise error_type(error_message)
+
     preflight_error: _SerdeErrorSpec | None = None
     try:
         _validate_json_metadata(metadata)

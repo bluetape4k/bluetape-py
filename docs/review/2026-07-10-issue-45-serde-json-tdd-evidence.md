@@ -31,7 +31,7 @@ historical proof.
 - Historical GREEN result at `6cf73dc`: exit 0, `63 passed, 2 deselected`.
 - Current non-overlapping encode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_serialize or encode) and not (json_deserialize or decode)'`
-- Current non-overlapping encode result: exit 0, `89 passed, 112 deselected`.
+- Current non-overlapping encode result: exit 0, `97 passed, 121 deselected`.
 
 ## Task 4 strict bounded JSON decoding
 
@@ -51,15 +51,15 @@ historical proof.
   INPUT_LIMIT retained payload/data and NESTING_LIMIT retained
   payload/data/text plus the scanner frame.
 - Current traceback-retention GREEN result for the same command: exit 0,
-  `2 passed, 199 deselected`.
+  `2 passed, 216 deselected`.
 - Current disjoint decode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_deserialize or decode)'`
-- Current disjoint decode result: exit 0, `110 passed, 91 deselected`.
+- Current disjoint decode result: exit 0, `119 passed, 99 deselected`.
 - Current encode-depth-only command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'depth and not (json_deserialize or decode)'`
-- Current encode-depth-only result: exit 0, `9 passed, 192 deselected`.
-- Current aggregate Task 4 selector result: exit 0, `119 passed, 82 deselected`,
-  composed of 110 decode cases plus 9 encode-depth cases.
+- Current encode-depth-only result: exit 0, `11 passed, 207 deselected`.
+- Current aggregate Task 4 selector result: exit 0, `130 passed, 88 deselected`,
+  composed of 119 decode cases plus 11 encode-depth cases.
 - Review-gap fixture command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_valid_escaped_string'`
 - Review-gap fixture result: exit 0, `1 passed, 149 deselected`; the prebuilt
@@ -67,7 +67,7 @@ historical proof.
   structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
   `uv run pytest packages/bluetape-serde/tests -q`
-- Current full serde result: exit 0, `345 passed`.
+- Current full serde result: exit 0, `362 passed`.
 
 ## Baseline reproducibility check
 
@@ -86,7 +86,7 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `345 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `362 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
@@ -112,12 +112,23 @@ verbatim record of the original RED run.
 - GREEN result after arithmetic encode preflight and the bounded `parse_int`
   hook, including CPython limit settings 640/default/disabled for both paths:
   exit 0, `43 passed, 302 deselected`.
+- Native configuration traceback RED command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'configuration_errors_do_not_retain_caller_sources'`
+- RED result: exit 1, `11 failed, 201 deselected`. Exact-type and range
+  validation failures retained encode/decode caller arguments in the public
+  adapter frame.
+- GREEN result for the same command after copying only exact native exception
+  type/message and clearing caller arguments outside the handler: exit 0,
+  `11 passed, 201 deselected`.
+- Combined security/configuration selector: exit 0,
+  `51 passed, 167 deselected`, including native fatal-exception identity
+  preservation on both adapter paths.
 - Full serde GREEN after complementary metadata traceback cases: exit 0,
-  `345 passed`.
-- Final exact performance selector: exit 0, `3 passed, 198 deselected` for
+  `362 passed`.
+- Final exact performance selector: exit 0, `3 passed, 215 deselected` for
   preflight O(depth), high-chunk encode allocation, and decode scanner constant
   auxiliary-state tests.
-- Final workspace GREEN: exit 0, `491 passed`.
+- Final workspace GREEN: exit 0, `508 passed`.
 - Final static/build gates: `uv lock --check`, locked all-package sync, Ruff
   check, Ruff format check, all-package build, branch/current diff checks,
   focused-wheel isolated roundtrip, 21-export/17-code assertion, four README

@@ -447,6 +447,74 @@ def test_json_serialize_validates_exact_metadata_and_configuration_before_value_
     assert constructed is False
 
 
+@pytest.mark.parametrize(
+    ("arguments", "error_type", "message"),
+    [
+        (
+            {"metadata": {"ENCODE_CONFIGURATION_PRIVATE_KEY": "private metadata"}},
+            TypeError,
+            "metadata must be an exact PayloadMetadata",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": IntegerLookalike(1)},
+            TypeError,
+            "max_output_size must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": -1},
+            ValueError,
+            "max_output_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": IntegerLookalike(1)},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": 257},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
+    ],
+)
+def test_json_serialize_configuration_errors_do_not_retain_caller_sources(
+    arguments: dict[str, object],
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    value: JsonValue = {"ENCODE_CONFIGURATION_PRIVATE_KEY": "private value"}
+
+    with pytest.raises(error_type) as caught:
+        json_serialize(value, **arguments)  # type: ignore[arg-type]
+
+    assert type(caught.value) is error_type
+    assert str(caught.value) == message
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset(
+            {"value", "metadata", "max_output_size", "max_nesting_depth"}
+        ),
+        source_values=(value, *arguments.values()),
+        source_keys=frozenset({"ENCODE_CONFIGURATION_PRIVATE_KEY"}),
+    )
+
+
+@pytest.mark.parametrize("fatal_error", [MemoryError(), KeyboardInterrupt(), SystemExit()])
+def test_json_serialize_configuration_fatal_errors_remain_native(
+    monkeypatch: pytest.MonkeyPatch,
+    fatal_error: BaseException,
+) -> None:
+    def fail_validation(**_arguments: object) -> None:
+        raise fatal_error
+
+    monkeypatch.setattr("bluetape.serde._json._validate_configuration", fail_validation)
+
+    with pytest.raises(type(fatal_error)) as caught:
+        json_serialize(None, metadata=metadata())
+
+    assert caught.value is fatal_error
+
+
 def test_json_serialize_accepts_largest_supported_output_size() -> None:
     assert json_serialize(None, metadata=metadata(), max_output_size=sys.maxsize - 1).data
 
@@ -1070,6 +1138,99 @@ def test_json_deserialize_validates_configuration_before_payload_data_access(
     assert type(caught.value) is error_type
     assert str(caught.value) == message
     assert accessed is False
+
+
+@pytest.mark.parametrize(
+    ("payload_value", "expected_value", "changes", "error_type", "message"),
+    [
+        (
+            {"DECODE_CONFIGURATION_PRIVATE_KEY": "private payload"},
+            metadata(),
+            {},
+            TypeError,
+            "payload must be an exact SerializedPayload",
+        ),
+        (
+            serialized(b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}'),
+            {"DECODE_CONFIGURATION_PRIVATE_KEY": "private metadata"},
+            {},
+            TypeError,
+            "expected_metadata must be an exact PayloadMetadata",
+        ),
+        (
+            serialized(b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}'),
+            metadata(),
+            {"max_input_size": IntegerLookalike(1)},
+            TypeError,
+            "max_input_size must be an exact int",
+        ),
+        (
+            serialized(b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}'),
+            metadata(),
+            {"max_input_size": -1},
+            ValueError,
+            "max_input_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            serialized(b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}'),
+            metadata(),
+            {"max_nesting_depth": IntegerLookalike(1)},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            serialized(b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}'),
+            metadata(),
+            {"max_nesting_depth": 257},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
+    ],
+)
+def test_json_deserialize_configuration_errors_do_not_retain_caller_sources(
+    payload_value: object,
+    expected_value: object,
+    changes: dict[str, object],
+    error_type: type[Exception],
+    message: str,
+) -> None:
+    with pytest.raises(error_type) as caught:
+        json_deserialize(  # type: ignore[arg-type]
+            payload_value,
+            expected_metadata=expected_value,
+            **changes,
+        )
+
+    assert type(caught.value) is error_type
+    assert str(caught.value) == message
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset(
+            {"payload", "expected_metadata", "max_input_size", "max_nesting_depth"}
+        ),
+        source_values=(payload_value, expected_value, *changes.values()),
+        source_keys=frozenset({"DECODE_CONFIGURATION_PRIVATE_KEY"}),
+        raw_source=b'{"DECODE_CONFIGURATION_PRIVATE_KEY":"private value"}',
+    )
+
+
+@pytest.mark.parametrize("fatal_error", [MemoryError(), KeyboardInterrupt(), SystemExit()])
+def test_json_deserialize_configuration_fatal_errors_remain_native(
+    monkeypatch: pytest.MonkeyPatch,
+    fatal_error: BaseException,
+) -> None:
+    def fail_validation(**_arguments: object) -> None:
+        raise fatal_error
+
+    monkeypatch.setattr(
+        "bluetape.serde._json._validate_deserialize_configuration",
+        fail_validation,
+    )
+
+    with pytest.raises(type(fatal_error)) as caught:
+        json_deserialize(serialized(), expected_metadata=metadata())
+
+    assert caught.value is fatal_error
 
 
 def test_json_deserialize_accepts_largest_supported_input_and_depth_configuration() -> None:
