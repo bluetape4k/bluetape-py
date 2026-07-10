@@ -221,38 +221,100 @@ class IntegerLookalike(int):
     pass
 
 
+class FloatLookalike(float):
+    pass
+
+
+class StringLookalike(str):
+    pass
+
+
+class DictLookalike(dict[str, object]):
+    pass
+
+
 class HostileList(list[object]):
     def __iter__(self) -> Iterator[object]:
         raise AssertionError("hostile value was traversed")
 
 
 @pytest.mark.parametrize(
-    "arguments",
+    ("arguments", "error_type", "message"),
     [
-        {"metadata": object()},
-        {
-            "metadata": MetadataLookalike(
-                format="json",
-                version=1,
-                content_type="application/json",
-                trust_profile=TrustProfile.UNTRUSTED,
-            )
-        },
-        {"metadata": metadata(), "max_output_size": True},
-        {"metadata": metadata(), "max_output_size": 1.0},
-        {"metadata": metadata(), "max_output_size": IntegerLookalike(1)},
-        {"metadata": metadata(), "max_output_size": -1},
-        {"metadata": metadata(), "max_output_size": sys.maxsize},
-        {"metadata": metadata(), "max_nesting_depth": True},
-        {"metadata": metadata(), "max_nesting_depth": 1.0},
-        {"metadata": metadata(), "max_nesting_depth": IntegerLookalike(1)},
-        {"metadata": metadata(), "max_nesting_depth": -1},
-        {"metadata": metadata(), "max_nesting_depth": 257},
+        (
+            {"metadata": object()},
+            TypeError,
+            "metadata must be an exact PayloadMetadata",
+        ),
+        (
+            {
+                "metadata": MetadataLookalike(
+                    format="json",
+                    version=1,
+                    content_type="application/json",
+                    trust_profile=TrustProfile.UNTRUSTED,
+                )
+            },
+            TypeError,
+            "metadata must be an exact PayloadMetadata",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": True},
+            TypeError,
+            "max_output_size must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": 1.0},
+            TypeError,
+            "max_output_size must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": IntegerLookalike(1)},
+            TypeError,
+            "max_output_size must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": -1},
+            ValueError,
+            "max_output_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            {"metadata": metadata(), "max_output_size": sys.maxsize},
+            ValueError,
+            "max_output_size must be between 0 and sys.maxsize - 1",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": True},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": 1.0},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": IntegerLookalike(1)},
+            TypeError,
+            "max_nesting_depth must be an exact int",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": -1},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
+        (
+            {"metadata": metadata(), "max_nesting_depth": 257},
+            ValueError,
+            "max_nesting_depth must be between 0 and MAX_SUPPORTED_NESTING_DEPTH",
+        ),
     ],
 )
 def test_json_serialize_validates_exact_metadata_and_configuration_before_value_or_encoder(
     monkeypatch: pytest.MonkeyPatch,
     arguments: dict[str, object],
+    error_type: type[Exception],
+    message: str,
 ) -> None:
     constructed = False
 
@@ -263,9 +325,11 @@ def test_json_serialize_validates_exact_metadata_and_configuration_before_value_
 
     monkeypatch.setattr("bluetape.serde._json.json.JSONEncoder", EncoderSpy)
 
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(error_type) as caught:
         json_serialize(HostileList(), **arguments)  # type: ignore[arg-type]
 
+    assert type(caught.value) is error_type
+    assert str(caught.value) == message
     assert constructed is False
 
 
@@ -280,7 +344,11 @@ def test_json_serialize_accepts_largest_supported_output_size() -> None:
         (value for value in [1]),
         object(),
         IntegerLookalike(1),
+        FloatLookalike(1.0),
+        StringLookalike("value"),
+        DictLookalike({"key": "value"}),
         HostileList(),
+        {StringLookalike("key"): "value"},
         {1: "number key"},
         {1: "coerced", "1": "string"},
     ],
@@ -327,6 +395,25 @@ def test_json_serialize_rejects_cycles_but_allows_shared_references() -> None:
     assert json_serialize([shared, shared], metadata=metadata()).data == b"[[1],[1]]"
 
 
+def test_json_serialize_rejects_circular_dict_but_allows_shared_dict() -> None:
+    cyclic: dict[str, JsonValue] = {}
+    cyclic["self"] = cyclic
+    shared: dict[str, JsonValue] = {"value": 1}
+
+    with pytest.raises(SerdeEncodeError) as caught:
+        json_serialize(cyclic, metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=SerdeEncodeError,
+        code=SerdeErrorCode.CIRCULAR_REFERENCE,
+        message="value contains a circular reference",
+    )
+    assert json_serialize([shared, shared], metadata=metadata()).data == (
+        b'[{"value":1},{"value":1}]'
+    )
+
+
 def test_json_serialize_enforces_configured_nesting_depth_including_zero() -> None:
     assert json_serialize(None, metadata=metadata(), max_nesting_depth=0).data == b"null"
     assert json_serialize([], metadata=metadata(), max_nesting_depth=1).data == b"[]"
@@ -338,6 +425,31 @@ def test_json_serialize_enforces_configured_nesting_depth_including_zero() -> No
 
     with pytest.raises(PayloadLimitError) as caught:
         json_serialize([], metadata=metadata(), max_nesting_depth=0)
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+@pytest.mark.parametrize("max_nesting_depth", [1, 7, 100])
+def test_json_serialize_accepts_nonzero_depth_n_and_rejects_n_plus_one(
+    max_nesting_depth: int,
+) -> None:
+    assert json_serialize(
+        nested_list(max_nesting_depth),
+        metadata=metadata(),
+        max_nesting_depth=max_nesting_depth,
+    ).data
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_serialize(
+            nested_list(max_nesting_depth + 1),
+            metadata=metadata(),
+            max_nesting_depth=max_nesting_depth,
+        )
 
     assert_error(
         caught,
