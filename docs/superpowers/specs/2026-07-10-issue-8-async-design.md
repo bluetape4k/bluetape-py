@@ -137,6 +137,11 @@ excluded async collection helpers and assigned that scope to this issue.
   records call-scoped terminal state. Every worker checks that state immediately
   before its next `next(iterator)` call, so no item is admitted after terminal
   failure is observed.
+- A worker also checks its own pending cancellation immediately after a mapper
+  returns normally. If the invocation owner has no pending external cancellation
+  but the worker does, it records terminal state and raises the private terminal
+  signal before recording a result or advancing the iterator. This closes the
+  unsupported self-cancel-with-immediate-return path without partial results.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.
@@ -257,7 +262,7 @@ streaming workload.
   documentation, non-iterable, ordinary iterator-failure, iterator-cancellation,
   and non-awaitable protocol violations, ordinary mapper `ExceptionGroup`,
   direct mapper-originated cancellation, unsupported mapper self-cancellation
-  fail-closed behavior,
+  fail-closed behavior (including immediate return),
   external cancellation-count preservation, timeout, concurrent failure races,
   cleanup, and orphan-task absence.
 - Run `uv sync --all-packages`, `uv lock --check`, targeted and full
