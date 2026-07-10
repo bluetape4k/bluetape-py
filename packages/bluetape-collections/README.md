@@ -27,7 +27,7 @@ by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 
 | Helper | Behavior |
 |---|---|
-| `chunked(iterable, size)` | Return fixed-size `list[list[T]]` chunks; non-integer `size` raises `TypeError`; `size <= 0` raises `ValueError`. |
+| `chunked(iterable, size)` | Return fixed-size `list[list[T]]` chunks; non-integer and boolean `size` values raise `TypeError`; `size <= 0` raises `ValueError`. |
 | `chunk_by(iterable, starts_new)` | Start a new chunk when `starts_new(item)` is true after the first item. |
 | `distinct(iterable)` | Preserve first-seen order for hashable values. |
 | `distinct_by(iterable, key)` | Preserve the first item for each hashable derived key. |

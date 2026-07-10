@@ -15,7 +15,7 @@ def chunked[T](iterable: Iterable[T], size: int) -> list[list[T]]:
     Raises:
         ValueError: If `size` is not greater than zero.
     """
-    if not isinstance(size, int):
+    if isinstance(size, bool) or not isinstance(size, int):
         raise TypeError("size must be an integer")
     if size <= 0:
         raise ValueError("size must be greater than 0")
