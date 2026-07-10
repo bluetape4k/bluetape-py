@@ -16,6 +16,7 @@ Distributions live under `packages/` and should map to focused import paths.
 Current public distributions:
 
 - `bluetape`
+- `bluetape-collections`
 - `bluetape-core`
 - `bluetape-logging`
 - `bluetape-testing`
@@ -23,6 +24,7 @@ Current public distributions:
 The `bluetape` distribution is a meta package. It should not create a root
 `bluetape/__init__.py` import surface. Focused packages own focused import paths
 such as `bluetape.core`, `bluetape.logging`, and `bluetape.testing`.
+The collections package owns `bluetape.collections`.
 
 ## Future Packages
 

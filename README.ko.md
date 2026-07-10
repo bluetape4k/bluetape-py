@@ -17,6 +17,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
+새 collections 패키지는 source workspace에서 사용할 수 있으며, registry 설치
+명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
@@ -42,6 +44,7 @@ PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 �
 |---|---|---:|---|---|
 | `bluetape` | 없음 | yes | active | `bluetape-core`에만 의존하는 얇은 메타 배포 패키지. |
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
+| `bluetape-collections` | `bluetape.collections` | no | active, source workspace | 표준 라이브러리만 사용하는 eager iterable/list/dict 헬퍼. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | planned | core API가 안정화된 뒤 다룰 serialization 경계 헬퍼. |
@@ -64,10 +67,14 @@ PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 �
 
 ## 설치
 
+PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 registry 설치 명령 대신
+아래의 로컬 workspace 명령을 사용합니다.
+
 첫 PyPI 릴리스 이후의 공개 설치 형태는 다음과 같습니다.
 
 ```bash
 pip install bluetape
+pip install "bluetape[collections]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
@@ -78,6 +85,7 @@ pip install "bluetape[all]"
 
 ```bash
 pip install bluetape-core
+pip install bluetape-collections
 pip install bluetape-logging
 pip install bluetape-testing
 ```
@@ -120,11 +128,21 @@ from bluetape.testing import eventually
 eventually(lambda: cache.get("ready"), timeout=2.0)
 ```
 
+### Collections
+
+```python
+from bluetape.collections import chunked, group_by
+
+chunks = chunked(range(5), 2)
+by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
+```
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
+| `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |

@@ -7,18 +7,22 @@ requires-python = ">=3.13"
 dependencies = ["bluetape-core==0.1.0"]
 
 [project.optional-dependencies]
+collections = ["bluetape-collections==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
 testing = ["bluetape-testing==0.1.0"]
 dev = [
+    "bluetape-collections==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 all = [
+    "bluetape-collections==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 
 [tool.uv.sources]
+bluetape-collections = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
 bluetape-testing = { workspace = true }

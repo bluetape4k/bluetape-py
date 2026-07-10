@@ -7,7 +7,11 @@ and this project uses semantic versioning once the first tag is published.
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Added
+
+- `bluetape-collections` source workspace package with eager stdlib-only
+  helpers under `bluetape.collections` for chunking, grouping, distinct,
+  partitioning, and exception-transparent map/filter transforms.
 
 ## [v0.1.0] - 2026-07-10
 
