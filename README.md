@@ -22,8 +22,9 @@ available from the source workspace; registry install commands describe the
 intended post-publication shape only.
 
 The current planning track is milestone
-[`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It expands
-the ecosystem backlog from issues #7 through #34. Detailed planning lives in
+[`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
+ecosystem issues #7 through #34 plus serialization follow-ups #45 and #46.
+Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -251,7 +252,7 @@ README for error handling and versioned rollout/rollback guidance.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem package planning in issues #7-#34, with research gates before broad adapters. |
+| `0.2.0` | Track ecosystem issues #7-#34 plus serialization follow-ups #45/#46, with research gates before broad adapters. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

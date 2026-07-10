@@ -196,6 +196,118 @@ or catch `SerdeError` and switch on `SerdeErrorCode`:
 | `MalformedPayloadError` | `INVALID_UTF8`, `DUPLICATE_KEY`, `DECODE_NON_FINITE_NUMBER`, `INVALID_JSON` |
 | `SerdeEncodeError` | `UNSUPPORTED_VALUE`, `CIRCULAR_REFERENCE`, `ENCODE_NON_FINITE_NUMBER`, `ENCODE_RECURSION` |
 
+Metadata mismatches are typed and never fall through to parsing:
+
+```python
+from bluetape.serde import (
+    FormatMismatchError,
+    PayloadMetadata,
+    SerdeErrorCode,
+    SerializedPayload,
+    TrustProfile,
+    json_deserialize,
+)
+
+received_payload = SerializedPayload(
+    metadata=PayloadMetadata(
+        format="legacy_json",
+        version=1,
+        content_type="application/json",
+        trust_profile=TrustProfile.UNTRUSTED,
+    ),
+    data=b'{"order_id":42}',
+)
+consumer_policy = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.UNTRUSTED,
+)
+
+try:
+    json_deserialize(received_payload, expected_metadata=consumer_policy)
+except FormatMismatchError as error:
+    assert error.code is SerdeErrorCode.FORMAT_MISMATCH
+else:
+    raise AssertionError("format mismatch was accepted")
+```
+
+`TRUSTED_INTERNAL` does not relax byte limits:
+
+```python
+from bluetape.serde import (
+    PayloadLimitError,
+    PayloadMetadata,
+    SerdeErrorCode,
+    SerializedPayload,
+    TrustProfile,
+    json_deserialize,
+)
+
+trusted_payload = SerializedPayload(
+    metadata=PayloadMetadata(
+        format="json",
+        version=1,
+        content_type="application/json",
+        trust_profile=TrustProfile.TRUSTED_INTERNAL,
+    ),
+    data=b'{"order_id":42}',
+)
+trusted_consumer_policy = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.TRUSTED_INTERNAL,
+)
+
+try:
+    json_deserialize(
+        trusted_payload,
+        expected_metadata=trusted_consumer_policy,
+        max_input_size=4,
+    )
+except PayloadLimitError as error:
+    assert error.code is SerdeErrorCode.INPUT_LIMIT
+else:
+    raise AssertionError("trusted payload bypassed max_input_size")
+```
+
+`TRUSTED_INTERNAL` also retains strict JSON parsing:
+
+```python
+from bluetape.serde import (
+    MalformedPayloadError,
+    PayloadMetadata,
+    SerdeErrorCode,
+    SerializedPayload,
+    TrustProfile,
+    json_deserialize,
+)
+
+trusted_payload = SerializedPayload(
+    metadata=PayloadMetadata(
+        format="json",
+        version=1,
+        content_type="application/json",
+        trust_profile=TrustProfile.TRUSTED_INTERNAL,
+    ),
+    data=b'{"order_id":}',
+)
+trusted_consumer_policy = PayloadMetadata(
+    format="json",
+    version=1,
+    content_type="application/json",
+    trust_profile=TrustProfile.TRUSTED_INTERNAL,
+)
+
+try:
+    json_deserialize(trusted_payload, expected_metadata=trusted_consumer_policy)
+except MalformedPayloadError as error:
+    assert error.code is SerdeErrorCode.INVALID_JSON
+else:
+    raise AssertionError("trusted payload bypassed strict JSON parsing")
+```
+
 Do not log the raw payload as part of error handling. The package intentionally
 keeps payload bytes and values out of error messages and representations.
 
