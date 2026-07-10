@@ -71,6 +71,22 @@ ERROR_CASES = [
 ]
 
 
+class StringLookalike(str):
+    pass
+
+
+class IntegerLookalike(int):
+    pass
+
+
+class BytesLookalike(bytes):
+    pass
+
+
+class PayloadMetadataLookalike(PayloadMetadata):
+    pass
+
+
 def valid_metadata(**changes: object) -> PayloadMetadata:
     values: dict[str, object] = {
         "format": "json",
@@ -144,6 +160,22 @@ def test_payload_metadata_rejects_inexact_field_types(field: str, value: object)
 
 
 @pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("format", StringLookalike("json")),
+        ("version", IntegerLookalike(1)),
+        ("content_type", StringLookalike("application/json")),
+    ],
+)
+def test_payload_metadata_rejects_runtime_subclass_lookalikes(
+    field: str,
+    value: object,
+) -> None:
+    with pytest.raises(TypeError):
+        valid_metadata(**{field: value})
+
+
+@pytest.mark.parametrize(
     "format_name",
     [
         "a",
@@ -198,6 +230,15 @@ def test_serialized_payload_is_keyword_only_frozen_slotted_and_preserves_empty_b
         SerializedPayload(metadata, b"")  # type: ignore[misc]
 
 
+def test_serialized_payload_preserves_non_empty_bytes_identity() -> None:
+    data = bytes(bytearray(b"payload"))
+
+    payload = SerializedPayload(metadata=valid_metadata(), data=data)
+
+    assert payload.data == b"payload"
+    assert payload.data is data
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -208,6 +249,32 @@ def test_serialized_payload_is_keyword_only_frozen_slotted_and_preserves_empty_b
     ],
 )
 def test_serialized_payload_rejects_inexact_field_types(field: str, value: object) -> None:
+    values = {"metadata": valid_metadata(), "data": b"data"}
+    values[field] = value
+
+    with pytest.raises(TypeError):
+        SerializedPayload(**values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (
+            "metadata",
+            PayloadMetadataLookalike(
+                format="json",
+                version=1,
+                content_type="application/json",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+        ),
+        ("data", BytesLookalike(b"payload")),
+    ],
+)
+def test_serialized_payload_rejects_runtime_subclass_lookalikes(
+    field: str,
+    value: object,
+) -> None:
     values = {"metadata": valid_metadata(), "data": b"data"}
     values[field] = value
 
@@ -296,10 +363,33 @@ def test_fixed_errors_have_exact_code_and_message(
 def test_fixed_errors_reject_all_arguments(error_type: type[SerdeError]) -> None:
     with pytest.raises(TypeError):
         error_type(SerdeErrorCode.INVALID_METADATA)  # type: ignore[call-arg]
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        InvalidMetadataError,
+        FormatMismatchError,
+        ContentTypeMismatchError,
+        UnsupportedVersionError,
+        TrustProfileMismatchError,
+    ],
+)
+@pytest.mark.parametrize(
+    "forbidden_arguments",
+    [
+        {"code": SerdeErrorCode.INVALID_METADATA},
+        {"message": "custom"},
+        {"payload": b"data"},
+        {"source": object()},
+    ],
+)
+def test_fixed_errors_reject_forbidden_keyword_arguments(
+    error_type: type[SerdeError],
+    forbidden_arguments: dict[str, object],
+) -> None:
     with pytest.raises(TypeError):
-        error_type(code=SerdeErrorCode.INVALID_METADATA)  # type: ignore[call-arg]
-    with pytest.raises(TypeError):
-        error_type(message="custom")  # type: ignore[call-arg]
+        error_type(**forbidden_arguments)  # type: ignore[call-arg]
 
 
 VARIABLE_ERROR_CASES = [
@@ -352,6 +442,39 @@ VARIABLE_ERROR_CASES = [
     ),
 ]
 
+VARIABLE_ERROR_ALLOWED_CODES = {
+    PayloadLimitError: frozenset(
+        {
+            SerdeErrorCode.INPUT_LIMIT,
+            SerdeErrorCode.OUTPUT_LIMIT,
+            SerdeErrorCode.NESTING_LIMIT,
+        }
+    ),
+    MalformedPayloadError: frozenset(
+        {
+            SerdeErrorCode.INVALID_UTF8,
+            SerdeErrorCode.DUPLICATE_KEY,
+            SerdeErrorCode.DECODE_NON_FINITE_NUMBER,
+            SerdeErrorCode.INVALID_JSON,
+        }
+    ),
+    SerdeEncodeError: frozenset(
+        {
+            SerdeErrorCode.UNSUPPORTED_VALUE,
+            SerdeErrorCode.CIRCULAR_REFERENCE,
+            SerdeErrorCode.ENCODE_NON_FINITE_NUMBER,
+            SerdeErrorCode.ENCODE_RECURSION,
+        }
+    ),
+}
+
+DISALLOWED_VARIABLE_ERROR_CASES = [
+    (error_type, code)
+    for error_type, allowed_codes in VARIABLE_ERROR_ALLOWED_CODES.items()
+    for code in SerdeErrorCode
+    if code not in allowed_codes
+]
+
 
 @pytest.mark.parametrize(("error_type", "code", "message"), VARIABLE_ERROR_CASES)
 def test_variable_errors_accept_only_their_codes(
@@ -368,14 +491,7 @@ def test_variable_errors_accept_only_their_codes(
     assert error.__context__ is None
 
 
-@pytest.mark.parametrize(
-    ("error_type", "foreign_code"),
-    [
-        (PayloadLimitError, SerdeErrorCode.INVALID_JSON),
-        (MalformedPayloadError, SerdeErrorCode.INPUT_LIMIT),
-        (SerdeEncodeError, SerdeErrorCode.INVALID_METADATA),
-    ],
-)
+@pytest.mark.parametrize(("error_type", "foreign_code"), DISALLOWED_VARIABLE_ERROR_CASES)
 def test_variable_errors_reject_cross_class_codes(
     error_type: type[SerdeError],
     foreign_code: SerdeErrorCode,
@@ -384,15 +500,44 @@ def test_variable_errors_reject_cross_class_codes(
         error_type(code=foreign_code)
 
 
-@pytest.mark.parametrize("error_type", [PayloadLimitError, MalformedPayloadError, SerdeEncodeError])
-def test_variable_errors_reject_wrong_types_positional_and_arbitrary_arguments(
+@pytest.mark.parametrize(
+    ("error_type", "allowed_code"),
+    [
+        (PayloadLimitError, SerdeErrorCode.INPUT_LIMIT),
+        (MalformedPayloadError, SerdeErrorCode.INVALID_JSON),
+        (SerdeEncodeError, SerdeErrorCode.UNSUPPORTED_VALUE),
+    ],
+)
+def test_variable_errors_reject_wrong_types_and_positional_code(
     error_type: type[SerdeError],
+    allowed_code: SerdeErrorCode,
 ) -> None:
     with pytest.raises(TypeError):
         error_type(code="invalid_json")  # type: ignore[arg-type]
     with pytest.raises(TypeError):
-        error_type(SerdeErrorCode.INVALID_JSON)  # type: ignore[misc]
+        error_type(allowed_code)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("error_type", "allowed_code"),
+    [
+        (PayloadLimitError, SerdeErrorCode.INPUT_LIMIT),
+        (MalformedPayloadError, SerdeErrorCode.INVALID_JSON),
+        (SerdeEncodeError, SerdeErrorCode.UNSUPPORTED_VALUE),
+    ],
+)
+@pytest.mark.parametrize(
+    "forbidden_arguments",
+    [
+        {"message": "custom"},
+        {"payload": b"data"},
+        {"source": object()},
+    ],
+)
+def test_variable_errors_reject_forbidden_keyword_arguments(
+    error_type: type[SerdeError],
+    allowed_code: SerdeErrorCode,
+    forbidden_arguments: dict[str, object],
+) -> None:
     with pytest.raises(TypeError):
-        error_type(code=SerdeErrorCode.INVALID_JSON, source=object())  # type: ignore[call-arg]
-    with pytest.raises(TypeError):
-        error_type(code=SerdeErrorCode.INVALID_JSON, payload=b"data")  # type: ignore[call-arg]
+        error_type(code=allowed_code, **forbidden_arguments)  # type: ignore[call-arg]
