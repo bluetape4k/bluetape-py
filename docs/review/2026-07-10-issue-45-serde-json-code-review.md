@@ -48,3 +48,22 @@ test selector. Final Step 5 result: `P0=0 P1=0`.
 
 All blocking review findings are resolved: `P0=0 P1=0`. All recorded
 non-blocking findings are also resolved: `P2=0 P3=0`.
+
+## Post-PR Review
+
+PR #48 review against exact head
+`a6f5b0fc496ddfe0f11b8fa5e38a6d4de2c3abc8` found one P1 and one deduplicated
+P2:
+
+- P1: shared-reference DAGs were validated once per expanded path, allowing
+  exponential preflight CPU before a tiny output limit could stop encoding.
+- P2: decode accepted escaped unpaired UTF-16 surrogates even though encode
+  rejected the resulting Python string, breaking the strict round-trip model.
+
+Commit `5f3774c21538792c32d597b8c7724443dac36242` resolved both findings. Completed
+containers are memoized by greatest validated entry depth while active-path IDs
+continue to detect cycles, so deeper reuse still enforces nesting limits.
+Strings now require Unicode scalar values; decode normalizes valid escaped
+surrogate pairs and rejects unpaired surrogates before returning a value.
+Deterministic traversal-count, deeper-entry, Unicode, duplicate-key, and
+source-retention regressions passed with the full 378-test serde suite.
