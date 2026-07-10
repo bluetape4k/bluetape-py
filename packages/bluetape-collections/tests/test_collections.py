@@ -50,7 +50,7 @@ def test_chunked_rejects_non_positive_size(size: int) -> None:
         chunked([1, 2, 3], size)
 
 
-@pytest.mark.parametrize("size", [1.5, float("nan"), "2"])
+@pytest.mark.parametrize("size", [True, False, 1.5, float("nan"), "2"])
 def test_chunked_rejects_non_integral_size_before_consuming_iterable(size: object) -> None:
     with pytest.raises(TypeError, match="size must be an integer"):
         chunked(_raising_iterable(), size)  # type: ignore[arg-type]
