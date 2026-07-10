@@ -72,7 +72,15 @@ async def map_bounded[T, R](
     limit: int,
     timeout: float | None = None,
 ) -> list[R]:
-    """Map items with at most ``limit`` concurrent mapper calls."""
+    """Map synchronous input with bounded asyncio concurrency.
+
+    Results preserve input order. ``limit`` must be in the inclusive range
+    from 1 through 1024, and ``timeout`` is one cooperative deadline for the
+    entire invocation. All mapper work is owned by this call's task group;
+    direct mapper or iterator cancellation terminates the invocation after
+    sibling cleanup, while external cancellation retains native asyncio
+    semantics.
+    """
     _require_limit(limit)
     if not callable(mapper):
         raise TypeError("mapper must be callable")
