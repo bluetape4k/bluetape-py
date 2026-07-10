@@ -17,7 +17,9 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed.
+are confirmed. The new collections package is available from the source
+workspace; registry install commands describe the intended post-publication
+shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It expands
@@ -43,6 +45,7 @@ only `bluetape-core` by default.
 |---|---|---:|---|---|
 | `bluetape` | none | yes | active | Thin meta distribution that depends on `bluetape-core`. |
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
+| `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | planned | Serialization boundary helpers after core APIs settle. |
@@ -65,10 +68,14 @@ only `bluetape-core` by default.
 
 ## Install
 
+PyPI publication is still on hold. Until publishing is enabled, use the local
+workspace commands below instead of registry install commands.
+
 The public install shape after the first PyPI release is:
 
 ```bash
 pip install bluetape
+pip install "bluetape[collections]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
@@ -79,6 +86,7 @@ Focused distributions can also be installed directly:
 
 ```bash
 pip install bluetape-core
+pip install bluetape-collections
 pip install bluetape-logging
 pip install bluetape-testing
 ```
@@ -121,11 +129,21 @@ from bluetape.testing import eventually
 eventually(lambda: cache.get("ready"), timeout=2.0)
 ```
 
+### Collections
+
+```python
+from bluetape.collections import chunked, group_by
+
+chunks = chunked(range(5), 2)
+by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
+```
+
 ## Package Documentation
 
 | Package | Documentation |
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
+| `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |

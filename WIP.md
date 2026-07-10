@@ -15,6 +15,8 @@ focused distribution model:
 
 - `bluetape`: thin meta distribution, default dependency is `bluetape-core`.
 - `bluetape-core`: stdlib-only validation and foundation helpers.
+- `bluetape-collections`: stdlib-only eager iterable/list/dict helpers, added
+  for issue #7 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
@@ -94,7 +96,8 @@ Historical release scope; all items are closed.
 
 ### `0.2.0` - Ecosystem Backlog
 
-- #7 - Collections helper package.
+- #7 - Collections helper package. Implemented by `bluetape-collections` in
+  the source workspace; PyPI publication remains part of the release hold.
 - #8 - Async and bounded concurrency primitives.
 - #9 - Codec and compression packages.
 - #10 - Serialization strategy research.
