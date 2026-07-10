@@ -77,6 +77,18 @@ DIRECT_EXPORTS = [
     json_serialize,
 ]
 
+LARGE_VALID_JSON_INPUT_LIMIT = 1024 * 1024
+_LARGE_VALID_JSON_PREFIX = (
+    b'{"odd":"odd ' + b"\\" * 3 + b'" quote {[]}","even":"even ' + b"\\" * 4 + b'","padding":"'
+)
+_LARGE_VALID_JSON_SUFFIX = b'"}'
+_LARGE_VALID_JSON_PADDING_SIZE = (
+    LARGE_VALID_JSON_INPUT_LIMIT - len(_LARGE_VALID_JSON_PREFIX) - len(_LARGE_VALID_JSON_SUFFIX)
+)
+LARGE_VALID_JSON_PAYLOAD = (
+    _LARGE_VALID_JSON_PREFIX + b"x" * _LARGE_VALID_JSON_PADDING_SIZE + _LARGE_VALID_JSON_SUFFIX
+)
+
 
 def metadata(
     *,
@@ -1082,6 +1094,26 @@ def test_json_deserialize_depth_scanner_handles_strings_quotes_and_backslash_run
         )
         is not None
     )
+
+
+def test_json_deserialize_large_valid_escaped_string_at_exact_input_limit() -> None:
+    assert len(LARGE_VALID_JSON_PAYLOAD) == LARGE_VALID_JSON_INPUT_LIMIT
+    assert b"{[]}" in LARGE_VALID_JSON_PAYLOAD
+    assert b"\\" * 3 + b'" quote' in LARGE_VALID_JSON_PAYLOAD
+    assert b"\\" * 4 + b'","padding"' in LARGE_VALID_JSON_PAYLOAD
+
+    decoded = json_deserialize(
+        serialized(LARGE_VALID_JSON_PAYLOAD),
+        expected_metadata=metadata(),
+        max_input_size=LARGE_VALID_JSON_INPUT_LIMIT,
+        max_nesting_depth=1,
+    )
+
+    assert decoded == {
+        "odd": 'odd \\" quote {[]}',
+        "even": "even \\\\",
+        "padding": "x" * _LARGE_VALID_JSON_PADDING_SIZE,
+    }
 
 
 @pytest.mark.parametrize("closers", [b"]", b"}", b"]}"])
