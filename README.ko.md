@@ -44,6 +44,7 @@ PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 �
 |---|---|---:|---|---|
 | `bluetape` | 없음 | yes | active | `bluetape-core`에만 의존하는 얇은 메타 배포 패키지. |
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
+| `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded structured-concurrency 헬퍼. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | 표준 라이브러리만 사용하는 eager iterable/list/dict 헬퍼. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
@@ -74,6 +75,7 @@ PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 r
 
 ```bash
 pip install bluetape
+pip install "bluetape[asyncio]"
 pip install "bluetape[collections]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
@@ -85,6 +87,7 @@ pip install "bluetape[all]"
 
 ```bash
 pip install bluetape-core
+pip install bluetape-async
 pip install bluetape-collections
 pip install bluetape-logging
 pip install bluetape-testing
@@ -137,11 +140,32 @@ chunks = chunked(range(5), 2)
 by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 ```
 
+### Bounded asyncio 작업
+
+```python
+import asyncio
+
+from bluetape.asyncio import map_bounded
+
+
+async def fetch_order(order_id: int) -> str:
+    await asyncio.sleep(0.01)
+    return f"order-{order_id}"
+
+
+async def main() -> None:
+    print(await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0))
+
+
+asyncio.run(main())
+```
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
+| `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
