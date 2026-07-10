@@ -109,3 +109,22 @@ async def test_map_bounded_direct_mapper_cancellation_cleans_up_siblings() -> No
     with pytest.raises(asyncio.CancelledError):
         await map_bounded([0, 1], mapper, limit=2)
     assert cleaned.is_set()
+
+
+async def test_map_bounded_preserves_external_cancellation_and_cleanup() -> None:
+    started = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def mapper(_: int) -> int:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    task = asyncio.create_task(map_bounded([1], mapper, limit=1))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cleaned.is_set()
