@@ -25,9 +25,13 @@ historical proof.
   `DEFAULT_MAX_INPUT_SIZE` was not exported before production implementation.
 - Captured executable RED rerun: exit 1, `55 failed, 2 deselected`; calls failed
   because the `json_serialize` API was still absent.
-- Current GREEN command:
+- Historical GREEN command for the Task 3 implementation and review closure
+  (`47dea05`, `5577ad8`):
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'serialize or encode'`
-- Current GREEN result: exit 0, `63 passed, 2 deselected`.
+- Historical GREEN result at `5577ad8`: exit 0, `63 passed, 2 deselected`.
+- Current non-overlapping encode command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_serialize or encode) and not (json_deserialize or decode)'`
+- Current non-overlapping encode result: exit 0, `63 passed, 85 deselected`.
 
 ## Task 4 strict bounded JSON decoding
 
@@ -39,10 +43,15 @@ historical proof.
   'json_deserialize' from 'bluetape.serde'`.
 - GREEN command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'deserialize or decode or depth'`
-- Current GREEN result: exit 0, `91 passed, 56 deselected`.
+- Current GREEN result: exit 0, `92 passed, 56 deselected`.
+- Review-gap fixture command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'large_valid_escaped_string'`
+- Review-gap fixture result: exit 0, `1 passed, 147 deselected`; the prebuilt
+  1 MiB valid JSON payload decoded at its exact byte limit with quoted
+  structural characters and explicit odd/even backslash runs.
 - Full serde regression command:
   `uv run pytest packages/bluetape-serde/tests -q`
-- Current full serde result: exit 0, `287 passed`.
+- Current full serde result: exit 0, `288 passed`.
 
 ## Baseline reproducibility check
 
@@ -61,7 +70,7 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `287 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `288 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
