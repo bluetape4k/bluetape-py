@@ -122,13 +122,29 @@ def assert_error(
     assert error.__context__ is None
 
 
-def assert_decode_traceback_does_not_retain_source(error: Exception) -> None:
+def assert_decode_traceback_does_not_retain_source(
+    error: Exception,
+    *,
+    raw_source: bytes | None = None,
+    text_source: str | None = None,
+) -> None:
     traceback = error.__traceback__
     while traceback is not None:
-        if traceback.tb_frame.f_code.co_name == "json_deserialize":
-            assert "payload" not in traceback.tb_frame.f_locals
-            assert "data" not in traceback.tb_frame.f_locals
-            assert "text" not in traceback.tb_frame.f_locals
+        frame = traceback.tb_frame
+        if frame.f_code.co_filename.endswith("/bluetape/serde/_json.py"):
+            assert frame.f_code.co_name != "_preflight_json_text"
+            if frame.f_code.co_name == "json_deserialize":
+                assert "payload" not in frame.f_locals
+                assert "data" not in frame.f_locals
+                assert "text" not in frame.f_locals
+            for value in frame.f_locals.values():
+                if raw_source is not None:
+                    if type(value) is bytes:
+                        assert value != raw_source
+                    if type(value) is SerializedPayload:
+                        assert value.data != raw_source
+                if text_source is not None and type(value) is str:
+                    assert value != text_source
         traceback = traceback.tb_next
 
 
@@ -944,6 +960,29 @@ def test_json_deserialize_enforces_exact_byte_input_limit_before_decode_or_parse
     )
 
 
+def test_json_deserialize_input_limit_traceback_does_not_retain_raw_source() -> None:
+    raw_source = b'"INPUT_LIMIT_PRIVATE_RAW_MARKER"'
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(raw_source),
+            expected_metadata=metadata(),
+            max_input_size=len(raw_source) - 1,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.INPUT_LIMIT,
+        message="serialized payload exceeds max_input_size",
+    )
+    assert "INPUT_LIMIT_PRIVATE_RAW_MARKER" not in repr(caught.value)
+    assert_decode_traceback_does_not_retain_source(
+        caught.value,
+        raw_source=raw_source,
+    )
+
+
 def test_json_deserialize_accepts_input_at_exact_byte_limit() -> None:
     assert (
         json_deserialize(
@@ -1026,6 +1065,31 @@ def test_json_deserialize_depth_zero_accepts_scalars_and_rejects_containers() ->
         error_type=PayloadLimitError,
         code=SerdeErrorCode.NESTING_LIMIT,
         message="JSON nesting exceeds max_nesting_depth",
+    )
+
+
+def test_json_deserialize_nesting_limit_traceback_does_not_retain_source() -> None:
+    raw_source = b'["NESTING_LIMIT_PRIVATE_TEXT_MARKER",[[]]]'
+    text_source = raw_source.decode("utf-8")
+
+    with pytest.raises(PayloadLimitError) as caught:
+        json_deserialize(
+            serialized(raw_source),
+            expected_metadata=metadata(),
+            max_nesting_depth=1,
+        )
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
+    assert "NESTING_LIMIT_PRIVATE_TEXT_MARKER" not in repr(caught.value)
+    assert_decode_traceback_does_not_retain_source(
+        caught.value,
+        raw_source=raw_source,
+        text_source=text_source,
     )
 
 
