@@ -254,6 +254,9 @@ Public adapter errors cross a narrow cloning boundary as type/code only. The
 caller `payload`/`value` and derived data, text, traversal, encoder, chunk, and
 output-buffer locals are cleared before a fresh public error is raised; no
 `_json.py` helper traceback frame may retain traversal state.
+Native configuration `TypeError` and `ValueError` cross the same boundary as
+exact type/message only, after all caller arguments are cleared and without
+changing validation order.
 `MemoryError`, `KeyboardInterrupt`, and `SystemExit` remain native.
 
 Every `SerdeError` exposes a stable `code: SerdeErrorCode` rather than requiring

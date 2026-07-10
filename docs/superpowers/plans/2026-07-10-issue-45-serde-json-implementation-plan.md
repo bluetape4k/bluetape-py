@@ -18,6 +18,9 @@ and left caller/traversal objects reachable from public exception tracebacks.
 The reviewed contract therefore requires one incremental `bytearray`, a fixed
 640-digit integer boundary on both paths, and a narrow type/code cloning
 boundary that raises fresh public errors only after source locals are cleared.
+Configuration validation similarly preserves exact native `TypeError` or
+`ValueError` type/message while raising a fresh source-free exception after
+leaving the handler; its validation order remains unchanged.
 
 **Architecture:** `bluetape.serde._contracts` owns immutable values, trust
 profiles, stable error codes, and the normative error matrix.
