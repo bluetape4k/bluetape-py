@@ -90,3 +90,22 @@ async def test_map_bounded_times_out_after_mapper_cleanup() -> None:
     with pytest.raises(TimeoutError):
         await map_bounded([1], mapper, limit=1, timeout=0.01)
     assert cleaned.is_set()
+
+
+async def test_map_bounded_direct_mapper_cancellation_cleans_up_siblings() -> None:
+    cleaned = asyncio.Event()
+    sibling_started = asyncio.Event()
+
+    async def mapper(value: int) -> int:
+        if value == 0:
+            sibling_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaned.set()
+        await sibling_started.wait()
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await map_bounded([0, 1], mapper, limit=2)
+    assert cleaned.is_set()

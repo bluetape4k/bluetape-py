@@ -8,6 +8,10 @@ from typing import cast
 _MAX_LIMIT = 1024
 
 
+class _MapperCancelledError(Exception):
+    """Private TaskGroup signal for direct mapper cancellation."""
+
+
 def _require_limit(limit: int) -> None:
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise TypeError("limit must be an integer")
@@ -24,6 +28,16 @@ def _require_timeout(timeout: float | None) -> None:
         raise TypeError("timeout must be a finite non-negative number")
     if timeout < 0 or not math.isfinite(timeout):
         raise ValueError("timeout must be a finite non-negative number")
+
+
+async def _invoke_mapper[T, R](mapper: Callable[[T], Awaitable[R]], item: T) -> R:
+    try:
+        return await mapper(item)
+    except asyncio.CancelledError:
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise
+        raise _MapperCancelledError from None
 
 
 async def map_bounded[T, R](
@@ -49,18 +63,21 @@ async def map_bounded[T, R](
                 return
             index = len(results)
             results.append(None)
-            results[index] = await mapper(item)
+            results[index] = await _invoke_mapper(mapper, item)
 
     async def run_workers() -> None:
         async with asyncio.TaskGroup() as task_group:
             for _ in range(limit):
                 task_group.create_task(worker())
 
-    if timeout is None:
-        await run_workers()
-    else:
-        async with asyncio.timeout(timeout):
+    try:
+        if timeout is None:
             await run_workers()
+        else:
+            async with asyncio.timeout(timeout):
+                await run_workers()
+    except* _MapperCancelledError:
+        raise asyncio.CancelledError from None
     return cast(list[R], results)
 
 
