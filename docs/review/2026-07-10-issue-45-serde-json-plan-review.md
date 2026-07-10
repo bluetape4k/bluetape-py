@@ -1,7 +1,7 @@
 # Issue #45 Strict Serde JSON — Step 3-R Plan Review
 
 Date: 2026-07-10
-Baseline: `a4b7f6c`
+Baseline: `3ff99dc`
 Spec: `docs/superpowers/specs/2026-07-10-issue-45-serde-json-design.md`
 Plan: `docs/superpowers/plans/2026-07-10-issue-45-serde-json-implementation-plan.md`
 
