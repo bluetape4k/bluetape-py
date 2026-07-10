@@ -87,9 +87,11 @@ excluded async collection helpers and assigned that scope to this issue.
   suitable for unbounded input.
 - The helper obtains `iter(items)` before consuming an item. A non-iterable
   input therefore raises its native `TypeError` before mapper invocation.
-- An exception from `next(iterator)` propagates with native semantics. Leaving
-  the enclosing task group cancels and awaits active mappers, and no later item
-  is admitted.
+- An ordinary exception from `next(iterator)` propagates with native task-group
+  semantics. Leaving the enclosing task group cancels and awaits active mappers,
+  and no later item is admitted. An iterator-raised `CancelledError` without a
+  pending caller cancellation fails closed as invocation `CancelledError` after
+  the same cleanup; an externally delivered cancellation remains unchanged.
 - `limit` must be an `int` other than `bool` and greater than zero. Invalid
   limits raise `TypeError` or `ValueError` before consuming `items` or invoking
   `mapper`.
@@ -131,6 +133,10 @@ excluded async collection helpers and assigned that scope to this issue.
   only receives the fail-closed no-partial-result behavior. The parent never
   calls `uncancel()`, and the implementation must preserve external cancellation
   counts.
+- Before raising any non-external terminal mapper or iterator signal, a worker
+  records call-scoped terminal state. Every worker checks that state immediately
+  before its next `next(iterator)` call, so no item is admitted after terminal
+  failure is observed.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.
@@ -196,7 +202,7 @@ streaming workload.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| Eager task creation bypasses the concurrency limit or leaves orphan tasks. | P0 | Admit at most `limit` items, own tasks in one `TaskGroup`, and assert cleanup plus terminal-path admission stop. |
+| Eager task creation bypasses the concurrency limit or leaves orphan tasks. | P0 | Admit at most `limit` items, own tasks in one `TaskGroup`, record terminal state before propagation, and assert cleanup plus terminal-path admission stop. |
 | Broad exception handling swallows `CancelledError` or reports partial slots. | P1 | Preserve native external cancellation; make mapper-originated cancellation terminate the invocation; use `finally` tests. |
 | Blocking iterator/mapper work defeats timeout and cancellation. | P1 | Document the cooperative boundary and test timeout only with cooperative suspension. |
 | Invalid mapper or timeout values consume caller input. | P1 | Validate all public inputs before iterator advancement and test every invalid class. |
@@ -248,9 +254,10 @@ streaming workload.
 - Targeted pytest covers success, empty input, ordering, invalid limits,
   invalid mapper and timeout values, bounded active work, iterator-probe
   admission/replenishment, terminal-path admission stop, `O(n)` result-memory
-  documentation, non-iterable, iterator-failure, and non-awaitable protocol
-  violations, ordinary mapper `ExceptionGroup`, direct mapper-originated
-  cancellation, unsupported mapper self-cancellation fail-closed behavior,
+  documentation, non-iterable, ordinary iterator-failure, iterator-cancellation,
+  and non-awaitable protocol violations, ordinary mapper `ExceptionGroup`,
+  direct mapper-originated cancellation, unsupported mapper self-cancellation
+  fail-closed behavior,
   external cancellation-count preservation, timeout, concurrent failure races,
   cleanup, and orphan-task absence.
 - Run `uv sync --all-packages`, `uv lock --check`, targeted and full
