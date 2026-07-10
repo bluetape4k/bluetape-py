@@ -1,6 +1,5 @@
 """Immutable payload contracts and stable serde failures."""
 
-import re
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
@@ -155,7 +154,7 @@ class SerdeEncodeError(_RestrictedSerdeError):
     )
 
 
-_FORMAT_PATTERN = re.compile(r"[a-z0-9_./-]{1,64}", flags=re.ASCII)
+_ALLOWED_FORMAT_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-_./")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -176,7 +175,11 @@ class PayloadMetadata:
             raise TypeError("content_type must be an exact str or None")
         if type(self.trust_profile) is not TrustProfile:
             raise TypeError("trust_profile must be an exact TrustProfile")
-        if _FORMAT_PATTERN.fullmatch(self.format) is None or self.version <= 0:
+        if (
+            not 1 <= len(self.format) <= 64
+            or not all(char in _ALLOWED_FORMAT_CHARACTERS for char in self.format)
+            or self.version <= 0
+        ):
             raise InvalidMetadataError
 
 

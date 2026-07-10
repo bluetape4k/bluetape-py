@@ -540,7 +540,7 @@ def test_json_serialize_accepts_nonzero_depth_n_and_rejects_n_plus_one(
     )
 
 
-def test_preflight_bookkeeping_peak_does_not_scale_with_wide_sibling_count() -> None:
+def test_preflight_auxiliary_memory_does_not_scale_with_wide_sibling_count() -> None:
     narrow = [None] * 10
     wide = [None] * 100_000
 
@@ -1225,7 +1225,7 @@ def test_json_deserialize_near_input_limit_adversarial_text_stops_in_scanner() -
     )
 
 
-def test_decode_depth_scanner_uses_constant_auxiliary_state() -> None:
+def test_decode_depth_scanner_linear_scan_uses_constant_auxiliary_state() -> None:
     small = "]" * 10 + '"quoted [brackets]"' + "[null]"
     large = "]" * 1_000_000 + '"quoted [brackets]"' + "[null]"
 
