@@ -547,6 +547,45 @@ def test_json_serialize_rejects_unsupported_values_without_coercion(value: objec
     )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "\ud800",
+        "\udc00",
+        "\ud83d\ude00",
+        {"\ud800": "value"},
+        {"key": "\udc00"},
+    ],
+)
+def test_json_serialize_rejects_surrogate_code_points_without_source_retention(
+    value: JsonValue,
+) -> None:
+    with pytest.raises(SerdeEncodeError) as caught:
+        json_serialize(value, metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=SerdeEncodeError,
+        code=SerdeErrorCode.UNSUPPORTED_VALUE,
+        message="value is not JSON-serializable",
+    )
+    assert_traceback_does_not_retain_source(
+        caught.value,
+        forbidden_local_names=frozenset({"value", "metadata"}),
+        source_values=(value,),
+    )
+
+
+def test_json_serialize_accepts_unicode_scalar_values_including_non_bmp() -> None:
+    assert (
+        json_serialize(
+            {"emoji": "😀", "music": "𝄞"},
+            metadata=metadata(),
+        ).data
+        == '{"emoji":"😀","music":"𝄞"}'.encode()
+    )
+
+
 @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
 def test_json_serialize_rejects_non_finite_numbers(value: float) -> None:
     with pytest.raises(SerdeEncodeError) as caught:
@@ -721,6 +760,45 @@ def test_preflight_auxiliary_memory_does_not_scale_with_wide_sibling_count() -> 
     tracemalloc.stop()
 
     assert wide_peak - narrow_peak < 64 * 1024
+
+
+def test_preflight_visits_each_completed_shared_dag_container_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import bluetape.serde._json as serde_json_module
+
+    original_dict_values = serde_json_module._dict_values
+    visits = 0
+
+    def counted_dict_values(value: dict[str, JsonValue]) -> Iterator[JsonValue]:
+        nonlocal visits
+        visits += 1
+        return original_dict_values(value)
+
+    monkeypatch.setattr(serde_json_module, "_dict_values", counted_dict_values)
+    shared: JsonValue = {"leaf": None}
+    unique_container_count = 1
+    for _ in range(18):
+        shared = {"left": shared, "right": shared}
+        unique_container_count += 1
+
+    _preflight_json_value(shared, max_nesting_depth=unique_container_count)
+
+    assert visits == unique_container_count
+
+
+def test_preflight_revisits_shared_container_when_entered_at_greater_depth() -> None:
+    shared: JsonValue = [[None]]
+
+    with pytest.raises(PayloadLimitError) as caught:
+        _preflight_json_value([shared, [shared]], max_nesting_depth=3)
+
+    assert_error(
+        caught,
+        error_type=PayloadLimitError,
+        code=SerdeErrorCode.NESTING_LIMIT,
+        message="JSON nesting exceeds max_nesting_depth",
+    )
 
 
 def test_json_serialize_high_chunk_count_uses_bounded_adapter_allocation() -> None:
@@ -1500,6 +1578,73 @@ def test_json_deserialize_rejects_invalid_utf8_without_source_retention() -> Non
     assert marker.decode("latin-1") not in repr(caught.value)
     assert not hasattr(caught.value, "object")
     assert_decode_traceback_does_not_retain_source(caught.value)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b'"\\ud800"',
+        b'"\\udc00"',
+        b'{"key":"\\ud800"}',
+        b'{"\\udc00":"value"}',
+    ],
+)
+def test_json_deserialize_rejects_unpaired_surrogates_without_source_retention(
+    data: bytes,
+) -> None:
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(data), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.INVALID_JSON,
+        message="payload is not valid JSON",
+    )
+    assert_decode_traceback_does_not_retain_source(
+        caught.value,
+        raw_source=data,
+        text_source=data.decode(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        (b'"\\ud83d\\ude00"', "😀"),
+        (b'{"\\ud834\\udd1e":"music"}', {"𝄞": "music"}),
+        ('"😀"'.encode(), "😀"),
+    ],
+)
+def test_json_deserialize_accepts_surrogate_pairs_and_non_bmp_scalars(
+    data: bytes,
+    expected: JsonValue,
+) -> None:
+    decoded = json_deserialize(serialized(data), expected_metadata=metadata())
+
+    assert decoded == expected
+    assert (
+        json_deserialize(
+            json_serialize(decoded, metadata=metadata()),
+            expected_metadata=metadata(),
+        )
+        == expected
+    )
+
+
+def test_json_deserialize_rejects_keys_that_duplicate_after_surrogate_normalization() -> None:
+    data = b'{"\\ud83d\\ude00":1,"\xf0\x9f\x98\x80":2}'
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        json_deserialize(serialized(data), expected_metadata=metadata())
+
+    assert_error(
+        caught,
+        error_type=MalformedPayloadError,
+        code=SerdeErrorCode.DUPLICATE_KEY,
+        message="JSON object contains a duplicate key",
+    )
+    assert_decode_traceback_does_not_retain_source(caught.value, raw_source=data)
 
 
 def nested_json_text(depth: int) -> bytes:
