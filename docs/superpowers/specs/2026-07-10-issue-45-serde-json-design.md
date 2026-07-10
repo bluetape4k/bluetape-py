@@ -1,7 +1,7 @@
 # Issue #45 Strict Serde JSON Design
 
 Date: 2026-07-10
-Status: Step 2-R reviewed, P0=0 P1=0; awaiting written-spec approval
+Status: Approved; Step 2-R reviewed, P0=0 P1=0
 Scope: issue #45, milestone `0.2.0`, `bluetape-serde`
 
 ## Problem
