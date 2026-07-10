@@ -28,7 +28,8 @@ _MAX_JSON_INTEGER_MAGNITUDE = 10**MAX_JSON_INTEGER_DIGITS
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
-type _TraversalFrame = tuple[int, Iterator[object]]
+type _TraversalItem = tuple[object, int]
+type _TraversalFrame = tuple[int, Iterator[_TraversalItem]]
 type _SerdeErrorSpec = tuple[type[SerdeError], SerdeErrorCode]
 type _NativeConfigurationErrorSpec = tuple[type[TypeError] | type[ValueError], str]
 
@@ -74,17 +75,34 @@ def _fresh_serde_error(spec: _SerdeErrorSpec) -> SerdeError:
     return error_type(code=code)  # type: ignore[call-arg]
 
 
-def _dict_values(value: dict[str, JsonValue]) -> Iterator[JsonValue]:
+def _list_values(value: list[JsonValue]) -> Iterator[_TraversalItem]:
+    for item in value:
+        yield item, 0
+
+
+def _dict_values(value: dict[str, JsonValue]) -> Iterator[_TraversalItem]:
     for key, item in value.items():
         if type(key) is not str:
             raise _unsupported_value_error()
-        _validate_unicode_scalar_string(key)
-        yield item
+        key_lower_bound = _validate_unicode_scalar_string(key)
+        yield item, key_lower_bound + 1
 
 
-def _validate_unicode_scalar_string(value: str) -> None:
-    if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
-        raise _unsupported_value_error()
+def _validate_unicode_scalar_string(value: str) -> int:
+    encoded_lower_bound = 2
+    for character in value:
+        code_point = ord(character)
+        if 0xD800 <= code_point <= 0xDFFF:
+            raise _unsupported_value_error()
+        if code_point <= 0x7F:
+            encoded_lower_bound += 1
+        elif code_point <= 0x7FF:
+            encoded_lower_bound += 2
+        elif code_point <= 0xFFFF:
+            encoded_lower_bound += 3
+        else:
+            encoded_lower_bound += 4
+    return encoded_lower_bound
 
 
 def _preflight_json_value(
@@ -93,14 +111,16 @@ def _preflight_json_value(
     max_nesting_depth: int,
     max_output_size: int,
 ) -> None:
-    """Validate a JSON graph with active-path state and an output-derived visit bound."""
+    """Validate a JSON graph with active-path state and an encoded-byte lower bound."""
     active_container_ids: set[int] = set()
     stack: list[_TraversalFrame] = []
-    validated_occurrences = 0
+    validated_output_lower_bound = 0
     current = value
+    pending_lower_bound = 0
 
     while True:
         container_id: int | None = None
+        value_lower_bound = 1
         current_type = type(current)
         if current is None or current_type is bool:
             pass
@@ -108,7 +128,7 @@ def _preflight_json_value(
             if current >= _MAX_JSON_INTEGER_MAGNITUDE or current <= -_MAX_JSON_INTEGER_MAGNITUDE:
                 raise PayloadLimitError(code=SerdeErrorCode.INTEGER_DIGIT_LIMIT)
         elif current_type is str:
-            _validate_unicode_scalar_string(current)
+            value_lower_bound = _validate_unicode_scalar_string(current)
         elif current_type is float:
             if not math.isfinite(current):
                 raise SerdeEncodeError(code=SerdeErrorCode.ENCODE_NON_FINITE_NUMBER)
@@ -123,14 +143,14 @@ def _preflight_json_value(
         else:
             raise _unsupported_value_error()
 
-        validated_occurrences += 1
-        if validated_occurrences > max_output_size:
+        validated_output_lower_bound += pending_lower_bound + value_lower_bound
+        if validated_output_lower_bound > max_output_size:
             raise PayloadLimitError(code=SerdeErrorCode.OUTPUT_LIMIT)
 
         if container_id is not None:
             active_container_ids.add(container_id)
             if current_type is list:
-                iterator: Iterator[object] = iter(current)
+                iterator = _list_values(current)
             else:
                 iterator = _dict_values(current)
             stack.append((container_id, iterator))
@@ -138,7 +158,7 @@ def _preflight_json_value(
         while stack:
             container_id, iterator = stack[-1]
             try:
-                current = next(iterator)
+                current, pending_lower_bound = next(iterator)
             except StopIteration:
                 stack.pop()
                 active_container_ids.remove(container_id)

@@ -361,11 +361,13 @@ cycles from repeated shared references. This prevents key coercion such as
 user-defined conversion hooks. Exact integers whose absolute value has more
 than `MAX_JSON_INTEGER_DIGITS` decimal digits are rejected by arithmetic
 comparison without decimal string conversion. Preflight retains only active
-path state. A validated-occurrence counter provides a conservative output
-lower bound: because every JSON value occurrence needs at least one encoded
-byte, traversal stops with `output_limit` once occurrences exceed
-`max_output_size`, bounding repeated shared-DAG expansion without retaining an
-O(unique containers) completed-node memo.
+path state and accumulates a conservative encoded-byte lower bound. String
+validation charges two quotes plus each Unicode scalar's UTF-8 width; JSON
+escaping can only increase the actual size. Dict keys and their colon are
+charged lazily with the corresponding item, while containers and other scalars
+use a safe one-byte minimum. Traversal stops with `output_limit` once this
+lower bound exceeds `max_output_size`, bounding repeated shared-DAG expansion
+without retaining an O(unique containers) completed-node memo.
 
 Encode uses a compact `json.JSONEncoder(...).iterencode()` stream with
 `allow_nan=False`. It UTF-8 encodes each emitted text chunk, compares it with
@@ -462,8 +464,8 @@ relationship.
    linear work and constant extra state.
 6. Encode rejects result bytes over the output limit while consuming
    `iterencode()` output, uses one incremental `bytearray`, and does not consume later chunks after failure;
-   preflight also rejects once validated value occurrences exceed the output
-   byte budget while retaining O(depth) active-path state;
+   preflight also rejects once its conservative encoded-byte lower bound
+   exceeds the output budget while retaining O(depth) active-path state;
    unsupported and circular values become fixed, payload-free
    `SerdeEncodeError`; configured depth excess becomes `PayloadLimitError` with
    `nesting_limit`, while an unexpected encoder `RecursionError` becomes
