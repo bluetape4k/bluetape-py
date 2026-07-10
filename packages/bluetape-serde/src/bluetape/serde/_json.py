@@ -28,7 +28,7 @@ _MAX_JSON_INTEGER_MAGNITUDE = 10**MAX_JSON_INTEGER_DIGITS
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
-type _TraversalFrame = tuple[int, int, Iterator[object]]
+type _TraversalFrame = tuple[int, Iterator[object]]
 type _SerdeErrorSpec = tuple[type[SerdeError], SerdeErrorCode]
 type _NativeConfigurationErrorSpec = tuple[type[TypeError] | type[ValueError], str]
 
@@ -87,14 +87,20 @@ def _validate_unicode_scalar_string(value: str) -> None:
         raise _unsupported_value_error()
 
 
-def _preflight_json_value(value: object, *, max_nesting_depth: int) -> None:
-    """Validate a JSON graph with active-path cycle and completed-depth state."""
+def _preflight_json_value(
+    value: object,
+    *,
+    max_nesting_depth: int,
+    max_output_size: int,
+) -> None:
+    """Validate a JSON graph with active-path state and an output-derived visit bound."""
     active_container_ids: set[int] = set()
-    completed_container_depths: dict[int, int] = {}
     stack: list[_TraversalFrame] = []
+    validated_occurrences = 0
     current = value
 
     while True:
+        container_id: int | None = None
         current_type = type(current)
         if current is None or current_type is bool:
             pass
@@ -114,28 +120,28 @@ def _preflight_json_value(value: object, *, max_nesting_depth: int) -> None:
             container_id = id(current)
             if container_id in active_container_ids:
                 raise SerdeEncodeError(code=SerdeErrorCode.CIRCULAR_REFERENCE)
-
-            if completed_container_depths.get(container_id, -1) < entry_depth:
-                active_container_ids.add(container_id)
-                if current_type is list:
-                    iterator: Iterator[object] = iter(current)
-                else:
-                    iterator = _dict_values(current)
-                stack.append((container_id, entry_depth, iterator))
         else:
             raise _unsupported_value_error()
 
+        validated_occurrences += 1
+        if validated_occurrences > max_output_size:
+            raise PayloadLimitError(code=SerdeErrorCode.OUTPUT_LIMIT)
+
+        if container_id is not None:
+            active_container_ids.add(container_id)
+            if current_type is list:
+                iterator: Iterator[object] = iter(current)
+            else:
+                iterator = _dict_values(current)
+            stack.append((container_id, iterator))
+
         while stack:
-            container_id, entry_depth, iterator = stack[-1]
+            container_id, iterator = stack[-1]
             try:
                 current = next(iterator)
             except StopIteration:
                 stack.pop()
                 active_container_ids.remove(container_id)
-                completed_container_depths[container_id] = max(
-                    completed_container_depths.get(container_id, -1),
-                    entry_depth,
-                )
                 continue
             break
         else:
@@ -433,7 +439,11 @@ def json_serialize(
     preflight_error: _SerdeErrorSpec | None = None
     try:
         _validate_json_metadata(metadata)
-        _preflight_json_value(value, max_nesting_depth=max_nesting_depth)
+        _preflight_json_value(
+            value,
+            max_nesting_depth=max_nesting_depth,
+            max_output_size=max_output_size,
+        )
     except SerdeError as error:
         preflight_error = _error_spec(error)
 

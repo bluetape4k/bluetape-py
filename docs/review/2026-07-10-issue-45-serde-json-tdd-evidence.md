@@ -133,3 +133,18 @@ verbatim record of the original RED run.
   check, Ruff format check, all-package build, branch/current diff checks,
   focused-wheel isolated roundtrip, 21-export/17-code assertion, four README
   wheel-snippet checks, and regex scan all exited 0.
+
+## Post-PR shared-DAG correction
+
+- RED selector:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'auxiliary_memory or shared_dag or output_visit_guard or greater_depth'`
+- RED result against completed-container memoization: exit 1, `3 failed, 3
+  passed, 231 deselected`; the private preflight lacked the output visit bound,
+  the encoder was reached for a tiny shared-DAG budget, and the distinct-wide-
+  sibling memory case could not exercise the approved contract.
+- GREEN design: active container IDs and iterator frames retain only the
+  current path. A scalar counter raises `OUTPUT_LIMIT` once validated value
+  occurrences exceed `max_output_size`; current-node unsupported, cycle, and
+  depth validation runs before the guard.
+- GREEN results: the exact selector passed `6 passed, 231 deselected`; the full
+  serde suite passed `381 passed`; the full workspace passed `527 passed`.

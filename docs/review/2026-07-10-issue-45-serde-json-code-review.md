@@ -61,9 +61,17 @@ P2:
   rejected the resulting Python string, breaking the strict round-trip model.
 
 Commit `5f3774c21538792c32d597b8c7724443dac36242` resolved both findings. Completed
-containers are memoized by greatest validated entry depth while active-path IDs
-continue to detect cycles, so deeper reuse still enforces nesting limits.
+container memoization initially bounded repeated-DAG work but introduced
+O(unique containers) auxiliary state, violating the approved O(depth) design.
+The follow-up correction restores active-path-only cycle state and uses the
+output budget as a conservative validated-occurrence bound; current-node type,
+cycle, and depth errors still precede that guard.
 Strings now require Unicode scalar values; decode normalizes valid escaped
 surrogate pairs and rejects unpaired surrogates before returning a value.
-Deterministic traversal-count, deeper-entry, Unicode, duplicate-key, and
-source-retention regressions passed with the full 378-test serde suite.
+Deterministic bounded-visit, distinct-sibling memory, validation-order,
+Unicode, duplicate-key, and source-retention regressions cover the corrected
+contracts. The performance rerun at exact PR head
+`05845fc` found the completed-memo O(unique containers) P1; after the
+active-path/output-budget correction, targeted tests passed `6 passed, 231
+deselected`, the serde suite passed `381 passed`, and the workspace passed `527
+passed`. Final rerun status: `P0=0 P1=0 P2=0 P3=0`.
