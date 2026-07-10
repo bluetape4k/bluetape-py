@@ -161,6 +161,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Use a synchronous loop for simple sequential work and `asyncio.gather` only
+when the coroutine set is already small and bounded. Use `map_bounded` when an
+input iterable can grow and the caller must set a cooperative concurrency cap.
+
 ## Package Documentation
 
 | Package | Documentation |

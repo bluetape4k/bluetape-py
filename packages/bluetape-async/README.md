@@ -31,6 +31,28 @@ at once. `limit` creates call-scoped workers and must be between 1 and 1024.
 Mapper and iterator work must cooperate with the event loop. `timeout` is one
 total cooperative deadline for the whole invocation.
 
+## Choosing Sync, Async, or Bounded Parallelism
+
+Use synchronous iteration when each operation is local or blocking and simple
+sequential ownership is the clearest choice:
+
+```python
+orders = [fetch_order_sync(order_id) for order_id in [1, 2, 3]]
+```
+
+Use `asyncio.gather` for a small, already-bounded set of coroutine calls:
+
+```python
+orders = await asyncio.gather(*(fetch_order(order_id) for order_id in [1, 2, 3]))
+```
+
+Use `map_bounded` when input can grow beyond that known set and the caller must
+put a concrete concurrency ceiling on cooperative async work:
+
+```python
+orders = await map_bounded([1, 2, 3], fetch_order, limit=2, timeout=1.0)
+```
+
 ## Failure and Cancellation
 
 - Invalid `limit`, `mapper`, or `timeout` values raise `TypeError` or

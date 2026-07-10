@@ -160,6 +160,10 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+단순한 순차 작업에는 동기 반복을 사용하고, 이미 작고 범위가 정해진 coroutine
+집합에만 `asyncio.gather`를 사용합니다. 입력 iterable이 커질 수 있고 호출자가
+cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합니다.
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
