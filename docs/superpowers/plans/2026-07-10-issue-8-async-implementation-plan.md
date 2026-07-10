@@ -262,8 +262,9 @@ async def test_map_bounded_preserves_native_non_iterable_and_non_awaitable_failu
             admitted += 1
             yield value
 
-    with pytest.raises(ExceptionGroup):
+    with pytest.raises(ExceptionGroup) as non_awaitable_error:
         await map_bounded(items(), lambda value: value, limit=1)  # type: ignore[arg-type]
+    assert non_awaitable_error.group_contains(TypeError)
     assert admitted == 1
     _assert_no_helper_tasks()
 
@@ -370,6 +371,25 @@ async def test_map_bounded_iterator_self_cancellation_fails_before_mapper() -> N
 
     with pytest.raises(asyncio.CancelledError):
         await map_bounded(SelfCancellingIterator(), mapper, limit=1)
+    _assert_no_helper_tasks()
+
+
+async def test_map_bounded_iter_self_cancellation_fails_before_mapper() -> None:
+    class IterSelfCancellingIterator:
+        def __iter__(self) -> "IterSelfCancellingIterator":
+            task = asyncio.current_task()
+            assert task is not None
+            task.cancel()
+            return self
+
+        def __next__(self) -> int:
+            raise AssertionError("next must not be called")
+
+    async def mapper(_: int) -> int:
+        raise AssertionError("mapper must not be called")
+
+    with pytest.raises(asyncio.CancelledError):
+        await map_bounded(IterSelfCancellingIterator(), mapper, limit=1)
     _assert_no_helper_tasks()
 
 
@@ -528,8 +548,10 @@ async def test_map_bounded_timeout_and_mapper_failure_keep_native_outcomes() -> 
         finally:
             cleaned.set()
 
-    with pytest.raises((TimeoutError, ExceptionGroup)):
+    with pytest.raises((TimeoutError, ExceptionGroup)) as timeout_race:
         await map_bounded([0, 1], mapper, limit=2, timeout=0.01)
+    if isinstance(timeout_race.value, ExceptionGroup):
+        assert timeout_race.group_contains(RuntimeError, match="boom")
     assert cleaned.is_set()
     _assert_no_helper_tasks()
 
@@ -553,14 +575,26 @@ async def test_map_bounded_external_cancellation_race_preserves_count() -> None:
         finally:
             cleaned.set()
 
-    task = asyncio.create_task(map_bounded([0, 1], mapper, limit=2))
+    admitted = 0
+
+    def items() -> Iterator[int]:
+        nonlocal admitted
+        for value in range(3):
+            admitted += 1
+            yield value
+
+    task = asyncio.create_task(map_bounded(items(), mapper, limit=2))
     await both_started.wait()
+    baseline = task.cancelling()
     task.cancel()
     task.cancel()
     failure_gate.set()
-    with pytest.raises((asyncio.CancelledError, ExceptionGroup)):
+    with pytest.raises((asyncio.CancelledError, ExceptionGroup)) as external_race:
         await task
-    assert task.cancelling() >= 2
+    if isinstance(external_race.value, ExceptionGroup):
+        assert external_race.group_contains(RuntimeError, match="boom")
+    assert task.cancelling() >= baseline + 2
+    assert admitted == 2
     assert cleaned.is_set()
     _assert_no_helper_tasks()
 
@@ -684,11 +718,11 @@ async def map_bounded[T, R](
     _require_limit(limit)
     mapper_fn = _require_mapper(mapper)
     _require_timeout(timeout)
-    iterator = iter(items)
     owner = asyncio.current_task()
     if owner is None:
         raise RuntimeError("map_bounded requires a running task")
     owner_cancellation_baseline = owner.cancelling()
+    iterator = iter(items)
     results: list[R | None] = []
     terminal = asyncio.Event()
 
