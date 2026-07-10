@@ -68,6 +68,9 @@ excluded async collection helpers and assigned that scope to this issue.
   wrapper would add API surface without a distinct contract.
 - No global event-loop state, detached/background tasks, threads, processes,
   executors, retries, rate limiting, or per-task timeout policy.
+- No support for a mapper that calls `asyncio.current_task().cancel()` on
+  itself. That ambiguous self-cancellation is outside this helper's terminal
+  cancellation contract.
 - No custom deadline type, custom cancellation token, AnyIO, or other new
   runtime dependency.
 - No Go `context` or Kotlin coroutine API port.
@@ -83,6 +86,9 @@ excluded async collection helpers and assigned that scope to this issue.
   suitable for unbounded input.
 - The helper obtains `iter(items)` before consuming an item. A non-iterable
   input therefore raises its native `TypeError` before mapper invocation.
+- An exception from `next(iterator)` propagates with native semantics. Leaving
+  the enclosing task group cancels and awaits active mappers, and no later item
+  is admitted.
 - `limit` must be an `int` other than `bool` and greater than zero. Invalid
   limits raise `TypeError` or `ValueError` before consuming `items` or invoking
   `mapper`.
@@ -111,16 +117,19 @@ excluded async collection helpers and assigned that scope to this issue.
   failure may be delivered as an `ExceptionGroup`.
 - External caller cancellation remains `asyncio.CancelledError`; mapper
   `finally` blocks must get a chance to run before propagation completes.
-- A mapper-originated `CancelledError` is treated as cancellation of the
-  `map_bounded` invocation: the helper stops new admission, cancels active
-  siblings, awaits cooperative cleanup, and raises `CancelledError` rather
-  than returning partial result slots.
+- A mapper-originated cancellation means a direct `raise asyncio.CancelledError`
+  from a mapper while its runner has no pending `Task.cancel()` request. It is
+  treated as cancellation of the `map_bounded` invocation: the helper stops new
+  admission, cancels active siblings, awaits cooperative cleanup, and raises
+  `CancelledError` rather than returning partial result slots.
 - To distinguish that case from external caller cancellation, the private task
   runner checks its task's `cancelling()` state. It re-raises externally
   delivered cancellation unchanged; only a mapper-raised cancellation with no
   pending task cancellation becomes an internal terminal signal that cancels
-  siblings. The parent never calls `uncancel()`, and the implementation must
-  preserve external cancellation counts.
+  siblings. A mapper must not self-cancel with `current_task().cancel()` because
+  that is intentionally unsupported and indistinguishable at this boundary.
+  The parent never calls `uncancel()`, and the implementation must preserve
+  external cancellation counts.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.
@@ -190,7 +199,7 @@ streaming workload.
 | Broad exception handling swallows `CancelledError` or reports partial slots. | P1 | Preserve native external cancellation; make mapper-originated cancellation terminate the invocation; use `finally` tests. |
 | Blocking iterator/mapper work defeats timeout and cancellation. | P1 | Document the cooperative boundary and test timeout only with cooperative suspension. |
 | Invalid mapper or timeout values consume caller input. | P1 | Validate all public inputs before iterator advancement and test every invalid class. |
-| Mapper self-cancellation is confused with external task cancellation. | P1 | Use `Task.cancelling()` only to preserve external cancellation; do not call `uncancel()`, and test self-cancellation plus external-cancellation races. |
+| Mapper self-cancellation is confused with external task cancellation. | P1 | Exclude `current_task().cancel()` self-cancellation, define supported mapper cancellation as a direct raise with no pending cancellation, and test the unsupported boundary plus external-cancellation races. |
 | Result order, iterator admission, exception races, or `timeout=None` drifts from the intended contract. | P2 | Add iterator-probe, exception-race, and focused contract tests. |
 | `bluetape[asyncio]` could be confused with the stdlib module. | P3 | Document the focused distribution and import path explicitly; keep the default install unchanged. |
 
@@ -217,10 +226,12 @@ streaming workload.
    a callable that returns a non-awaitable fails with native task-group error
    aggregation and stops further admission.
 5. It never runs more than `limit` mappers at once, admits items incrementally,
-   stops admission after every terminal path, and preserves result order.
+   stops admission after every terminal path (including an iterator exception),
+   and preserves result order.
 6. Empty input returns an empty list without mapper calls.
 7. Ordinary mapper failure retains native task-group `ExceptionGroup` behavior;
-   mapper-originated and external cancellation do not return partial results.
+   direct mapper-originated cancellation and external cancellation do not return
+   partial results. Mapper self-cancellation via `Task.cancel()` is unsupported.
 8. Cooperative mapper failure, external cancellation, and total timeout preserve
    their caller-visible exception contracts while all started mappers finish
    cleanup. Concurrent failure races retain native asyncio outcomes.
@@ -235,10 +246,11 @@ streaming workload.
 - Targeted pytest covers success, empty input, ordering, invalid limits,
   invalid mapper and timeout values, bounded active work, iterator-probe
   admission/replenishment, terminal-path admission stop, `O(n)` result-memory
-  documentation, non-iterable and non-awaitable protocol violations, ordinary
-  mapper `ExceptionGroup`, mapper-originated cancellation, external
-  cancellation-count preservation, timeout, concurrent failure races, cleanup,
-  and orphan-task absence.
+  documentation, non-iterable, iterator-failure, and non-awaitable protocol
+  violations, ordinary mapper `ExceptionGroup`, direct mapper-originated
+  cancellation, unsupported mapper self-cancellation, external cancellation-
+  count preservation, timeout, concurrent failure races, cleanup, and orphan-
+  task absence.
 - Run `uv sync --all-packages`, `uv lock --check`, targeted and full
   `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`,
   `uv build --all-packages`, and `git diff --check`.
