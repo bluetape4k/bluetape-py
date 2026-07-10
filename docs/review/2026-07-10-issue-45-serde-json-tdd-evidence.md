@@ -26,9 +26,9 @@ historical proof.
 - Captured executable RED rerun: exit 1, `55 failed, 2 deselected`; calls failed
   because the `json_serialize` API was still absent.
 - Historical GREEN command for the Task 3 implementation and review closure
-  (`47dea05`, `5577ad8`):
+  (`d8b5a20`, `6cf73dc`):
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'serialize or encode'`
-- Historical GREEN result at `5577ad8`: exit 0, `63 passed, 2 deselected`.
+- Historical GREEN result at `6cf73dc`: exit 0, `63 passed, 2 deselected`.
 - Current non-overlapping encode command:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k '(json_serialize or encode) and not (json_deserialize or decode)'`
 - Current non-overlapping encode result: exit 0, `63 passed, 87 deselected`.
@@ -41,7 +41,7 @@ historical proof.
   `json_deserialize` API was absent before production implementation. Pytest
   reported one collection error with `ImportError: cannot import name
   'json_deserialize' from 'bluetape.serde'`.
-- Historical pre-retention-fix GREEN selector at `27d3fce`:
+- Historical pre-retention-fix GREEN selector at `38eacbb`:
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'deserialize or decode or depth'`
 - Historical selector result: exit 0, `92 passed, 56 deselected`, composed of
   83 decode cases plus 9 encode-depth cases.
@@ -71,7 +71,7 @@ historical proof.
 
 ## Baseline reproducibility check
 
-The Task 2 test tree from commit `f71d637` was run with `PYTHONPATH` pointed at
+The Task 2 test tree from commit `4fa5243` was run with `PYTHONPATH` pointed at
 its parent commit's placeholder serde source, using:
 
 ```text
