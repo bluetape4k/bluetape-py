@@ -17,8 +17,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-새 collections 패키지는 source workspace에서 사용할 수 있으며, registry 설치
-명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
+collections, codec, compression 패키지는 source workspace에서 사용할 수 있으며,
+registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
@@ -45,7 +45,9 @@ PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 �
 | `bluetape` | 없음 | yes | active | `bluetape-core`에만 의존하는 얇은 메타 배포 패키지. |
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded structured-concurrency 헬퍼. |
+| `bluetape-codec` | `bluetape.codec` | no | active, source workspace | 엄격한 URL-safe Base64와 hexadecimal 헬퍼. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | 표준 라이브러리만 사용하는 eager iterable/list/dict 헬퍼. |
+| `bluetape-compression` | `bluetape.compression` | no | active, source workspace | 제한된 gzip, zlib, raw-DEFLATE byte 헬퍼. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | planned | core API가 안정화된 뒤 다룰 serialization 경계 헬퍼. |
@@ -76,7 +78,9 @@ PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 r
 ```bash
 pip install bluetape
 pip install "bluetape[asyncio]"
+pip install "bluetape[codec]"
 pip install "bluetape[collections]"
+pip install "bluetape[compression]"
 pip install "bluetape[logging]"
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
@@ -88,7 +92,9 @@ pip install "bluetape[all]"
 ```bash
 pip install bluetape-core
 pip install bluetape-async
+pip install bluetape-codec
 pip install bluetape-collections
+pip install bluetape-compression
 pip install bluetape-logging
 pip install bluetape-testing
 ```
@@ -140,6 +146,21 @@ chunks = chunked(range(5), 2)
 by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 ```
 
+### Codec과 compression
+
+```python
+from bluetape.codec import base64url_encode
+from bluetape.compression import gzip_compress, gzip_decompress
+
+token = base64url_encode(b"order:42")
+assert gzip_decompress(gzip_compress(token.encode("ascii"))) == token.encode("ascii")
+```
+
+`bluetape.codec`는 canonical URL-safe Base64와 strict hex text만 decode합니다.
+`bluetape.compression`은 기본 64 MiB logical returned-payload 제한을 사용하며,
+gzip은 완전한 concatenated member를 허용하고 zlib/raw-DEFLATE는 trailing byte를
+거부합니다. 두 패키지 모두 기본 `bluetape` 설치에는 포함되지 않습니다.
+
 ### Bounded asyncio 작업
 
 ```python
@@ -170,7 +191,9 @@ cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합�
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
+| `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |

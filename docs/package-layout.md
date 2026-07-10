@@ -17,7 +17,9 @@ Current public distributions:
 
 - `bluetape`
 - `bluetape-async`
+- `bluetape-codec`
 - `bluetape-collections`
+- `bluetape-compression`
 - `bluetape-core`
 - `bluetape-logging`
 - `bluetape-testing`
@@ -25,9 +27,12 @@ Current public distributions:
 The `bluetape` distribution is a meta package. It should not create a root
 `bluetape/__init__.py` import surface. Focused packages own focused import paths
 such as `bluetape.core`, `bluetape.logging`, and `bluetape.testing`.
-The async package owns `bluetape.asyncio` and the collections package owns
-`bluetape.collections`. Async packages must document cooperative ownership,
-cancellation, timeout, and cleanup behavior.
+The async package owns `bluetape.asyncio`, codec owns `bluetape.codec`,
+collections owns `bluetape.collections`, and compression owns
+`bluetape.compression`. Async packages must document cooperative ownership,
+cancellation, timeout, and cleanup behavior. Compression packages must document
+wire formats, output bounds, malformed-input errors, and optional-backend
+availability.
 
 ## Future Packages
 

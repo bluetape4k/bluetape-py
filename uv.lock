@@ -6,7 +6,9 @@ requires-python = ">=3.13"
 members = [
     "bluetape",
     "bluetape-async",
+    "bluetape-codec",
     "bluetape-collections",
+    "bluetape-compression",
     "bluetape-core",
     "bluetape-logging",
     "bluetape-py-workspace",
@@ -24,19 +26,29 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "bluetape-async" },
+    { name = "bluetape-codec" },
     { name = "bluetape-collections" },
+    { name = "bluetape-compression" },
     { name = "bluetape-logging" },
     { name = "bluetape-testing" },
 ]
 asyncio = [
     { name = "bluetape-async" },
 ]
+codec = [
+    { name = "bluetape-codec" },
+]
 collections = [
     { name = "bluetape-collections" },
 ]
+compression = [
+    { name = "bluetape-compression" },
+]
 dev = [
     { name = "bluetape-async" },
+    { name = "bluetape-codec" },
     { name = "bluetape-collections" },
+    { name = "bluetape-compression" },
     { name = "bluetape-logging" },
     { name = "bluetape-testing" },
 ]
@@ -52,9 +64,15 @@ requires-dist = [
     { name = "bluetape-async", marker = "extra == 'all'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'asyncio'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'dev'", editable = "packages/bluetape-async" },
+    { name = "bluetape-codec", marker = "extra == 'all'", editable = "packages/bluetape-codec" },
+    { name = "bluetape-codec", marker = "extra == 'codec'", editable = "packages/bluetape-codec" },
+    { name = "bluetape-codec", marker = "extra == 'dev'", editable = "packages/bluetape-codec" },
     { name = "bluetape-collections", marker = "extra == 'all'", editable = "packages/bluetape-collections" },
     { name = "bluetape-collections", marker = "extra == 'collections'", editable = "packages/bluetape-collections" },
     { name = "bluetape-collections", marker = "extra == 'dev'", editable = "packages/bluetape-collections" },
+    { name = "bluetape-compression", marker = "extra == 'all'", editable = "packages/bluetape-compression" },
+    { name = "bluetape-compression", marker = "extra == 'compression'", editable = "packages/bluetape-compression" },
+    { name = "bluetape-compression", marker = "extra == 'dev'", editable = "packages/bluetape-compression" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-logging", marker = "extra == 'all'", editable = "packages/bluetape-logging" },
     { name = "bluetape-logging", marker = "extra == 'dev'", editable = "packages/bluetape-logging" },
@@ -63,7 +81,7 @@ requires-dist = [
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "collections", "logging", "testing", "dev", "all"]
+provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "testing", "dev", "all"]
 
 [[package]]
 name = "bluetape-async"
@@ -71,9 +89,19 @@ version = "0.1.0"
 source = { editable = "packages/bluetape-async" }
 
 [[package]]
+name = "bluetape-codec"
+version = "0.1.0"
+source = { editable = "packages/bluetape-codec" }
+
+[[package]]
 name = "bluetape-collections"
 version = "0.1.0"
 source = { editable = "packages/bluetape-collections" }
+
+[[package]]
+name = "bluetape-compression"
+version = "0.1.0"
+source = { editable = "packages/bluetape-compression" }
 
 [[package]]
 name = "bluetape-core"
@@ -91,7 +119,9 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "bluetape-async" },
+    { name = "bluetape-codec" },
     { name = "bluetape-collections" },
+    { name = "bluetape-compression" },
     { name = "bluetape-core" },
     { name = "bluetape-logging" },
     { name = "bluetape-testing" },
@@ -107,7 +137,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bluetape-async", editable = "packages/bluetape-async" },
+    { name = "bluetape-codec", editable = "packages/bluetape-codec" },
     { name = "bluetape-collections", editable = "packages/bluetape-collections" },
+    { name = "bluetape-compression", editable = "packages/bluetape-compression" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-logging", editable = "packages/bluetape-logging" },
     { name = "bluetape-testing", editable = "packages/bluetape-testing" },

@@ -19,6 +19,10 @@ focused distribution model:
   for issue #7 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-async`: stdlib-only bounded `asyncio` helpers, added for issue #8
   in the source workspace while PyPI publication remains on HOLD.
+- `bluetape-codec`: strict URL-safe Base64 and hexadecimal helpers, added for
+  issue #9 in the source workspace while PyPI publication remains on HOLD.
+- `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers, added
+  for issue #9 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
@@ -102,7 +106,9 @@ Historical release scope; all items are closed.
   the source workspace; PyPI publication remains part of the release hold.
 - #8 - Async and bounded concurrency primitives. Implemented by
   `bluetape-async` in the source workspace; PyPI publication remains on HOLD.
-- #9 - Codec and compression packages.
+- #9 - Codec and compression packages. Implemented by `bluetape-codec` and
+  `bluetape-compression` in the source workspace; PyPI publication remains on
+  HOLD.
 - #10 - Serialization strategy research.
 - #11 - Cache and Redis coordination packages.
 - #12 - Resilience policies.
