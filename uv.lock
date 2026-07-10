@@ -5,6 +5,7 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "bluetape",
+    "bluetape-async",
     "bluetape-collections",
     "bluetape-core",
     "bluetape-logging",
@@ -22,14 +23,19 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "bluetape-async" },
     { name = "bluetape-collections" },
     { name = "bluetape-logging" },
     { name = "bluetape-testing" },
+]
+asyncio = [
+    { name = "bluetape-async" },
 ]
 collections = [
     { name = "bluetape-collections" },
 ]
 dev = [
+    { name = "bluetape-async" },
     { name = "bluetape-collections" },
     { name = "bluetape-logging" },
     { name = "bluetape-testing" },
@@ -43,6 +49,9 @@ testing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bluetape-async", marker = "extra == 'all'", editable = "packages/bluetape-async" },
+    { name = "bluetape-async", marker = "extra == 'asyncio'", editable = "packages/bluetape-async" },
+    { name = "bluetape-async", marker = "extra == 'dev'", editable = "packages/bluetape-async" },
     { name = "bluetape-collections", marker = "extra == 'all'", editable = "packages/bluetape-collections" },
     { name = "bluetape-collections", marker = "extra == 'collections'", editable = "packages/bluetape-collections" },
     { name = "bluetape-collections", marker = "extra == 'dev'", editable = "packages/bluetape-collections" },
@@ -54,7 +63,12 @@ requires-dist = [
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["collections", "logging", "testing", "dev", "all"]
+provides-extras = ["asyncio", "collections", "logging", "testing", "dev", "all"]
+
+[[package]]
+name = "bluetape-async"
+version = "0.1.0"
+source = { editable = "packages/bluetape-async" }
 
 [[package]]
 name = "bluetape-collections"
@@ -76,6 +90,7 @@ name = "bluetape-py-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bluetape-async" },
     { name = "bluetape-collections" },
     { name = "bluetape-core" },
     { name = "bluetape-logging" },
@@ -91,6 +106,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bluetape-async", editable = "packages/bluetape-async" },
     { name = "bluetape-collections", editable = "packages/bluetape-collections" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-logging", editable = "packages/bluetape-logging" },
