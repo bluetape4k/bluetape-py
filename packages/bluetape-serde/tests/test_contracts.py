@@ -20,6 +20,7 @@ from bluetape.serde import (
     TrustProfile,
     TrustProfileMismatchError,
     UnsupportedVersionError,
+    json_deserialize,
     json_serialize,
 )
 
@@ -42,6 +43,7 @@ EXPECTED_EXPORTS = [
     "TrustProfile",
     "TrustProfileMismatchError",
     "UnsupportedVersionError",
+    "json_deserialize",
     "json_serialize",
 ]
 EXPECTED_EXPORT_VALUES = [
@@ -63,6 +65,7 @@ EXPECTED_EXPORT_VALUES = [
     TrustProfile,
     TrustProfileMismatchError,
     UnsupportedVersionError,
+    json_deserialize,
     json_serialize,
 ]
 

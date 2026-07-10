@@ -29,6 +29,21 @@ historical proof.
   `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'serialize or encode'`
 - Current GREEN result: exit 0, `63 passed, 2 deselected`.
 
+## Task 4 strict bounded JSON decoding
+
+- RED command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'deserialize or decode or depth'`
+- Captured RED result: exit 2 during collection because the public
+  `json_deserialize` API was absent before production implementation. Pytest
+  reported one collection error with `ImportError: cannot import name
+  'json_deserialize' from 'bluetape.serde'`.
+- GREEN command:
+  `uv run pytest packages/bluetape-serde/tests/test_json.py -q -k 'deserialize or decode or depth'`
+- Current GREEN result: exit 0, `91 passed, 56 deselected`.
+- Full serde regression command:
+  `uv run pytest packages/bluetape-serde/tests -q`
+- Current full serde result: exit 0, `287 passed`.
+
 ## Baseline reproducibility check
 
 The Task 2 test tree from commit `f71d637` was run with `PYTHONPATH` pointed at
@@ -46,7 +61,7 @@ verbatim record of the original RED run.
 
 ## Current regression gates
 
-- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `205 passed`.
+- `uv run pytest packages/bluetape-serde/tests -q`: exit 0, `287 passed`.
 - `uv run ruff check packages/bluetape-serde`: exit 0.
 - `uv run ruff format --check packages/bluetape-serde`: exit 0.
 - `git diff --check`: exit 0.
