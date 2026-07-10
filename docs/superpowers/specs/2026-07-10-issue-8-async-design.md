@@ -121,10 +121,12 @@ excluded async collection helpers and assigned that scope to this issue.
 - External caller cancellation remains `asyncio.CancelledError`; mapper
   `finally` blocks must get a chance to run before propagation completes.
 - A mapper-originated cancellation means a direct `raise asyncio.CancelledError`
-  from a mapper while its runner has no pending `Task.cancel()` request. It is
-  treated as cancellation of the `map_bounded` invocation: the helper stops new
-  admission, cancels active siblings, awaits cooperative cleanup, and raises
-  `CancelledError` rather than returning partial result slots.
+  or mapper self-cancellation when the invocation owner has no pending external
+  cancellation. It is treated as cancellation of the `map_bounded` invocation:
+  the helper stops new admission, cancels active siblings, awaits cooperative
+  cleanup, and raises `CancelledError` rather than returning partial result
+  slots. Self-cancellation remains unsupported except for this fail-closed
+  safety behavior.
 - To distinguish external caller cancellation, the private runner also checks
   the invocation-owner task's `cancelling()` state. It re-raises cancellation
   while the owner has a pending external request; otherwise a mapper
@@ -140,8 +142,8 @@ excluded async collection helpers and assigned that scope to this issue.
 - A worker also checks its own pending cancellation immediately after a mapper
   returns normally. If the invocation owner has no pending external cancellation
   but the worker does, it records terminal state and raises the private terminal
-  signal before recording a result or advancing the iterator. This closes the
-  unsupported self-cancel-with-immediate-return path without partial results.
+  signal before recording a result or advancing the iterator. Tests cover both
+  self-cancel delivery at the mapper's next `await` and immediate mapper return.
 - A non-`None` `timeout` is a total invocation budget implemented with
   `asyncio.timeout()` over cooperative awaited work. Its expiry is exposed as
   `TimeoutError` outside that context, after active mapper cleanup.
