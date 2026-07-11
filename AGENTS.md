@@ -11,11 +11,11 @@ source of truth here.
 
 ## Skills
 
-- Use `bluetape4k-workflow` for task classification, issue/PR discipline,
+- Use `bluetape-workflow` for task classification, issue/PR discipline,
   release gates, and DoD reporting.
 - Use `bluetape-py-patterns` for Python implementation, tests, async behavior,
   packaging, public API design, release preflight, and Python review gates.
-- Use `bluetape4k-maintenance` for README, docs, `.gitignore`, `AGENTS.md`,
+- Use `bluetape-maintenance` for README, docs, `.gitignore`, `AGENTS.md`,
   release guidance, and workflow-only changes.
 
 ## Commands
@@ -58,7 +58,7 @@ contracts change.
   smoke check when dependencies, extras, namespace packages, or Python version
   requirements change.
 - Python code PRs must record P0/P1 review evidence through the active
-  `bluetape4k-workflow` gates before being reported merge-ready.
+  `bluetape-workflow` gates before being reported merge-ready.
 
 ## Documentation
 
