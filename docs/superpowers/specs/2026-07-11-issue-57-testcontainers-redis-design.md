@@ -50,7 +50,7 @@ packages/bluetape-testcontainers/
 - distribution: `bluetape-testcontainers==0.1.0`
 - import: `bluetape.testcontainers`
 - Python: `>=3.13`
-- production dependency: `testcontainers[redis]>=4.14.2,<5`
+- production dependency: `testcontainers>=4.14.2,<5`
 - default Redis image: `redis:8`
 - `bluetape` default dependency: 변경 없음 (`bluetape-core` only)
 - `bluetape[testcontainers]`: explicit forwarding extra
@@ -166,7 +166,7 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 ## Readiness and Connection Details
 
-Wrapper는 공식 Redis Testcontainers support를 내부에서 사용하되 image와 timeout을 명시한다. `start()`는 Testcontainers readiness가 완료된 뒤에만 성공한다. 별도의 redis-py client dependency를 readiness 목적으로 추가하지 않는다.
+Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `start()`는 이 command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
 
 `RedisConnectionDetails`는 successful startup 후 한 번 계산한 immutable snapshot이다.
 
@@ -262,7 +262,7 @@ CI는 base/default install에서 `testcontainers`, `docker`, `redis` import가 �
 - `redis:8` starts and reaches readiness
 - mapped port is positive, dynamic, and not assumed to be 6379
 - URL has `redis://host:port` form
-- a short-lived test-only redis-py client can `PING`, write, read, and close
+- stdlib socket으로 RESP `PING`, `SET`, `GET` round trip을 수행한다
 - context exit terminates the container
 - two sequential server lifecycles do not reuse stale details
 - tests are marked `testcontainers` and run serially
@@ -271,6 +271,7 @@ CI는 base/default install에서 `testcontainers`, `docker`, `redis` import가 �
 
 - wheel name/version/Python requirement
 - Testcontainers dependency exists only in `bluetape-testcontainers`
+- redis-py dependency is absent from `bluetape-testcontainers`
 - default `bluetape` wheel still depends only on `bluetape-core`
 - `bluetape[testcontainers]` forwards exactly `bluetape-testcontainers==0.1.0`
 - `bluetape-testing`, `bluetape-cache`, and production cache/provider distributions do not acquire Testcontainers dependencies
