@@ -25,8 +25,8 @@ The wrapper does not depend on redis-py.
 ```python
 from bluetape.testcontainers import RedisServer
 
-with RedisServer() as redis:
-    configure_test(redis_url=redis.url)
+with RedisServer() as server:
+    print(server.url)
 ```
 
 - Default image: `redis:8`
