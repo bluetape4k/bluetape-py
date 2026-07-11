@@ -7,9 +7,13 @@ from dataclasses import dataclass
 def _ttl_ns(value: float, parameter: str) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"{parameter} must be a finite positive number")
-    if not math.isfinite(value) or value <= 0:
+    if value <= 0 or (isinstance(value, float) and not math.isfinite(value)):
         raise ValueError(f"{parameter} must be a finite positive number")
-    nanoseconds = int(value * 1_000_000_000)
+    if isinstance(value, int):
+        nanoseconds = value * 1_000_000_000
+    else:
+        numerator, denominator = value.as_integer_ratio()
+        nanoseconds = (numerator * 1_000_000_000) // denominator
     if nanoseconds < 1:
         raise ValueError(f"{parameter} must be at least one nanosecond")
     return nanoseconds
