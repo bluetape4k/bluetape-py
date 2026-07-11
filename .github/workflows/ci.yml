@@ -59,6 +59,17 @@ jobs:
       - name: Build distributions
         run: uv build --all-packages
 
+      - name: Assert default wheel is Docker-provider-free
+        run: |
+          tmp_dir="$(mktemp -d)"
+          uv build --package bluetape-core --out-dir "$tmp_dir/dist"
+          uv build --package bluetape --out-dir "$tmp_dir/dist"
+          uv venv "$tmp_dir/venv" --python 3.13.14
+          uv pip install --python "$tmp_dir/venv/bin/python" --no-index \
+            --find-links "$tmp_dir/dist" bluetape==0.1.0
+          "$tmp_dir/venv/bin/python" -c \
+            'import importlib.util; assert importlib.util.find_spec("testcontainers") is None; assert importlib.util.find_spec("docker") is None; assert importlib.util.find_spec("redis") is None'
+
   testcontainers-redis:
     runs-on: ubuntu-latest
     steps:
