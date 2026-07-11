@@ -17,7 +17,7 @@ def test_distribution_owns_testcontainers_namespace_and_dependency() -> None:
 
     assert project["name"] == "bluetape-testcontainers"
     assert project["requires-python"] == ">=3.13"
-    assert project["dependencies"] == ["testcontainers>=4.14.2,<5"]
+    assert project["dependencies"] == ["testcontainers>=4.14.2,<4.15"]
     specification = importlib.util.find_spec("bluetape.testcontainers")
     assert specification is not None
 
@@ -78,4 +78,4 @@ def test_built_wheels_preserve_version_and_namespace_coexistence(tmp_path: Path)
     assert "Name: bluetape-testcontainers\n" in metadata
     assert "Version: 0.1.0\n" in metadata
     assert "Requires-Python: >=3.13\n" in metadata
-    assert "Requires-Dist: testcontainers>=4.14.2,<5\n" in metadata
+    assert "Requires-Dist: testcontainers>=4.14.2,<4.15\n" in metadata

@@ -50,7 +50,7 @@ packages/bluetape-testcontainers/
 - distribution: `bluetape-testcontainers==0.1.0`
 - import: `bluetape.testcontainers`
 - Python: `>=3.13`
-- production dependency: `testcontainers>=4.14.2,<5`
+- production dependency: `testcontainers>=4.14.2,<4.15`
 - default Redis image: `redis:8`
 - `bluetape` default dependency: 변경 없음 (`bluetape-core` only)
 - `bluetape[testcontainers]`: explicit forwarding extra

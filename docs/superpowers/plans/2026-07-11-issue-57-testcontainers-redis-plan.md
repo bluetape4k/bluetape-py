@@ -76,7 +76,7 @@ def test_distribution_owns_testcontainers_namespace_and_dependency() -> None:
 
     assert project["name"] == "bluetape-testcontainers"
     assert project["requires-python"] == ">=3.13"
-    assert project["dependencies"] == ["testcontainers>=4.14.2,<5"]
+    assert project["dependencies"] == ["testcontainers>=4.14.2,<4.15"]
     specification = importlib.util.find_spec("bluetape.testcontainers")
     assert specification is not None
 
@@ -120,7 +120,7 @@ description = "Ecosystem-owned Testcontainers wrappers for bluetape-py."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "testcontainers>=4.14.2,<5",
+    "testcontainers>=4.14.2,<4.15",
 ]
 
 [build-system]

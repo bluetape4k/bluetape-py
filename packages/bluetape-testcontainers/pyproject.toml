@@ -5,7 +5,7 @@ description = "Ecosystem-owned Testcontainers wrappers for bluetape-py."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "testcontainers>=4.14.2,<5",
+    "testcontainers>=4.14.2,<4.15",
 ]
 
 [build-system]
