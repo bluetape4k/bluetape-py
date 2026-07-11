@@ -1,5 +1,6 @@
 import math
 import traceback
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -70,6 +71,32 @@ def test_construction_has_no_container_side_effect(monkeypatch: pytest.MonkeyPat
     assert DEFAULT_REDIS_IMAGE == "redis:8"
     with pytest.raises(RuntimeError, match="not running"):
         _ = server.details
+
+
+def test_container_factory_applies_redis_runtime_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    strategy = Mock()
+    strategy.with_startup_timeout.return_value = strategy
+    wait_strategy = Mock(return_value=strategy)
+    container = Mock()
+    container.with_exposed_ports.return_value = container
+    container.waiting_for.return_value = container
+    docker_container = Mock(return_value=container)
+    monkeypatch.setattr(redis_module, "_ExecWaitStrategy", wait_strategy)
+    monkeypatch.setattr(redis_module, "_DockerContainer", docker_container)
+
+    created = redis_module._new_container("redis:8", 7.0)
+
+    assert created is container
+    wait_strategy.assert_called_once_with(["redis-cli", "ping"])
+    strategy.with_startup_timeout.assert_called_once_with(timedelta(seconds=7.0))
+    docker_container.assert_called_once_with(
+        "redis:8",
+        docker_client_kw={"timeout": 7.0},
+    )
+    container.with_exposed_ports.assert_called_once_with(6379)
+    container.waiting_for.assert_called_once_with(strategy)
 
 
 def test_start_is_idempotent_and_details_are_stable(monkeypatch: pytest.MonkeyPatch) -> None:
