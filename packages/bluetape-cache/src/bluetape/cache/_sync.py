@@ -186,23 +186,27 @@ class TTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentionally us
         error: BaseException | None,
     ) -> None:
         with self._lock:
-            can_publish = (
-                error is None
-                and result is not _UNSET
-                and not flight.superseded
-                and self._state.clear_epoch == flight.epoch
-                and self._state.version(flight.key) == flight.version
-                and self._active_flights.get(flight.key) is flight
-            )
-            if can_publish:
-                self._state.store(
-                    flight.key,
-                    cast(V, result),
-                    ttl_ns=flight.ttl_ns,
-                    now=self._now(),
-                    owned_keys=self._owned_keys(),
+            loader_failed = error is not None
+            try:
+                can_publish = (
+                    error is None
+                    and result is not _UNSET
+                    and not flight.superseded
+                    and self._state.clear_epoch == flight.epoch
+                    and self._state.version(flight.key) == flight.version
+                    and self._active_flights.get(flight.key) is flight
                 )
-            if error is not None:
+                if can_publish:
+                    self._state.store(
+                        flight.key,
+                        cast(V, result),
+                        ttl_ns=flight.ttl_ns,
+                        now=self._now(),
+                        owned_keys=self._owned_keys(),
+                    )
+            except BaseException as publication_error:
+                error = publication_error
+            if loader_failed:
                 self._state.load_failures += 1
             flight.result = result
             flight.error = error
