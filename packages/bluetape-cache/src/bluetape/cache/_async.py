@@ -157,11 +157,17 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
                 )
                 self._active_flights[key] = flight
                 self._owned_flights.add(flight)
+                loader_coroutine = self._run_loader(flight, loader)
+                try:
+                    flight.task = asyncio.create_task(
+                        loader_coroutine,
+                        name=f"bluetape-cache-load-{flight.sequence}",
+                    )
+                except BaseException:
+                    loader_coroutine.close()
+                    self._complete_async_flight(flight, result=None, publish=False)
+                    raise
                 self._state.loads += 1
-                flight.task = asyncio.create_task(
-                    self._run_loader(flight, loader),
-                    name=f"bluetape-cache-load-{flight.sequence}",
-                )
 
         task = flight.task
         if task is None:  # pragma: no cover - task is installed before lock release

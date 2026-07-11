@@ -434,6 +434,107 @@ async def test_async_owner_only_terminal_paths_cleanup() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_task_creation_failure_rolls_back_flight_and_recovers() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1, max_inflight=1)
+    loop = asyncio.get_running_loop()
+    original_factory = loop.get_task_factory()
+    failure = RuntimeError("task factory rejected")
+    loader_calls = 0
+
+    async def loader(_: str) -> str:
+        nonlocal loader_calls
+        loader_calls += 1
+        return "value"
+
+    def rejecting_factory(
+        _loop: asyncio.AbstractEventLoop,
+        _coroutine: object,
+        **_kwargs: object,
+    ) -> asyncio.Task[object]:
+        raise failure
+
+    try:
+        loop.set_task_factory(rejecting_factory)  # type: ignore[arg-type]
+        with pytest.raises(RuntimeError) as caught:
+            await cache.get_or_load("key", loader)
+    finally:
+        loop.set_task_factory(original_factory)
+
+    assert caught.value is failure
+    assert loader_calls == 0
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+    assert "key" not in cache._state.key_versions
+    stats = await cache.stats()
+    assert stats.loads == 0
+    assert stats.inflight_loads == 0
+    assert await cache.get_or_load("key", loader) == "value"
+    assert loader_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_async_publication_failure_is_shared_and_always_cleans_flight() -> None:
+    publication_failure = RuntimeError("publication clock failed")
+
+    class PublicationFailingClock:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> int:
+            self.calls += 1
+            if self.calls == 3:
+                raise publication_failure
+            return 0
+
+    cache = AsyncTTLCache[str, str](
+        default_ttl=1,
+        max_size=1,
+        max_inflight=1,
+        clock=PublicationFailingClock(),
+    )
+    started = asyncio.Event()
+    release = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return "value"
+
+    async def unused_loader(_: str) -> str:
+        pytest.fail("coalesced loader must not run")
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", loader)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(asyncio.create_task(cache.get_or_load("key", unused_loader)))
+        async with asyncio.timeout(1):
+            while cache._active_flights["key"].waiters != 2:
+                await asyncio.sleep(0)
+        release.set()
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            1,
+        )
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+
+    assert outcomes == [publication_failure, publication_failure]
+    assert outcomes[0] is publication_failure
+    assert outcomes[1] is publication_failure
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+    assert "key" not in cache._state.key_versions
+    stats = await cache.stats()
+    assert stats.load_failures == 0
+    assert stats.inflight_loads == 0
+    assert await cache.get_or_load("key", lambda _: asyncio.sleep(0, result="recovered")) == (
+        "recovered"
+    )
+
+
+@pytest.mark.asyncio
 async def test_inherited_child_task_same_key_recursion_is_rejected() -> None:
     cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
 
