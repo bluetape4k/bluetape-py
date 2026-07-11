@@ -168,7 +168,7 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 ## Readiness and Connection Details
 
-Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK local image cache를 확인하고 없을 때만 명시적 pull phase로 진입한다. Local image lookup의 daemon/socket 실패는 `runtime-unavailable`, 실제 pull phase의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 Docker client operation timeout에도 적용한다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
+Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK local image cache를 확인하고 없을 때만 격리된 bounded pull process를 실행한다. Local image lookup의 daemon/socket 실패는 `runtime-unavailable`, 실제 pull process의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 각 Docker client operation, missing-image pull process, readiness에 적용하며 전체 startup wall-clock deadline을 뜻하지 않는다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
 
 `RedisConnectionDetails`는 successful startup 후 한 번 계산한 immutable snapshot이다.
 
@@ -180,19 +180,19 @@ Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `
 
 ## Error Contract
 
-Startup failure는 `TestcontainerStartError`로 감싸되 `raise ... from cause`로 원인을 유지한다.
+Startup failure는 `TestcontainerStartError`와 stable failure kind로 변환한다. Raw provider exception은 credential, daemon path, registry response, container log를 traceback으로 노출할 수 있으므로 public cause chain에서 제거한다.
 
 - `runtime-unavailable`: Docker socket/daemon/runtime 접근 실패
 - `image-pull`: image resolution, authentication, registry, pull 실패
 - `readiness-timeout`: configured startup timeout 안에 Redis readiness가 완료되지 않음
 - `wrapper-failure`: mapped port/detail 계산 또는 예상하지 못한 wrapper 단계 실패
 
-Error message는 failure kind와 image identifier만 포함한다. Docker daemon URL, registry credential, environment, full provider response, container log 전체를 문자열화하지 않는다. 상세 진단은 cause chain을 명시적으로 검사하는 test/tool에 맡긴다.
+Error message는 failure kind와 validated image identifier만 포함한다. Docker daemon URL, registry credential, environment, full provider response, container log 전체를 문자열화하거나 public traceback에 연결하지 않는다.
 
 Constructor validation taxonomy:
 
 - non-string image/startup timeout: `TypeError`
-- blank image, `latest`, non-finite/non-positive timeout: `ValueError`
+- blank/whitespace/control-character image, `latest`, non-finite/non-positive timeout: `ValueError`
 - connection details before/after live interval: `RuntimeError`
 
 ## Pytest Integration
@@ -255,7 +255,7 @@ CI는 base/default install에서 `testcontainers`, `docker`, `redis` import가 �
 - immutable/stable connection detail snapshot
 - context manager success and body exception cleanup
 - `KeyboardInterrupt`/`SystemExit` cleanup and propagation
-- each startup failure category and preserved cause
+- each startup failure category and provider-diagnostic traceback redaction
 - error string redaction
 - public `__all__` and absence of lower-level container/client leakage
 

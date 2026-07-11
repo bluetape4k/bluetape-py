@@ -1,4 +1,5 @@
 import math
+import traceback
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -21,7 +22,11 @@ REAL_PULL_IMAGE = redis_module._pull_image
 
 @pytest.fixture(autouse=True)
 def avoid_real_image_pull(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(redis_module, "_pull_image", lambda container, image: None)
+    monkeypatch.setattr(
+        redis_module,
+        "_pull_image",
+        lambda container, image, startup_timeout: None,
+    )
 
 
 @pytest.mark.parametrize("image", ["", " ", "redis", "redis:latest", "registry/redis:latest"])
@@ -34,6 +39,12 @@ def test_rejects_unpinned_or_blank_image(image: str) -> None:
 def test_rejects_non_string_image(image: object) -> None:
     with pytest.raises(TypeError):
         RedisServer(image=image)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("image", ["redis:8 forged", "redis:8\nforged", "redis:8\tforged"])
+def test_rejects_image_whitespace_and_control_characters(image: str) -> None:
+    with pytest.raises(ValueError):
+        RedisServer(image=image)
 
 
 @pytest.mark.parametrize("timeout", [True, "5"])
@@ -128,8 +139,9 @@ def test_start_failure_is_typed_redacted_and_cleaned(
         server.start()
 
     assert raised.value.kind is kind
-    assert raised.value.__cause__ is error
+    assert raised.value.__cause__ is None
     assert "secret-marker" not in str(raised.value)
+    assert "secret-marker" not in "".join(traceback.format_exception(raised.value))
     assert container.stops == 1
     server.close()
     assert container.stops == 1
@@ -171,6 +183,8 @@ def test_explicit_close_failure_is_typed_and_idempotent(monkeypatch: pytest.Monk
         server.close()
 
     assert "secret-marker" not in str(raised.value)
+    assert raised.value.__cause__ is None
+    assert "secret-marker" not in "".join(traceback.format_exception(raised.value))
     assert container.stops == 1
     container.stop_error = None
     server.close()
@@ -212,9 +226,10 @@ def test_pull_phase_failures_are_classified_as_image_pull(
     container = FakeContainer()
     monkeypatch.setattr(redis_module, "_new_container", ContainerFactory(container))
 
-    def fail_pull(fake: FakeContainer, image: str) -> None:
+    def fail_pull(fake: FakeContainer, image: str, startup_timeout: float) -> None:
         assert fake is container
         assert image == "redis:8"
+        assert startup_timeout == 30.0
         try:
             raise error
         except Exception as provider_error:
@@ -226,8 +241,9 @@ def test_pull_phase_failures_are_classified_as_image_pull(
         RedisServer().start()
 
     assert raised.value.kind is StartFailureKind.IMAGE_PULL
-    assert raised.value.__cause__.__cause__ is error
+    assert raised.value.__cause__ is None
     assert "secret-marker" not in str(raised.value)
+    assert "secret-marker" not in "".join(traceback.format_exception(raised.value))
 
 
 def test_daemon_failure_during_image_lookup_is_runtime_unavailable(
@@ -237,7 +253,7 @@ def test_daemon_failure_during_image_lookup_is_runtime_unavailable(
     container = FakeContainer()
     monkeypatch.setattr(redis_module, "_new_container", ContainerFactory(container))
 
-    def fail_lookup(fake: FakeContainer, image: str) -> None:
+    def fail_lookup(fake: FakeContainer, image: str, startup_timeout: float) -> None:
         raise error
 
     monkeypatch.setattr(redis_module, "_pull_image", fail_lookup)
@@ -246,8 +262,9 @@ def test_daemon_failure_during_image_lookup_is_runtime_unavailable(
         RedisServer().start()
 
     assert raised.value.kind is StartFailureKind.RUNTIME_UNAVAILABLE
-    assert raised.value.__cause__ is error
+    assert raised.value.__cause__ is None
     assert "secret-marker" not in str(raised.value)
+    assert "secret-marker" not in "".join(traceback.format_exception(raised.value))
 
 
 def test_image_resolution_uses_cached_image_without_registry_pull() -> None:
@@ -257,28 +274,49 @@ def test_image_resolution_uses_cached_image_without_registry_pull() -> None:
         client=SimpleNamespace(images=images)
     )
 
-    REAL_PULL_IMAGE(container, "redis:8")
+    REAL_PULL_IMAGE(container, "redis:8", 7.0)
 
     images.get.assert_called_once_with("redis:8")
     images.pull.assert_not_called()
 
 
-def test_missing_image_is_pulled_and_registry_failure_is_wrapped() -> None:
+def test_missing_image_is_pulled_and_registry_failure_is_wrapped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     provider_error = DockerException("registry secret-marker")
     images = Mock()
     images.get.side_effect = ImageNotFound("missing")
-    images.pull.side_effect = provider_error
     container = Mock()
     container.get_docker_client.return_value = SimpleNamespace(
         client=SimpleNamespace(images=images)
     )
 
+    bounded_pull = Mock(side_effect=provider_error)
+    monkeypatch.setattr(redis_module, "_run_bounded_pull", bounded_pull)
+
     with pytest.raises(redis_module._ImagePullError) as raised:
-        REAL_PULL_IMAGE(container, "redis:8")
+        REAL_PULL_IMAGE(container, "redis:8", 7.0)
 
     assert raised.value.__cause__ is provider_error
     images.get.assert_called_once_with("redis:8")
-    images.pull.assert_called_once_with("redis:8")
+    bounded_pull.assert_called_once_with("redis:8", 7.0)
+
+
+def test_bounded_pull_uses_isolated_process_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    run = Mock()
+    monkeypatch.setattr(redis_module._subprocess, "run", run)
+
+    redis_module._run_bounded_pull("redis:8", 7.0)
+
+    command = run.call_args.args[0]
+    assert command[0] == redis_module._sys.executable
+    assert command[-1] == "redis:8"
+    assert run.call_args.kwargs == {
+        "check": True,
+        "stdout": redis_module._subprocess.DEVNULL,
+        "stderr": redis_module._subprocess.DEVNULL,
+        "timeout": 7.0,
+    }
 
 
 def test_public_submodule_does_not_export_provider_types() -> None:
@@ -307,5 +345,6 @@ def test_container_factory_failure_is_runtime_unavailable(monkeypatch: pytest.Mo
         RedisServer().start()
 
     assert raised.value.kind is StartFailureKind.RUNTIME_UNAVAILABLE
-    assert raised.value.__cause__ is error
+    assert raised.value.__cause__ is None
     assert "secret-marker" not in str(raised.value)
+    assert "secret-marker" not in "".join(traceback.format_exception(raised.value))

@@ -37,6 +37,10 @@ with RedisServer() as redis:
 - Docker-backed suites run serially
 - Explicit tagged or digest image overrides are allowed; `latest` is rejected
 
+Image overrides are executable test infrastructure. Accept them only from
+trusted configuration, never from untrusted PR or request input. Prefer a
+digest reference when CI requires immutable evidence.
+
 Construction does not access Docker. After `start()` succeeds, `host`, `port`,
 `url`, and immutable `details` describe the mapped endpoint until `close()`.
 A server instance is single-use: repeated `start()` while running is safe, but
@@ -48,8 +52,9 @@ succeeds.
 
 Startup failures raise `TestcontainerStartError` with one stable
 `StartFailureKind`: `runtime-unavailable`, `image-pull`, `readiness-timeout`, or
-`wrapper-failure`. Provider diagnostics stay in the exception cause instead of
-the public error text.
+`wrapper-failure`. Raw provider diagnostics are suppressed from both the public
+message and traceback because they can contain daemon paths, credentials, or
+registry responses.
 
 Docker-backed tests require a Docker-compatible runtime and must run serially:
 

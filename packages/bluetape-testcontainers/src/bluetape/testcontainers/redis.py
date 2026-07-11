@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import subprocess as _subprocess
+import sys as _sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -23,6 +25,17 @@ __all__ = [
 
 DEFAULT_REDIS_IMAGE = "redis:8"
 REDIS_PORT = 6379
+
+_PULL_SCRIPT = """
+import sys
+from testcontainers.core.docker_client import DockerClient
+
+client = DockerClient()
+try:
+    client.client.images.pull(sys.argv[1])
+finally:
+    client.client.close()
+"""
 
 
 class _ServerState(StrEnum):
@@ -81,6 +94,10 @@ def _validated_image(image: str) -> str:
         raise TypeError("image must be a string")
     if not image or image != image.strip():
         raise ValueError("image must be non-blank without surrounding whitespace")
+    if any(
+        character.isspace() or ord(character) < 32 or ord(character) == 127 for character in image
+    ):
+        raise ValueError("image must not contain whitespace or control characters")
     leaf = image.rsplit("/", 1)[-1]
     if "@sha256:" not in image and ":" not in leaf:
         raise ValueError("image must include an explicit tag or digest")
@@ -109,15 +126,25 @@ def _new_container(image: str, startup_timeout: float) -> _DockerContainer:
     )
 
 
-def _pull_image(container: _DockerContainer, image: str) -> None:
+def _pull_image(container: _DockerContainer, image: str, startup_timeout: float) -> None:
     images = container.get_docker_client().client.images
     try:
         images.get(image)
     except _ImageNotFound:
         try:
-            images.pull(image)
+            _run_bounded_pull(image, startup_timeout)
         except Exception as error:
             raise _ImagePullError from error
+
+
+def _run_bounded_pull(image: str, timeout: float) -> None:
+    _subprocess.run(
+        [_sys.executable, "-c", _PULL_SCRIPT, image],
+        check=True,
+        stdout=_subprocess.DEVNULL,
+        stderr=_subprocess.DEVNULL,
+        timeout=timeout,
+    )
 
 
 def _failure_kind(error: Exception, phase: _StartPhase) -> StartFailureKind:
@@ -197,7 +224,7 @@ class RedisServer:
             container = _new_container(self._image, self._startup_timeout)
             self._container = container
             phase = _StartPhase.IMAGE_PULL
-            _pull_image(container, self._image)
+            _pull_image(container, self._image, self._startup_timeout)
             phase = _StartPhase.START
             container.start()
             phase = _StartPhase.DETAILS
@@ -220,7 +247,7 @@ class RedisServer:
                 start_error.add_note(
                     "Redis test container cleanup is pending; call close() to retry"
                 )
-            raise start_error from error
+            raise start_error from None
 
         self._state = _ServerState.RUNNING
         return self
@@ -236,8 +263,8 @@ class RedisServer:
         self._state = _ServerState.CLEANUP_FAILED
         try:
             container.stop()
-        except Exception as error:
-            raise RuntimeError("Redis test container cleanup failed") from error
+        except Exception:
+            raise RuntimeError("Redis test container cleanup failed") from None
         self._container = None
         self._state = _ServerState.CLOSED
 
