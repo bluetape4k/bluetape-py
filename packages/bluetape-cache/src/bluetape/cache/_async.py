@@ -178,20 +178,49 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
         task = flight.task
         if task is None:  # pragma: no cover - task is installed before lock release
             raise RuntimeError("cache flight task was not initialized")
-        task_to_cancel: asyncio.Task[V] | None = None
         try:
             return await asyncio.shield(task)
         finally:
-            async with lock:
-                flight.waiters -= 1
-                if flight.waiters == 0 and not task.done():
-                    flight.abandoned = True
-                    if self._active_flights.get(flight.key) is flight:
-                        del self._active_flights[flight.key]
-                    self._state.bump_version(flight.key)
-                    task_to_cancel = task
-            if task_to_cancel is not None:
-                task_to_cancel.cancel()
+            await self._release_waiter_cancellation_safe(flight, task, lock)
+
+    async def _release_waiter_cancellation_safe(
+        self,
+        flight: _AsyncFlight[K, V],
+        task: asyncio.Task[V],
+        lock: asyncio.Lock,
+    ) -> None:
+        release_task = asyncio.create_task(
+            self._release_waiter(flight, task, lock),
+            name=f"bluetape-cache-release-{flight.sequence}",
+        )
+        release_task.add_done_callback(self._observe_task)
+        cancelled = False
+        while not release_task.done():
+            try:
+                await asyncio.shield(release_task)
+            except asyncio.CancelledError:
+                cancelled = True
+        release_task.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _release_waiter(
+        self,
+        flight: _AsyncFlight[K, V],
+        task: asyncio.Task[V],
+        lock: asyncio.Lock,
+    ) -> None:
+        task_to_cancel: asyncio.Task[V] | None = None
+        async with lock:
+            flight.waiters -= 1
+            if flight.waiters == 0 and not task.done():
+                flight.abandoned = True
+                if self._active_flights.get(flight.key) is flight:
+                    del self._active_flights[flight.key]
+                self._state.bump_version(flight.key)
+                task_to_cancel = task
+        if task_to_cancel is not None:
+            task_to_cancel.cancel()
 
     async def stats(self) -> CacheStats:
         async with self._bound_lock():

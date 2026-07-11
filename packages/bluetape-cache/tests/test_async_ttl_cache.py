@@ -35,7 +35,7 @@ def _named_cache_tasks() -> list[asyncio.Task[object]]:
     return [
         task
         for task in asyncio.all_tasks()
-        if task is not asyncio.current_task() and task.get_name().startswith("bluetape-cache-load-")
+        if task is not asyncio.current_task() and task.get_name().startswith("bluetape-cache-")
     ]
 
 
@@ -43,6 +43,14 @@ async def _assert_no_named_cache_task() -> None:
     async with asyncio.timeout(1):
         while _named_cache_tasks():
             await asyncio.sleep(0)
+
+
+async def _cancel_and_gather_named_cache_tasks() -> None:
+    tasks = _named_cache_tasks()
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 1)
 
 
 def test_non_loading_state_method_signatures_match_public_contract() -> None:
@@ -699,6 +707,64 @@ async def test_last_waiter_cancellation_returns_before_slow_loader_cleanup() -> 
         cleanup_release.set()
         if caller is not None:
             await _cancel_and_gather([caller])
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_repeated_caller_cancellation_cannot_interrupt_waiter_cleanup() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+    started = asyncio.Event()
+    loader_cancelled = asyncio.Event()
+    terminal_release = asyncio.Event()
+    caller: asyncio.Task[str] | None = None
+    lock = cache._bound_lock()
+
+    async def loader(_: str) -> str:
+        started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            loader_cancelled.set()
+            await asyncio.wait_for(terminal_release.wait(), 1)
+            return "abandoned"
+
+    try:
+        caller = asyncio.create_task(cache.get_or_load("key", loader))
+        await asyncio.wait_for(started.wait(), 1)
+        await asyncio.wait_for(lock.acquire(), 1)
+        caller.cancel()
+        async with asyncio.timeout(1):
+            while not lock._waiters:  # type: ignore[attr-defined]
+                await asyncio.sleep(0)
+        caller.cancel()
+        await asyncio.sleep(0)
+        lock.release()
+
+        outcome = await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 1)
+        assert isinstance(outcome[0], asyncio.CancelledError)
+        assert caller.cancelling() == 2
+        await asyncio.wait_for(loader_cancelled.wait(), 1)
+        current = await cache.stats()
+        assert current.inflight_loads == 1
+        assert current.abandoned_loads == 1
+        assert cache._active_flights == {}
+
+        terminal_release.set()
+        await _assert_no_named_cache_task()
+        terminal = await cache.stats()
+        assert terminal.inflight_loads == 0
+        assert terminal.abandoned_loads == 0
+        assert cache._owned_flights == set()
+        assert await cache.get_or_load("key", lambda _: asyncio.sleep(0, result="recovered")) == (
+            "recovered"
+        )
+    finally:
+        if lock.locked():
+            lock.release()
+        terminal_release.set()
+        if caller is not None:
+            await _cancel_and_gather([caller])
+        await _cancel_and_gather_named_cache_tasks()
         await _assert_no_named_cache_task()
 
 
