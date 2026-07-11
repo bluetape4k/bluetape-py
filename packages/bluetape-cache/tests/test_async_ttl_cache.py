@@ -769,6 +769,72 @@ async def test_repeated_caller_cancellation_cannot_interrupt_waiter_cleanup() ->
 
 
 @pytest.mark.asyncio
+async def test_release_task_factory_rejection_falls_back_without_leaking_waiter() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1, max_inflight=1)
+    loop = asyncio.get_running_loop()
+    original_factory = loop.get_task_factory()
+    started = asyncio.Event()
+    loader_cancelled = asyncio.Event()
+    terminal_release = asyncio.Event()
+    caller: asyncio.Task[str] | None = None
+    rejected = 0
+
+    async def loader(_: str) -> str:
+        started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            loader_cancelled.set()
+            await asyncio.wait_for(terminal_release.wait(), 1)
+            return "abandoned"
+
+    def rejecting_release_factory(
+        running_loop: asyncio.AbstractEventLoop,
+        coroutine: object,
+        **kwargs: object,
+    ) -> asyncio.Task[object]:
+        nonlocal rejected
+        code = getattr(coroutine, "cr_code", None)
+        if code is not None and code.co_name == "_release_waiter":
+            rejected += 1
+            raise RuntimeError("release task factory rejected")
+        return asyncio.Task(coroutine, loop=running_loop, **kwargs)  # type: ignore[arg-type]
+
+    try:
+        caller = asyncio.create_task(cache.get_or_load("key", loader))
+        await asyncio.wait_for(started.wait(), 1)
+        flight = cache._active_flights["key"]
+        loop.set_task_factory(rejecting_release_factory)  # type: ignore[arg-type]
+        caller.cancel()
+        outcome = await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 1)
+        loop.set_task_factory(original_factory)
+
+        assert isinstance(outcome[0], asyncio.CancelledError)
+        assert caller.cancelling() == 1
+        assert rejected == 1
+        await asyncio.wait_for(loader_cancelled.wait(), 1)
+        assert flight.waiters == 0
+        assert flight.abandoned is True
+        assert cache._state.version("key") == 1
+        assert cache._active_flights == {}
+        assert cache._owned_flights == {flight}
+
+        terminal_release.set()
+        await _assert_no_named_cache_task()
+        assert cache._owned_flights == set()
+        assert await cache.get_or_load("key", lambda _: asyncio.sleep(0, result="recovered")) == (
+            "recovered"
+        )
+    finally:
+        loop.set_task_factory(original_factory)
+        terminal_release.set()
+        if caller is not None:
+            await _cancel_and_gather([caller])
+        await _cancel_and_gather_named_cache_tasks()
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
 async def test_cancellation_suppressing_loader_cannot_publish_and_keeps_slot() -> None:
     cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1, max_inflight=1)
     started = asyncio.Event()
