@@ -1,0 +1,248 @@
+{
+  "allocation": {
+    "operations": 10000,
+    "traced_current_bytes": 96,
+    "traced_peak_bytes": 520
+  },
+  "async": {
+    "coalesced_load": {
+      "actual_loader_count": 1,
+      "callers": 8,
+      "results": [
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7
+      ]
+    },
+    "hit": {
+      "elapsed_ns": 11025000,
+      "ns_per_op": 551.25,
+      "operations": 20000,
+      "throughput_ops_per_sec": 1814058.9569160999
+    }
+  },
+  "coordination": {
+    "different_key": {
+      "actual_loader_count": 2,
+      "loaders_entered_overlap_barrier": true
+    },
+    "same_key": {
+      "actual_loader_count": 1,
+      "callers": 8,
+      "errors": [],
+      "results": 8
+    }
+  },
+  "environment": {
+    "cpu_count": 10,
+    "git_sha": "3ea338c6356162ff1cb9c545a893e46d6be01e9c",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.14 (main, Jun 23 2026, 15:20:43) [Clang 22.1.3 ]"
+  },
+  "expiry_heavy": {
+    "capacity_1000": {
+      "batch_max_ns": 105333,
+      "batch_p95_ns": 81333,
+      "batch_p99_ns": 87334,
+      "batch_size": 100,
+      "capacity": 1000,
+      "median_ns_per_op": 761,
+      "operations": 10000,
+      "raw_ns_per_op": [
+        763,
+        760,
+        765,
+        761,
+        759,
+        758,
+        764
+      ]
+    },
+    "capacity_10000": {
+      "batch_max_ns": 188167,
+      "batch_p95_ns": 82000,
+      "batch_p99_ns": 87959,
+      "batch_size": 100,
+      "capacity": 10000,
+      "median_ns_per_op": 780,
+      "operations": 100000,
+      "raw_ns_per_op": [
+        767,
+        768,
+        772,
+        782,
+        795,
+        783,
+        780
+      ]
+    }
+  },
+  "fixed_worker_contention": {
+    "distinct_keys": {
+      "operations_per_worker": 20000,
+      "p50_latency_ns": 333,
+      "p95_latency_ns": 667,
+      "throughput_ops_per_sec": 2347189.6987712095,
+      "total_operations": 160000,
+      "workers": 8
+    },
+    "hot_key": {
+      "operations_per_worker": 20000,
+      "p50_latency_ns": 333,
+      "p95_latency_ns": 667,
+      "throughput_ops_per_sec": 2300565.2560726833,
+      "total_operations": 160000,
+      "workers": 8
+    }
+  },
+  "heap_rebuild_proxy": {
+    "capacity_1000": {
+      "capacity": 1000,
+      "final_heap_length": 1999,
+      "heap_bound": 2000,
+      "max_rebuild_trigger_upper_bound_ns": 162000,
+      "observations": [
+        {
+          "after": 1000,
+          "before": 2000,
+          "duration_ns": 162000
+        }
+      ],
+      "rebuild_count": 1,
+      "rebuild_trigger_upper_bound_ns": [
+        162000
+      ]
+    },
+    "capacity_10000": {
+      "capacity": 10000,
+      "final_heap_length": 19999,
+      "heap_bound": 20000,
+      "max_rebuild_trigger_upper_bound_ns": 1059334,
+      "observations": [
+        {
+          "after": 10000,
+          "before": 20000,
+          "duration_ns": 1059334
+        }
+      ],
+      "rebuild_count": 1,
+      "rebuild_trigger_upper_bound_ns": [
+        1059334
+      ]
+    }
+  },
+  "parameters": {
+    "capacity": 10000,
+    "operations": 100000,
+    "repetitions": 7,
+    "warmups": 3
+  },
+  "rss": {
+    "label": "fresh-process high-water, not retained memory",
+    "platform_unit_normalization": "macOS bytes; Linux KiB multiplied by 1024",
+    "scenarios": {
+      "hit": {
+        "process_high_water_bytes": 35323904,
+        "scenario": "hit"
+      },
+      "overwrite": {
+        "process_high_water_bytes": 38977536,
+        "scenario": "overwrite"
+      }
+    }
+  },
+  "schema_version": 1,
+  "timing": {
+    "ordered_dict_hit_touch": {
+      "max_ns": 2618834,
+      "median_ns_per_op": 25.70333,
+      "p50_ns": 2570333,
+      "p95_ns": 2613959,
+      "p99_ns": 2613959,
+      "raw_samples_ns": [
+        2613959,
+        2579875,
+        2618834,
+        2537292,
+        2570333,
+        2559292,
+        2550000
+      ],
+      "throughput_ops_per_sec": 38905464.77829915
+    },
+    "ttl_cache_get_hit": {
+      "max_ns": 29069083,
+      "median_ns_per_op": 286.1425,
+      "p50_ns": 28614250,
+      "p95_ns": 28932208,
+      "p99_ns": 28932208,
+      "raw_samples_ns": [
+        26819375,
+        28209625,
+        28932208,
+        29069083,
+        27537500,
+        28850459,
+        28614250
+      ],
+      "throughput_ops_per_sec": 3494762.225115109
+    },
+    "ttl_cache_get_miss": {
+      "max_ns": 45447959,
+      "median_ns_per_op": 433.09333,
+      "p50_ns": 43309333,
+      "p95_ns": 44578875,
+      "p99_ns": 44578875,
+      "raw_samples_ns": [
+        42776958,
+        43309333,
+        44578875,
+        45447959,
+        43712250,
+        42817666,
+        43216209
+      ],
+      "throughput_ops_per_sec": 2308971.1402389873
+    },
+    "ttl_cache_get_or_load_hit": {
+      "max_ns": 39440542,
+      "median_ns_per_op": 389.63625,
+      "p50_ns": 38963625,
+      "p95_ns": 39116375,
+      "p99_ns": 39116375,
+      "raw_samples_ns": [
+        38847000,
+        39116375,
+        38649000,
+        39096416,
+        38683792,
+        38963625,
+        39440542
+      ],
+      "throughput_ops_per_sec": 2566496.315473727
+    },
+    "ttl_cache_set": {
+      "max_ns": 79526583,
+      "median_ns_per_op": 785.84542,
+      "p50_ns": 78584542,
+      "p95_ns": 79167208,
+      "p99_ns": 79167208,
+      "raw_samples_ns": [
+        75906584,
+        78504500,
+        79167208,
+        75223584,
+        79526583,
+        79020667,
+        78584542
+      ],
+      "throughput_ops_per_sec": 1272514.8923054105
+    }
+  }
+}
