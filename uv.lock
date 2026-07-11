@@ -55,6 +55,9 @@ dev = [
     { name = "bluetape-serde" },
     { name = "bluetape-testing" },
 ]
+fory = [
+    { name = "bluetape-serde", extra = ["fory"] },
+]
 logging = [
     { name = "bluetape-logging" },
 ]
@@ -86,11 +89,12 @@ requires-dist = [
     { name = "bluetape-serde", marker = "extra == 'all'", editable = "packages/bluetape-serde" },
     { name = "bluetape-serde", marker = "extra == 'dev'", editable = "packages/bluetape-serde" },
     { name = "bluetape-serde", marker = "extra == 'serde'", editable = "packages/bluetape-serde" },
+    { name = "bluetape-serde", extras = ["fory"], marker = "extra == 'fory'", editable = "packages/bluetape-serde" },
     { name = "bluetape-testing", marker = "extra == 'all'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "testing", "dev", "all"]
+provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "fory", "testing", "dev", "all"]
 
 [[package]]
 name = "bluetape-async"
