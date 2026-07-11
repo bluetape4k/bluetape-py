@@ -119,6 +119,22 @@ def test_constructor_rejects_invalid_default_ttl(
 
 
 @pytest.mark.parametrize("cache_type", [cache.TTLCache, cache.AsyncTTLCache])
+@pytest.mark.parametrize("value", [1e300, 10**400])
+def test_constructor_accepts_large_finite_default_ttl(
+    cache_type: type[object],
+    value: int | float,
+) -> None:
+    instance = cache_type(default_ttl=value, max_size=1)
+    if isinstance(value, int):
+        expected_ns = value * 1_000_000_000
+    else:
+        numerator, denominator = value.as_integer_ratio()
+        expected_ns = (numerator * 1_000_000_000) // denominator
+
+    assert instance._default_ttl_ns == expected_ns
+
+
+@pytest.mark.parametrize("cache_type", [cache.TTLCache, cache.AsyncTTLCache])
 @pytest.mark.parametrize(("value", "error", "message"), INVALID_MAX_SIZES)
 def test_constructor_rejects_invalid_max_size(
     cache_type: type[object],
