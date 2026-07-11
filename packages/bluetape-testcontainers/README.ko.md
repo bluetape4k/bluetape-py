@@ -31,7 +31,8 @@ with RedisServer() as redis:
 - 기본 image: `redis:8`
 - 동적으로 매핑한 host port만 사용
 - 명시적인 `start()`/`close()` 또는 context manager가 수명주기를 소유
-- `startup_timeout` 안에서 image pull과 `redis-cli ping` readiness를 수행
+- `startup_timeout`을 각 operation에 적용해 local image를 확인하고, 없으면
+  pull한 뒤 `redis-cli ping` readiness를 수행
 - Docker 기반 test suite는 직렬 실행
 - tag나 digest를 지정한 image override는 허용하지만 `latest`는 거절
 

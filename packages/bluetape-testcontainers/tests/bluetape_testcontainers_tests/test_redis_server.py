@@ -1,4 +1,6 @@
 import math
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import bluetape.testcontainers.redis as redis_module
 import pytest
@@ -13,6 +15,8 @@ from bluetape.testcontainers import (
 from docker.errors import DockerException, ImageNotFound
 
 from ._support import ContainerFactory, FakeContainer
+
+REAL_PULL_IMAGE = redis_module._pull_image
 
 
 @pytest.fixture(autouse=True)
@@ -211,7 +215,10 @@ def test_pull_phase_failures_are_classified_as_image_pull(
     def fail_pull(fake: FakeContainer, image: str) -> None:
         assert fake is container
         assert image == "redis:8"
-        raise error
+        try:
+            raise error
+        except Exception as provider_error:
+            raise redis_module._ImagePullError from provider_error
 
     monkeypatch.setattr(redis_module, "_pull_image", fail_pull)
 
@@ -219,8 +226,59 @@ def test_pull_phase_failures_are_classified_as_image_pull(
         RedisServer().start()
 
     assert raised.value.kind is StartFailureKind.IMAGE_PULL
+    assert raised.value.__cause__.__cause__ is error
+    assert "secret-marker" not in str(raised.value)
+
+
+def test_daemon_failure_during_image_lookup_is_runtime_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = DockerException("socket secret-marker")
+    container = FakeContainer()
+    monkeypatch.setattr(redis_module, "_new_container", ContainerFactory(container))
+
+    def fail_lookup(fake: FakeContainer, image: str) -> None:
+        raise error
+
+    monkeypatch.setattr(redis_module, "_pull_image", fail_lookup)
+
+    with pytest.raises(RedisStartError) as raised:
+        RedisServer().start()
+
+    assert raised.value.kind is StartFailureKind.RUNTIME_UNAVAILABLE
     assert raised.value.__cause__ is error
     assert "secret-marker" not in str(raised.value)
+
+
+def test_image_resolution_uses_cached_image_without_registry_pull() -> None:
+    images = Mock()
+    container = Mock()
+    container.get_docker_client.return_value = SimpleNamespace(
+        client=SimpleNamespace(images=images)
+    )
+
+    REAL_PULL_IMAGE(container, "redis:8")
+
+    images.get.assert_called_once_with("redis:8")
+    images.pull.assert_not_called()
+
+
+def test_missing_image_is_pulled_and_registry_failure_is_wrapped() -> None:
+    provider_error = DockerException("registry secret-marker")
+    images = Mock()
+    images.get.side_effect = ImageNotFound("missing")
+    images.pull.side_effect = provider_error
+    container = Mock()
+    container.get_docker_client.return_value = SimpleNamespace(
+        client=SimpleNamespace(images=images)
+    )
+
+    with pytest.raises(redis_module._ImagePullError) as raised:
+        REAL_PULL_IMAGE(container, "redis:8")
+
+    assert raised.value.__cause__ is provider_error
+    images.get.assert_called_once_with("redis:8")
+    images.pull.assert_called_once_with("redis:8")
 
 
 def test_public_submodule_does_not_export_provider_types() -> None:
