@@ -11,9 +11,9 @@ guarantees.
 
 - Python: 3.13.14
 - Platform: macOS 26.5.1, arm64, 10 logical CPUs
-- Benchmarked source SHA: `3ea338c6356162ff1cb9c545a893e46d6be01e9c`
+- Benchmarked source SHA: `e7a4c3d16cb68a5def84b3b2ddfce95dc5a662be`
 - Raw evidence: `docs/review/artifacts/issue-50-local-cache-benchmark.json`
-- Raw evidence SHA-256: `971220cf19c0c3c7550ef12c4067db1e7cbef7876ea49c88b690a6866a0ecb43`
+- Raw evidence SHA-256: `8d36c98adf995b3d6ec654aa1f5424a08c015ee1e4ec93917279d92aa85814d1`
 
 ```bash
 uv run python packages/bluetape-cache/benchmarks/cache_benchmark.py \
@@ -31,19 +31,19 @@ value is normalized process high-water, not retained memory.
 |---|---:|---:|---|
 | Same-key loader invocations | 1 for 8 callers | exactly 1 | PASS |
 | Different-key loader overlap | 2 loaders met at barrier | overlap required | PASS |
-| Cache-hit / `OrderedDict` median cost | 11.13x | <= 25x | PASS |
-| Distinct/hot throughput | 1.02x | >= 0.5x | PASS |
+| Cache-hit / `OrderedDict` median cost | 10.82x | <= 25x | PASS |
+| Distinct/hot throughput | 1.03x | >= 0.5x | PASS |
 | Distinct/hot p95 latency | 1.00x | <= 2.5x | PASS |
-| Expiry-heavy 10k/1k median ns/op | 1.02x | <= 2.5x | PASS |
-| Expiry-heavy 10k/1k batch p99 | 1.01x | <= 15x | PASS |
-| Expiry-heavy 10k/1k batch max | 1.79x | <= 15x | PASS |
-| Rebuild-trigger proxy 10k/1k max | 6.54x | <= 15x | PASS |
+| Expiry-heavy 10k/1k median ns/op | 1.05x | <= 2.5x | PASS |
+| Expiry-heavy 10k/1k batch p99 | 1.02x | <= 15x | PASS |
+| Expiry-heavy 10k/1k batch max | 1.22x | <= 15x | PASS |
+| Rebuild-trigger proxy 10k/1k max | 6.50x | <= 15x | PASS |
 | Counted heap rebuilds | 1 at each capacity | every shrink counted | PASS |
 
 The fixed-worker scenarios used eight workers and 20,000 operations per worker
-with a 90% get / 10% set mix. Hot-key throughput was 2.30M operations/second;
-distinct-key throughput was 2.35M operations/second. Both distributions had a
-667 ns p95 operation latency in this run.
+with a 90% get / 10% set mix. Hot-key throughput was 2.19M operations/second;
+distinct-key throughput was 2.26M operations/second. Both distributions had a
+708 ns p95 operation latency in this run.
 
 ## Lifecycle and boundedness
 
@@ -56,7 +56,7 @@ distinct-key throughput was 2.35M operations/second. Both distributions had a
   respectively, below the `2 * max_size` bounds of 2,000 and 20,000.
 - The separate allocation phase recorded a 520-byte traced peak for 10,000
   cache-hit operations. Fresh-process RSS high-water was 35,323,904 bytes for
-  the hit scenario and 38,977,536 bytes for overwrite.
+  the hit scenario and 39,124,992 bytes for overwrite.
 
 ## Caveats
 
