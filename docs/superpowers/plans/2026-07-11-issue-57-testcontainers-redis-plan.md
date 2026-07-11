@@ -54,7 +54,7 @@ Do not modify:
 - Modify: `packages/bluetape/pyproject.toml`
 - Modify: `uv.lock`
 
-- [ ] **Step 1: Write failing packaging tests**
+- [x] **Step 1: Write failing packaging tests**
 
 Create `packages/bluetape-testcontainers/tests/test_packaging.py`:
 
@@ -98,7 +98,7 @@ def test_production_packages_remain_testcontainers_free() -> None:
         assert all("testcontainers" not in dependency for dependency in dependencies)
 ```
 
-- [ ] **Step 2: Run the packaging test and confirm the missing package failure**
+- [x] **Step 2: Run the packaging test and confirm the missing package failure**
 
 Run:
 
@@ -108,7 +108,7 @@ uv run pytest packages/bluetape-testcontainers/tests/test_packaging.py -q
 
 Expected: collection fails because `packages/bluetape-testcontainers` and `bluetape.testcontainers` do not exist.
 
-- [ ] **Step 3: Create minimal distribution metadata and public placeholder module**
+- [x] **Step 3: Create minimal distribution metadata and public placeholder module**
 
 Create `packages/bluetape-testcontainers/pyproject.toml`:
 
@@ -177,7 +177,7 @@ all = [
 bluetape-testcontainers = { workspace = true }
 ```
 
-- [ ] **Step 4: Lock dependencies and prove the packaging tests pass**
+- [x] **Step 4: Lock dependencies and prove the packaging tests pass**
 
 Run:
 
@@ -189,7 +189,7 @@ uv run pytest packages/bluetape-testcontainers/tests/test_packaging.py -q
 
 Expected: `3 passed`; `uv.lock` contains exact Testcontainers and Docker SDK resolutions.
 
-- [ ] **Step 5: Commit the isolated package boundary**
+- [x] **Step 5: Commit the isolated package boundary**
 
 ```bash
 git add pyproject.toml uv.lock packages/bluetape/pyproject.toml packages/bluetape-testcontainers
@@ -211,7 +211,7 @@ Not-tested: Docker lifecycle is added in later tasks"
 - Create: `packages/bluetape-testcontainers/tests/test_redis_server.py`
 - Modify: `packages/bluetape-testcontainers/src/bluetape/testcontainers/__init__.py`
 
-- [ ] **Step 1: Write failing constructor and state tests**
+- [x] **Step 1: Write failing constructor and state tests**
 
 Create the initial `packages/bluetape-testcontainers/tests/_support.py`:
 
@@ -334,7 +334,7 @@ def test_close_is_idempotent_and_prevents_restart(monkeypatch: pytest.MonkeyPatc
         server.start()
 ```
 
-- [ ] **Step 2: Run the state tests and confirm missing API failures**
+- [x] **Step 2: Run the state tests and confirm missing API failures**
 
 Run:
 
@@ -344,7 +344,7 @@ uv run pytest packages/bluetape-testcontainers/tests/test_redis_server.py -q
 
 Expected: collection fails because `DEFAULT_REDIS_IMAGE` and `RedisServer` are not exported.
 
-- [ ] **Step 3: Implement validation, immutable details, and state transitions**
+- [x] **Step 3: Implement validation, immutable details, and state transitions**
 
 Create `packages/bluetape-testcontainers/src/bluetape/testcontainers/redis.py` with the following complete first slice:
 
@@ -505,7 +505,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 4: Run focused tests and fix only contract mismatches**
+- [x] **Step 4: Run focused tests and fix only contract mismatches**
 
 Run:
 
@@ -517,7 +517,7 @@ uv run ruff format --check packages/bluetape-testcontainers
 
 Expected: all constructor/state tests pass and Ruff reports no violations.
 
-- [ ] **Step 5: Commit the public lifecycle skeleton**
+- [x] **Step 5: Commit the public lifecycle skeleton**
 
 ```bash
 git add packages/bluetape-testcontainers
@@ -538,7 +538,7 @@ Not-tested: failure classification and real Docker lifecycle follow"
 - Modify: `packages/bluetape-testcontainers/src/bluetape/testcontainers/__init__.py`
 - Modify: `packages/bluetape-testcontainers/tests/test_redis_server.py`
 
-- [ ] **Step 1: Add failing cleanup and typed-error tests**
+- [x] **Step 1: Add failing cleanup and typed-error tests**
 
 Append tests that cover these exact outcomes:
 
@@ -620,7 +620,7 @@ def test_explicit_close_failure_is_typed_and_idempotent(monkeypatch: pytest.Monk
     assert container.stops == 1
 ```
 
-- [ ] **Step 2: Run focused tests and confirm missing error types/cleanup failures**
+- [x] **Step 2: Run focused tests and confirm missing error types/cleanup failures**
 
 Run:
 
@@ -630,7 +630,7 @@ uv run pytest packages/bluetape-testcontainers/tests/test_redis_server.py -q
 
 Expected: new tests fail because error taxonomy and failure cleanup are not implemented.
 
-- [ ] **Step 3: Implement stable failure classification and non-masking cleanup**
+- [x] **Step 3: Implement stable failure classification and non-masking cleanup**
 
 Add to `redis.py`:
 
@@ -736,7 +736,7 @@ Replace `start`, `close`, and `__exit__` terminal paths with:
 
 Export `StartFailureKind` and `TestcontainerStartError` from `__init__.py` and include them in `__all__`.
 
-- [ ] **Step 4: Run lifecycle/error tests and static checks**
+- [x] **Step 4: Run lifecycle/error tests and static checks**
 
 Run:
 
@@ -748,7 +748,7 @@ uv run ruff format --check packages/bluetape-testcontainers
 
 Expected: every fake-container lifecycle/error test passes; error strings contain no fake provider detail.
 
-- [ ] **Step 5: Commit deterministic cleanup behavior**
+- [x] **Step 5: Commit deterministic cleanup behavior**
 
 ```bash
 git add packages/bluetape-testcontainers
@@ -770,7 +770,7 @@ Not-tested: real Docker failure injection is outside issue #57"
 - Modify: `pyproject.toml`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Add a stdlib RESP helper and failing Docker integration test**
+- [x] **Step 1: Add a stdlib RESP helper and failing Docker integration test**
 
 Append to `_support.py`:
 
@@ -853,7 +853,7 @@ markers = [
 ]
 ```
 
-- [ ] **Step 2: Run the Docker test before CI changes**
+- [x] **Step 2: Run the Docker test before CI changes**
 
 Run:
 
@@ -863,7 +863,7 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 
 Expected: pass with a locally available Docker runtime. If Docker is unavailable, preserve the failure as a blocker; do not add an unconditional skip.
 
-- [ ] **Step 3: Separate base and Docker-backed CI execution**
+- [x] **Step 3: Separate base and Docker-backed CI execution**
 
 In `.github/workflows/ci.yml`, change the base test command to:
 
@@ -898,7 +898,7 @@ Add the dedicated job:
 
 Do not add a matrix, xdist, service container, fixed port, or direct `redis` Docker image declaration to the workflow.
 
-- [ ] **Step 4: Validate both test lanes and workflow syntax**
+- [x] **Step 4: Validate both test lanes and workflow syntax**
 
 Run sequentially:
 
@@ -910,7 +910,7 @@ actionlint
 
 Expected: the existing 857-test baseline plus all new non-Docker tests pass in the first lane; the Redis 8 integration test passes in the second; `actionlint` is silent.
 
-- [ ] **Step 5: Commit Docker and CI evidence**
+- [x] **Step 5: Commit Docker and CI evidence**
 
 ```bash
 git add pyproject.toml .github/workflows/ci.yml packages/bluetape-testcontainers/tests
@@ -936,7 +936,7 @@ Not-tested: Redis Cluster, Sentinel, TLS, and failure injection are out of scope
 - Modify: `packages/bluetape-testcontainers/tests/test_packaging.py`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Add wheel/default-install packaging assertions**
+- [x] **Step 1: Add wheel/default-install packaging assertions**
 
 Extend `test_packaging.py` to assert:
 
@@ -962,7 +962,7 @@ uv run pytest packages/bluetape-testcontainers/tests/test_packaging.py -q
 
 Expected: pass after Task 1 metadata; these tests prevent later dependency leakage.
 
-- [ ] **Step 2: Add English and Korean package documentation**
+- [x] **Step 2: Add English and Korean package documentation**
 
 Both package READMEs must include, in source-equivalent form:
 
@@ -1000,7 +1000,7 @@ with RedisServer() as redis:
 
 The Korean README uses `[English](README.md) | 한국어` and natural Korean prose. Do not add a diagram: the approved spec records the linear lifecycle as text and code.
 
-- [ ] **Step 3: Update root docs, changelog, and roadmap state**
+- [x] **Step 3: Update root docs, changelog, and roadmap state**
 
 Update root README locale files with:
 
@@ -1017,7 +1017,7 @@ Add an Unreleased entry to `CHANGELOG.md`:
 
 Update `WIP.md` so #57 is the active completed prerequisite in this branch and #54/#55 remain follow-ups.
 
-- [ ] **Step 4: Add an actual default-wheel smoke check to CI**
+- [x] **Step 4: Add an actual default-wheel smoke check to CI**
 
 After the existing build step in the base CI job, add:
 
@@ -1034,7 +1034,7 @@ After the existing build step in the base CI job, add:
             'import importlib.util; assert importlib.util.find_spec("testcontainers") is None; assert importlib.util.find_spec("docker") is None; assert importlib.util.find_spec("redis") is None'
 ```
 
-- [ ] **Step 5: Validate bilingual parity and packaging**
+- [x] **Step 5: Validate bilingual parity and packaging**
 
 Run:
 
@@ -1046,7 +1046,7 @@ git diff --check
 
 Manually compare README headings, install commands, public API names, default image, and lifecycle/error claims across both locales. Expected: no missing section or contradictory claim.
 
-- [ ] **Step 6: Commit adoption documentation and isolation evidence**
+- [x] **Step 6: Commit adoption documentation and isolation evidence**
 
 ```bash
 git add README.md README.ko.md CHANGELOG.md WIP.md .github/workflows/ci.yml packages/bluetape-testcontainers
@@ -1068,7 +1068,7 @@ Not-tested: Published-index installation awaits release workflow"
 - Create when durable learning exists: `docs/lessons/2026-07-11-issue-57-testcontainers-redis.md`
 - Modify: implementation/docs/tests only when review produces evidence-backed findings.
 
-- [ ] **Step 1: Run targeted verification from a clean dependency state**
+- [x] **Step 1: Run targeted verification from a clean dependency state**
 
 ```bash
 uv sync --all-packages --extra fory --locked
@@ -1079,7 +1079,7 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 
 Expected: packaging/unit/Docker integration tests pass; Docker tests run sequentially.
 
-- [ ] **Step 2: Run repository-wide static, test, build, and workflow checks**
+- [x] **Step 2: Run repository-wide static, test, build, and workflow checks**
 
 ```bash
 uv run ruff check .
@@ -1092,7 +1092,7 @@ git diff --check
 
 Expected: all commands exit 0. Record exact test counts and built wheel names in the verifier artifact.
 
-- [ ] **Step 3: Audit the full package registration chain**
+- [x] **Step 3: Audit the full package registration chain**
 
 Verify and record evidence for:
 
@@ -1110,7 +1110,7 @@ uv build --all-packages artifact
 
 Any missing, stale, or `UNKNOWN` item is FAIL; do not use `SKIPPED`.
 
-- [ ] **Step 4: Run independent code review until P0=0 and P1=0**
+- [x] **Step 4: Run independent code review until P0=0 and P1=0**
 
 Use the repository `code-review` workflow against `origin/develop...HEAD`. Record every finding with severity, file, line, evidence, disposition, and verification in `docs/superpowers/reviews/2026-07-11-issue-57-testcontainers-redis-review.md`.
 
@@ -1124,7 +1124,7 @@ For each P0/P1 finding:
 
 Stop only when the current diff has `P0=0 P1=0`.
 
-- [ ] **Step 5: Write verifier evidence and workflow counts**
+- [x] **Step 5: Write verifier evidence and workflow counts**
 
 Create `docs/superpowers/reviews/2026-07-11-issue-57-testcontainers-redis-verifier.md` with:
 
@@ -1153,7 +1153,7 @@ N/A is allowed only for:
 - diagram: one linear lifecycle is clearer in code/text;
 - nightly workflow: this repository has no nightly workflow and dedicated CI owns Docker proof.
 
-- [ ] **Step 6: Commit final review and verification evidence**
+- [x] **Step 6: Commit final review and verification evidence**
 
 ```bash
 git add docs/superpowers/reviews packages pyproject.toml uv.lock .github README.md README.ko.md CHANGELOG.md WIP.md
@@ -1168,7 +1168,7 @@ Tested: targeted and full tests; Ruff; build; actionlint; diff check; independen
 Not-tested: Publication is outside issue #57"
 ```
 
-- [ ] **Step 7: Confirm the branch is ready for PR creation**
+- [x] **Step 7: Confirm the branch is ready for PR creation**
 
 ```bash
 repo-status
