@@ -217,7 +217,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "testcontainers", specifier = ">=4.14.2,<5" }]
+requires-dist = [{ name = "testcontainers", specifier = ">=4.14.2,<4.15" }]
 
 [[package]]
 name = "bluetape-testing"
