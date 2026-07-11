@@ -157,6 +157,8 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 숨은 process-global singleton은 제공하지 않는다. Pytest session scope가 필요한 consumer는 명시적 fixture에서 한 `RedisServer` instance를 소유한다. 이는 Kotlin launcher의 재사용 효과를 Python의 fixture ownership으로 표현하면서 import-time Docker side effect를 피한다.
 
+`RedisServer`는 thread-safe하지 않다. 하나의 fixture/caller가 instance를 소유하고, concurrent test worker 사이에서 같은 instance를 공유하지 않는다.
+
 ## Image and Port Authority
 
 - 기본 image는 Kotlin `bluetape4k-testcontainers`와 같은 compatibility line인 `redis:8`이다.
@@ -168,7 +170,7 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 ## Readiness and Connection Details
 
-Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK local image cache를 확인하고 없을 때만 격리된 bounded pull process를 실행한다. Local image lookup의 daemon/socket 실패는 `runtime-unavailable`, 실제 pull process의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 각 Docker client operation, missing-image pull process, readiness에 적용하며 전체 startup wall-clock deadline을 뜻하지 않는다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
+Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK local image cache를 확인하고 없을 때만 격리된 bounded pull process를 실행한다. Local image lookup의 daemon/socket 실패는 `runtime-unavailable`, 실제 pull process의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 각 Docker client operation, missing-image pull process, readiness에 적용하며 전체 startup wall-clock deadline을 뜻하지 않는다. Testcontainers의 global Ryuk initialization은 wrapper timeout 밖에서 별도 image pull과 connection loop를 수행하므로 사용하지 않는다. Wrapper가 bounded Docker client로 Redis container를 직접 시작하고 `com.bluetape.testcontainers.redis=true` label과 explicit cleanup을 소유한다. 비정상 process 종료 뒤에는 label로 orphan container를 확인하고 명시적으로 제거해야 한다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
 
 `RedisConnectionDetails`는 successful startup 후 한 번 계산한 immutable snapshot이다.
 

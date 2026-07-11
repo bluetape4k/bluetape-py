@@ -25,6 +25,7 @@ __all__ = [
 
 DEFAULT_REDIS_IMAGE = "redis:8"
 REDIS_PORT = 6379
+_BLUETAPE_REDIS_LABEL = "com.bluetape.testcontainers.redis"
 
 _PULL_SCRIPT = """
 import sys
@@ -99,8 +100,11 @@ def _validated_image(image: str) -> str:
     ):
         raise ValueError("image must not contain whitespace or control characters")
     leaf = image.rsplit("/", 1)[-1]
-    if "@sha256:" not in image and ":" not in leaf:
-        raise ValueError("image must include an explicit tag or digest")
+    if "@sha256:" in image:
+        if not image.partition("@sha256:")[2]:
+            raise ValueError("image digest must be non-empty")
+    elif ":" not in leaf or not leaf.rpartition(":")[2]:
+        raise ValueError("image must include a non-empty tag or digest")
     if leaf.rsplit(":", 1)[-1].casefold() == "latest":
         raise ValueError("image must not use the latest tag")
     return image
@@ -121,9 +125,29 @@ def _new_container(image: str, startup_timeout: float) -> _DockerContainer:
     )
     return (
         _DockerContainer(image, docker_client_kw={"timeout": startup_timeout})
+        .with_kwargs(labels={_BLUETAPE_REDIS_LABEL: "true"})
         .with_exposed_ports(REDIS_PORT)
         .waiting_for(strategy)
     )
+
+
+def _start_without_reaper(container: _DockerContainer) -> _DockerContainer:
+    docker_client = container.get_docker_client()
+    container._configure()
+    created = docker_client.client.containers.create(
+        container.image,
+        command=container._command,
+        environment=container.env,
+        ports=container.ports,
+        name=container._name,
+        volumes=container.volumes,
+        **container._kwargs,
+    )
+    container._container = created
+    created.start()
+    if container._wait_strategy is not None:
+        container._wait_strategy.wait_until_ready(container)
+    return container
 
 
 def _pull_image(container: _DockerContainer, image: str, startup_timeout: float) -> None:
@@ -145,6 +169,13 @@ def _run_bounded_pull(image: str, timeout: float) -> None:
         stderr=_subprocess.DEVNULL,
         timeout=timeout,
     )
+
+
+def _connection_url(host: str, port: int) -> str:
+    authority = host
+    if ":" in authority and not authority.startswith("["):
+        authority = f"[{authority}]"
+    return f"redis://{authority}:{port}"
 
 
 def _failure_kind(error: Exception, phase: _StartPhase) -> StartFailureKind:
@@ -226,14 +257,14 @@ class RedisServer:
             phase = _StartPhase.IMAGE_PULL
             _pull_image(container, self._image, self._startup_timeout)
             phase = _StartPhase.START
-            container.start()
+            _start_without_reaper(container)
             phase = _StartPhase.DETAILS
             host = container.get_container_host_ip()
             port = int(container.get_exposed_port(REDIS_PORT))
             self._details = RedisConnectionDetails(
                 host=host,
                 port=port,
-                url=f"redis://{host}:{port}",
+                url=_connection_url(host, port),
             )
         except BaseException as error:
             self._details = None
@@ -282,4 +313,4 @@ class RedisServer:
         except Exception:
             if exc is None:
                 raise
-            exc.add_note("Redis test container cleanup also failed")
+            exc.add_note("Redis test container cleanup also failed; call close() to retry")
