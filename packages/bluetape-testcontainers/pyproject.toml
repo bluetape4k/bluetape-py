@@ -1,0 +1,16 @@
+[project]
+name = "bluetape-testcontainers"
+version = "0.1.0"
+description = "Ecosystem-owned Testcontainers wrappers for bluetape-py."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "testcontainers>=4.14.2,<5",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bluetape.testcontainers"

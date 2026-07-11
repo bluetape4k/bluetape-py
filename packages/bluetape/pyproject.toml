@@ -16,6 +16,7 @@ logging = ["bluetape-logging==0.1.0"]
 serde = ["bluetape-serde==0.1.0"]
 fory = ["bluetape-serde[fory]==0.1.0"]
 testing = ["bluetape-testing==0.1.0"]
+testcontainers = ["bluetape-testcontainers==0.1.0"]
 dev = [
     "bluetape-async==0.1.0",
     "bluetape-cache==0.1.0",
@@ -24,6 +25,7 @@ dev = [
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-serde==0.1.0",
+    "bluetape-testcontainers==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 all = [
@@ -34,6 +36,7 @@ all = [
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-serde==0.1.0",
+    "bluetape-testcontainers==0.1.0",
     "bluetape-testing==0.1.0",
 ]
 
@@ -46,6 +49,7 @@ bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
 bluetape-serde = { workspace = true }
+bluetape-testcontainers = { workspace = true }
 bluetape-testing = { workspace = true }
 
 [build-system]
