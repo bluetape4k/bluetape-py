@@ -139,8 +139,10 @@ Testcontainers Python의 container 객체와 Docker client는 공개 API로 노�
 
 ```text
 NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
-                    |                 |
-                    +--failure--------+--close-->
+                    |                 |             ^
+                    +--failure--------+             |
+                    |                               |
+                    +--> CLEANUP_FAILED --close-----+
 ```
 
 - constructor는 Docker에 연결하거나 container를 시작하지 않는다.
@@ -148,8 +150,8 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 - 성공한 `start()`는 `self`를 반환한다.
 - `RUNNING`에서 다시 `start()`하면 같은 instance를 반환하며 container를 추가 생성하지 않는다.
 - `CLOSED`에서 `start()`하면 `RuntimeError`다. 한 wrapper instance를 재사용해 새 container를 만드는 동작은 지원하지 않는다.
-- startup 중간 실패는 생성된 container가 있으면 bounded termination을 시도한 뒤 typed error를 발생시킨다.
-- `close()`는 `NEW`, partial failure, `RUNNING`, `CLOSED`에서 모두 안전하고 반복 호출해도 container termination은 최대 한 번만 수행한다.
+- startup 중간 실패는 생성된 container가 있으면 Docker client timeout으로 제한된 termination을 시도한 뒤 typed error를 발생시킨다.
+- `close()`는 `NEW`, partial failure, `RUNNING`, `CLEANUP_FAILED`, `CLOSED`에서 안전하다. termination 성공 뒤의 반복 호출은 no-op이며, termination 실패 시에는 container 참조를 보존해 다음 `close()`가 정리를 재시도한다.
 - context manager 진입은 `start()`, 이탈은 `close()`를 호출한다.
 - `KeyboardInterrupt`, `SystemExit`, `GeneratorExit`는 category error로 바꾸지 않고 cleanup 후 원래 exception을 전파한다.
 
@@ -166,7 +168,7 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 ## Readiness and Connection Details
 
-Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `start()`는 이 command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
+Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK pull phase에서 image를 명시적으로 확보하며, 이 phase의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 Docker client operation timeout에도 적용한다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
 
 `RedisConnectionDetails`는 successful startup 후 한 번 계산한 immutable snapshot이다.
 

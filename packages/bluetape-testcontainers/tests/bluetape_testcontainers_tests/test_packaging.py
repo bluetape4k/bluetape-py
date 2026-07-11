@@ -1,5 +1,7 @@
 import importlib.util
+import subprocess
 import tomllib
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).parents[4]
@@ -48,3 +50,32 @@ def test_wrapper_does_not_depend_on_redis_py() -> None:
     project = load_project(ROOT / "packages/bluetape-testcontainers/pyproject.toml")
 
     assert all(not dependency.startswith("redis") for dependency in project["dependencies"])
+
+
+def test_built_wheels_preserve_version_and_namespace_coexistence(tmp_path: Path) -> None:
+    distribution_dir = tmp_path / "dist"
+    for package in ("bluetape-core", "bluetape-testcontainers"):
+        subprocess.run(
+            ["uv", "build", "--package", package, "--wheel", "--out-dir", distribution_dir],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    core_wheel = next(distribution_dir.glob("bluetape_core-*.whl"))
+    wrapper_wheel = next(distribution_dir.glob("bluetape_testcontainers-*.whl"))
+    with zipfile.ZipFile(core_wheel) as archive:
+        core_names = set(archive.namelist())
+    with zipfile.ZipFile(wrapper_wheel) as archive:
+        wrapper_names = set(archive.namelist())
+        metadata_name = next(name for name in wrapper_names if name.endswith(".dist-info/METADATA"))
+        metadata = archive.read(metadata_name).decode()
+
+    assert "bluetape/__init__.py" not in core_names | wrapper_names
+    assert "bluetape/core/__init__.py" in core_names
+    assert "bluetape/testcontainers/__init__.py" in wrapper_names
+    assert "Name: bluetape-testcontainers\n" in metadata
+    assert "Version: 0.1.0\n" in metadata
+    assert "Requires-Python: >=3.13\n" in metadata
+    assert "Requires-Dist: testcontainers>=4.14.2,<5\n" in metadata

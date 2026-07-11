@@ -31,7 +31,7 @@ with RedisServer() as redis:
 - 기본 image: `redis:8`
 - 동적으로 매핑한 host port만 사용
 - 명시적인 `start()`/`close()` 또는 context manager가 수명주기를 소유
-- `startup_timeout` 안에서 `redis-cli ping`으로 readiness 확인
+- `startup_timeout` 안에서 image pull과 `redis-cli ping` readiness를 수행
 - Docker 기반 test suite는 직렬 실행
 - tag나 digest를 지정한 image override는 허용하지만 `latest`는 거절
 
@@ -39,6 +39,9 @@ with RedisServer() as redis:
 호출할 때까지 `host`, `port`, `url`, 불변 `details`에서 매핑된 endpoint를 읽을 수
 있습니다. 같은 객체가 실행 중일 때 `start()`를 다시 호출하는 것은 안전하지만,
 닫은 객체를 다시 시작할 수는 없습니다.
+
+Container termination에 실패하면 래퍼가 container 참조를 유지합니다. `close()`를
+다시 호출하면 정리를 재시도하며, termination에 성공한 뒤부터 no-op으로 동작합니다.
 
 시작에 실패하면 `TestcontainerStartError`가 안정적인 `StartFailureKind` 하나를
 제공합니다. 종류는 `runtime-unavailable`, `image-pull`, `readiness-timeout`,
