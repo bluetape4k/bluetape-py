@@ -32,7 +32,8 @@ with RedisServer() as redis:
 - Default image: `redis:8`
 - Dynamic host port only
 - Explicit `start()`/`close()` or context-manager ownership
-- Image pull and `redis-cli ping` readiness bounded by `startup_timeout`
+- Cached image lookup, missing-image pull, and `redis-cli ping` readiness
+  bounded per operation by `startup_timeout`
 - Docker-backed suites run serially
 - Explicit tagged or digest image overrides are allowed; `latest` is rejected
 

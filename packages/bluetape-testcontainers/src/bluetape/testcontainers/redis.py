@@ -40,6 +40,10 @@ class _StartPhase(StrEnum):
     DETAILS = "details"
 
 
+class _ImagePullError(RuntimeError):
+    pass
+
+
 class StartFailureKind(StrEnum):
     """Stable category for a Redis test container startup failure."""
 
@@ -106,12 +110,21 @@ def _new_container(image: str, startup_timeout: float) -> _DockerContainer:
 
 
 def _pull_image(container: _DockerContainer, image: str) -> None:
-    container.get_docker_client().client.images.pull(image)
+    images = container.get_docker_client().client.images
+    try:
+        images.get(image)
+    except _ImageNotFound:
+        try:
+            images.pull(image)
+        except Exception as error:
+            raise _ImagePullError from error
 
 
 def _failure_kind(error: Exception, phase: _StartPhase) -> StartFailureKind:
-    if phase is _StartPhase.IMAGE_PULL or isinstance(error, _ImageNotFound):
+    if isinstance(error, (_ImagePullError, _ImageNotFound)):
         return StartFailureKind.IMAGE_PULL
+    if phase is _StartPhase.DETAILS:
+        return StartFailureKind.WRAPPER_FAILURE
     if isinstance(error, TimeoutError):
         return StartFailureKind.READINESS_TIMEOUT
     if isinstance(error, _DockerException):

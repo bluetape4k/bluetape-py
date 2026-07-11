@@ -168,7 +168,7 @@ NEW --start--> STARTING --ready--> RUNNING --close--> CLOSED
 
 ## Readiness and Connection Details
 
-Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK pull phase에서 image를 명시적으로 확보하며, 이 phase의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 Docker client operation timeout에도 적용한다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
+Wrapper는 Testcontainers core `DockerContainer`에 `redis:8`과 internal port `6379`를 직접 구성한다. 공식 `RedisContainer`는 `redis:latest`와 redis-py client를 결합하므로 사용하지 않는다. Container start 전에 Docker SDK local image cache를 확인하고 없을 때만 명시적 pull phase로 진입한다. Local image lookup의 daemon/socket 실패는 `runtime-unavailable`, 실제 pull phase의 registry 인증, throttling, resolution 실패는 `image-pull`로 분류한다. Readiness는 `ExecWaitStrategy(["redis-cli", "ping"])`에 configured startup timeout을 적용한다. `startup_timeout`은 Docker client operation timeout에도 적용한다. `start()`는 readiness command가 성공한 뒤에만 완료되며 redis-py dependency를 추가하지 않는다.
 
 `RedisConnectionDetails`는 successful startup 후 한 번 계산한 immutable snapshot이다.
 
