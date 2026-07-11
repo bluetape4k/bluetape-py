@@ -373,7 +373,61 @@ def test_loader_failure_is_shared_not_cached_and_preserves_exception() -> None:
     assert len(errors) == 2
     assert errors[0] is failure
     assert errors[1] is failure
+    assert cache._state.load_failures == 1
     assert cache.get_or_load("key", lambda _: "recovered") == "recovered"
+
+
+def test_publication_failure_is_shared_and_always_cleans_flight() -> None:
+    publication_failure = RuntimeError("publication clock failed")
+
+    class PublicationFailingClock:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self) -> int:
+            self.calls += 1
+            if self.calls == 3:
+                raise publication_failure
+            return 0
+
+    cache = TTLCache[str, str](
+        default_ttl=1,
+        max_size=1,
+        max_inflight=1,
+        clock=PublicationFailingClock(),
+    )
+    started = threading.Event()
+    release = threading.Event()
+    results: list[str] = []
+    errors: list[BaseException] = []
+    threads: list[threading.Thread] = []
+
+    def loader(_: str) -> str:
+        started.set()
+        assert release.wait(2)
+        return "value"
+
+    try:
+        threads.append(_run_in_thread(lambda: cache.get_or_load("key", loader), results, errors))
+        assert started.wait(2)
+        threads.append(
+            _run_in_thread(lambda: cache.get_or_load("key", lambda _: "unused"), results, errors)
+        )
+        _wait_until(lambda: cache._state.coalesced_waiters == 1)
+        release.set()
+    finally:
+        release.set()
+        _join_all(threads)
+
+    assert results == []
+    assert len(errors) == 2
+    assert errors[0] is publication_failure
+    assert errors[1] is publication_failure
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+    assert cache._state.key_versions == {}
+    assert cache._state.load_failures == 0
+    assert cache.get_or_load("later", lambda _: "recovered") == "recovered"
 
 
 def test_owner_only_success_and_failure_cleanup_flights_and_versions() -> None:
