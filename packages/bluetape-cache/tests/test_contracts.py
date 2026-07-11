@@ -107,6 +107,16 @@ def test_cache_constructors_are_keyword_only(cache_type: type[object]) -> None:
 
 
 @pytest.mark.parametrize("cache_type", [cache.TTLCache, cache.AsyncTTLCache])
+@pytest.mark.parametrize("clock", [None, 0, "clock", object()])
+def test_constructor_rejects_non_callable_clock(
+    cache_type: type[object],
+    clock: object,
+) -> None:
+    with pytest.raises(TypeError, match=r"^clock must be callable$"):
+        cache_type(default_ttl=1.0, max_size=1, clock=clock)
+
+
+@pytest.mark.parametrize("cache_type", [cache.TTLCache, cache.AsyncTTLCache])
 @pytest.mark.parametrize(("value", "error", "message"), INVALID_TTLS)
 def test_constructor_rejects_invalid_default_ttl(
     cache_type: type[object],

@@ -1,7 +1,14 @@
 """Shared cache contracts and validation."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
+
+
+def _require_callable[F: Callable[..., object]](value: F | object, parameter: str) -> F:
+    if not callable(value):
+        raise TypeError(f"{parameter} must be callable")
+    return value
 
 
 def _ttl_ns(value: float, parameter: str) -> int:
