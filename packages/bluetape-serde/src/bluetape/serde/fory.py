@@ -15,8 +15,10 @@ from ._contracts import (
     FormatMismatchError,
     ForyConcurrencyError,
     ForyRegistrationError,
+    MalformedPayloadError,
     PayloadLimitError,
     PayloadMetadata,
+    SchemaMismatchError,
     SerdeEncodeError,
     SerdeErrorCode,
     SerializedPayload,
@@ -152,7 +154,7 @@ def _new_error(spec: _ErrorSpec) -> Exception:
     error_type, detail = spec
     if error_type is TypeError:
         return TypeError(detail)
-    if error_type in {PayloadLimitError, SerdeEncodeError}:
+    if error_type in {MalformedPayloadError, PayloadLimitError, SerdeEncodeError}:
         return error_type(code=detail)
     return error_type()
 
@@ -292,4 +294,90 @@ class ForyAdapter[T]:
             return SerializedPayload(metadata=metadata, data=header + body), None
         finally:
             body = None
+            self._semaphore.release()
+
+    def deserialize(
+        self,
+        payload: SerializedPayload,
+        *,
+        expected_metadata: PayloadMetadata,
+    ) -> T:
+        """Deserialize a trusted envelope against independent caller policy."""
+        result, error_spec = self._try_deserialize(payload, expected_metadata)
+        del payload, expected_metadata
+        if error_spec is not None:
+            raise _new_error(error_spec)
+        if result is None:  # pragma: no cover - internal completeness invariant
+            raise RuntimeError("Fory deserialization produced no result")
+        return result
+
+    def _try_deserialize(
+        self,
+        payload: SerializedPayload,
+        expected_metadata: PayloadMetadata,
+    ) -> tuple[T | None, _ErrorSpec | None]:
+        if type(payload) is not SerializedPayload:
+            return None, (TypeError, "payload must be an exact SerializedPayload")
+        actual_error = _metadata_error(payload.metadata)
+        if actual_error is not None:
+            return None, actual_error
+        expected_error = _metadata_error(expected_metadata)
+        if expected_error is not None:
+            if expected_error[0] is TypeError:
+                return None, (TypeError, "expected_metadata must be an exact PayloadMetadata")
+            return None, expected_error
+
+        data = payload.data
+        if len(data) > self.limits.max_input_size:
+            return None, (PayloadLimitError, SerdeErrorCode.INPUT_LIMIT)
+        if len(data) < _ENVELOPE.size:
+            return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+
+        (
+            magic,
+            envelope_version,
+            flags,
+            schema_id,
+            schema_version,
+            type_id,
+            body_length,
+        ) = _ENVELOPE.unpack_from(data)
+        if magic != b"BTFY":
+            return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+        if envelope_version != FORY_VERSION:
+            return None, (UnsupportedVersionError, None)
+        if flags != 0:
+            return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+        if (
+            schema_id != self.registration.schema_id
+            or schema_version != self.registration.schema_version
+        ):
+            return None, (SchemaMismatchError, None)
+        if type_id != self.registration.type_id:
+            return None, (TypeMismatchError, None)
+        if body_length == 0 or body_length != len(data) - _ENVELOPE.size:
+            return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+        root_header = data[_ENVELOPE.size]
+        if root_header & 0xFC or root_header & 0x02 or not root_header & 0x01:
+            return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+        if not self._semaphore.acquire(timeout=self.limits.acquire_timeout_seconds):
+            return None, (ForyConcurrencyError, None)
+
+        try:
+            try:
+                buffer = _pyfory.Buffer(memoryview(data)[_ENVELOPE.size :])
+                result = self._pool.deserialize(buffer)
+                fully_consumed = buffer.get_reader_index() == body_length
+            except _FATAL_EXCEPTIONS:
+                raise
+            except _ForyRegistrationFailureError:
+                return None, (ForyRegistrationError, None)
+            except Exception:
+                return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+            if not fully_consumed:
+                return None, (MalformedPayloadError, SerdeErrorCode.INVALID_FORY)
+            if type(result) is not self.registration.python_type:
+                return None, (TypeMismatchError, None)
+            return result, None
+        finally:
             self._semaphore.release()

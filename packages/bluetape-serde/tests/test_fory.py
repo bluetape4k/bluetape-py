@@ -2,6 +2,8 @@ import importlib.util
 import math
 import struct
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 from types import ModuleType
@@ -13,11 +15,15 @@ import pytest
 from bluetape.serde import (
     ContentTypeMismatchError,
     FormatMismatchError,
+    ForyConcurrencyError,
     ForyRegistrationError,
+    MalformedPayloadError,
     PayloadLimitError,
     PayloadMetadata,
+    SchemaMismatchError,
     SerdeEncodeError,
     SerdeErrorCode,
+    SerializedPayload,
     TrustProfile,
     TrustProfileMismatchError,
     TypeMismatchError,
@@ -74,6 +80,31 @@ def record() -> ConformanceRecord:
         name="Ada",
         active=True,
         scores=[pyfory.Int32(10), pyfory.Int32(20)],
+    )
+
+
+def envelope(
+    body: bytes,
+    *,
+    magic: bytes = b"BTFY",
+    envelope_version: int = 1,
+    flags: int = 0,
+    schema_id: int = 0x42544659,
+    schema_version: int = 1,
+    type_id: int = 1001,
+    body_length: int | None = None,
+) -> bytes:
+    return (
+        struct.Struct(">4sBBIHII").pack(
+            magic,
+            envelope_version,
+            flags,
+            schema_id,
+            schema_version,
+            type_id,
+            len(body) if body_length is None else body_length,
+        )
+        + body
     )
 
 
@@ -591,3 +622,416 @@ def test_fory_serialize_sanitizes_provider_failure_without_logging(
             )
         traceback = traceback.tb_next
     assert not caplog.records
+
+
+class _DecodeSpyPool:
+    def __init__(self, result: object = None, failure: BaseException | None = None):
+        self.result = result
+        self.failure = failure
+        self.deserialize_calls = 0
+
+    def deserialize(self, buffer: object) -> object:
+        self.deserialize_calls += 1
+        if self.failure is not None:
+            raise self.failure
+        if hasattr(buffer, "set_reader_index"):
+            buffer.set_reader_index(len(buffer))
+        return self.result
+
+
+def valid_payload(adapter: ForyAdapter[ConformanceRecord] | None = None) -> SerializedPayload:
+    active_adapter = adapter or ForyAdapter(registration=registration())
+    return active_adapter.serialize(record(), metadata=trusted_metadata())
+
+
+@pytest.mark.parametrize(
+    ("actual_trust", "expected_trust"),
+    [
+        (TrustProfile.UNTRUSTED, TrustProfile.UNTRUSTED),
+        (TrustProfile.UNTRUSTED, TrustProfile.TRUSTED_INTERNAL),
+        (TrustProfile.TRUSTED_INTERNAL, TrustProfile.UNTRUSTED),
+    ],
+)
+def test_fory_deserialize_rejects_untrusted_actual_or_expected_policy_before_provider(
+    actual_trust: TrustProfile,
+    expected_trust: TrustProfile,
+) -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    spy = _DecodeSpyPool(record())
+    adapter._pool = spy
+    payload = SerializedPayload(
+        metadata=trusted_metadata(trust_profile=actual_trust),
+        data=produced.data,
+    )
+    expected = trusted_metadata(trust_profile=expected_trust)
+
+    with pytest.raises(TrustProfileMismatchError):
+        adapter.deserialize(payload, expected_metadata=expected)
+
+    assert spy.deserialize_calls == 0
+
+
+def test_fory_deserialize_uses_caller_expected_metadata_not_received_policy() -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    spy = _DecodeSpyPool(record())
+    adapter._pool = spy
+    received = SerializedPayload(metadata=trusted_metadata(), data=produced.data)
+    caller_policy = trusted_metadata(content_type="application/octet-stream")
+
+    with pytest.raises(ContentTypeMismatchError):
+        adapter.deserialize(received, expected_metadata=caller_policy)
+
+    assert spy.deserialize_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("mutate", "error_type", "code"),
+    [
+        (lambda data: data[:19], MalformedPayloadError, SerdeErrorCode.INVALID_FORY),
+        (
+            lambda data: envelope(data[20:], magic=b"NOPE"),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(data[20:], envelope_version=2),
+            UnsupportedVersionError,
+            None,
+        ),
+        (
+            lambda data: envelope(data[20:], flags=1),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(data[20:], schema_id=7),
+            SchemaMismatchError,
+            None,
+        ),
+        (
+            lambda data: envelope(data[20:], schema_version=2),
+            SchemaMismatchError,
+            None,
+        ),
+        (lambda data: envelope(data[20:], type_id=7), TypeMismatchError, None),
+        (
+            lambda data: envelope(data[20:], body_length=len(data)),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(b""),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(bytes([data[20] | 0x02]) + data[21:]),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(bytes([data[20] | 0x04]) + data[21:]),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+        (
+            lambda data: envelope(bytes([data[20] & ~0x01]) + data[21:]),
+            MalformedPayloadError,
+            SerdeErrorCode.INVALID_FORY,
+        ),
+    ],
+)
+def test_fory_deserialize_rejects_envelope_gates_before_provider(
+    mutate: Any,
+    error_type: type[Exception],
+    code: SerdeErrorCode | None,
+) -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    spy = _DecodeSpyPool(record())
+    adapter._pool = spy
+    payload = SerializedPayload(metadata=trusted_metadata(), data=mutate(produced.data))
+
+    with pytest.raises(error_type) as caught:
+        adapter.deserialize(payload, expected_metadata=trusted_metadata())
+
+    if code is not None:
+        assert caught.value.code is code
+    assert spy.deserialize_calls == 0
+
+
+def test_fory_deserialize_rejects_total_input_limit_before_provider() -> None:
+    producer = ForyAdapter(registration=registration())
+    produced = valid_payload(producer)
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_input_size=20),
+    )
+    spy = _DecodeSpyPool(record())
+    adapter._pool = spy
+
+    with pytest.raises(PayloadLimitError) as caught:
+        adapter.deserialize(produced, expected_metadata=trusted_metadata())
+
+    assert caught.value.code is SerdeErrorCode.INPUT_LIMIT
+    assert spy.deserialize_calls == 0
+
+
+def test_fory_deserialize_round_trips_exact_registered_root() -> None:
+    adapter = ForyAdapter(registration=registration())
+    value = record()
+    payload = adapter.serialize(value, metadata=trusted_metadata())
+
+    assert adapter.deserialize(payload, expected_metadata=trusted_metadata()) == value
+
+
+def test_fory_deserialize_rejects_builtin_and_subclass_results() -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    child = ConformanceRecordChild(
+        record_id=pyfory.Int64(7),
+        name="Ada",
+        active=True,
+        scores=[],
+    )
+    for invalid in ({"built_in": True}, child):
+        adapter._pool = _DecodeSpyPool(invalid)
+        with pytest.raises(TypeMismatchError):
+            adapter.deserialize(produced, expected_metadata=trusted_metadata())
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ValueError("provider depth limit secret"),
+        RuntimeError("provider parse secret"),
+    ],
+)
+def test_fory_deserialize_sanitizes_provider_failures(
+    failure: BaseException,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    marker = "payload-secret-marker"
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    payload = SerializedPayload(metadata=trusted_metadata(), data=produced.data + marker.encode())
+    payload = SerializedPayload(
+        metadata=payload.metadata,
+        data=envelope(payload.data[20:], body_length=len(payload.data[20:])),
+    )
+    adapter._pool = _DecodeSpyPool(failure=failure)
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        adapter.deserialize(payload, expected_metadata=trusted_metadata())
+
+    assert caught.value.code is SerdeErrorCode.INVALID_FORY
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert marker not in str(caught.value)
+    traceback = caught.value.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_filename.endswith("/bluetape/serde/fory.py"):
+            assert all(
+                marker not in repr(local_value)
+                for local_value in traceback.tb_frame.f_locals.values()
+            )
+        traceback = traceback.tb_next
+    assert not caplog.records
+
+
+@pytest.mark.parametrize("failure", [MemoryError(), KeyboardInterrupt(), SystemExit()])
+def test_fory_deserialize_propagates_fatal_provider_failures(failure: BaseException) -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    adapter._pool = _DecodeSpyPool(failure=failure)
+
+    with pytest.raises(type(failure)) as caught:
+        adapter.deserialize(produced, expected_metadata=trusted_metadata())
+
+    assert caught.value is failure
+
+
+def test_fory_deserialize_rejects_valid_body_with_trailing_byte() -> None:
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    body = produced.data[20:] + b"\x00"
+    payload = SerializedPayload(metadata=trusted_metadata(), data=envelope(body))
+
+    with pytest.raises(MalformedPayloadError) as caught:
+        adapter.deserialize(payload, expected_metadata=trusted_metadata())
+
+    assert caught.value.code is SerdeErrorCode.INVALID_FORY
+
+
+def test_fory_deserialize_maps_semaphore_timeout_without_provider_access() -> None:
+    class TimeoutSemaphore:
+        def acquire(self, *, timeout: float) -> bool:
+            return False
+
+        def release(self) -> None:
+            raise AssertionError("unacquired semaphore must not be released")
+
+    adapter = ForyAdapter(registration=registration())
+    produced = valid_payload(adapter)
+    spy = _DecodeSpyPool(record())
+    adapter._pool = spy
+    adapter._semaphore = TimeoutSemaphore()
+
+    with pytest.raises(ForyConcurrencyError):
+        adapter.deserialize(produced, expected_metadata=trusted_metadata())
+
+    assert spy.deserialize_calls == 0
+
+
+def test_fory_adapter_caps_lazy_runtimes_and_times_out_fifth_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[object] = []
+    entered = threading.Barrier(5)
+    release = threading.Event()
+
+    class BlockingRuntime:
+        def __init__(self) -> None:
+            created.append(self)
+
+        def register(self, python_type: type[object], *, type_id: int) -> None:
+            pass
+
+        def serialize(self, value: ConformanceRecord, *args: object) -> bytes:
+            entered.wait(timeout=2)
+            assert release.wait(timeout=2)
+            return b"\x01" + value.name.encode()
+
+    monkeypatch.setattr(fory_module._pyfory, "Fory", lambda **kwargs: BlockingRuntime())
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_concurrency=4, acquire_timeout_seconds=0.01),
+    )
+    values = [
+        ConformanceRecord(pyfory.Int64(index), f"value-{index}", True, []) for index in range(4)
+    ]
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [
+            executor.submit(adapter.serialize, value, metadata=trusted_metadata())
+            for value in values
+        ]
+        entered.wait(timeout=2)
+        with pytest.raises(ForyConcurrencyError):
+            adapter.serialize(record(), metadata=trusted_metadata())
+        release.set()
+        payloads = [future.result(timeout=2) for future in futures]
+
+    assert len(created) == 5  # one discarded probe plus four retained runtimes
+    assert {payload.data[21:].decode() for payload in payloads} == {value.name for value in values}
+
+
+def test_lazy_registration_failure_is_discarded_and_releases_permit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[object] = []
+
+    class RegistrationRuntime:
+        def __init__(self) -> None:
+            self.number = len(created) + 1
+            created.append(self)
+
+        def register(self, python_type: type[object], *, type_id: int) -> None:
+            if self.number == 2:
+                raise ValueError("first lazy registration fails")
+
+        def serialize(self, value: object, *args: object) -> bytes:
+            return b"\x01ok"
+
+    monkeypatch.setattr(
+        fory_module._pyfory,
+        "Fory",
+        lambda **kwargs: RegistrationRuntime(),
+    )
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_concurrency=1, acquire_timeout_seconds=0.01),
+    )
+
+    with pytest.raises(ForyRegistrationError):
+        adapter.serialize(record(), metadata=trusted_metadata())
+    payload = adapter.serialize(record(), metadata=trusted_metadata())
+
+    assert payload.data[20:] == b"\x01ok"
+    assert len(created) == 3
+
+
+def test_ordinary_encode_failure_returns_same_runtime_for_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[object] = []
+    used: list[object] = []
+
+    class ReusableRuntime:
+        def __init__(self) -> None:
+            self.fail_next = len(created) == 1
+            created.append(self)
+
+        def register(self, python_type: type[object], *, type_id: int) -> None:
+            pass
+
+        def serialize(self, value: object, *args: object) -> bytes:
+            used.append(self)
+            if self.fail_next:
+                self.fail_next = False
+                raise ValueError("ordinary encode failure")
+            return b"\x01reused"
+
+    monkeypatch.setattr(fory_module._pyfory, "Fory", lambda **kwargs: ReusableRuntime())
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_concurrency=1, acquire_timeout_seconds=0.01),
+    )
+
+    with pytest.raises(SerdeEncodeError):
+        adapter.serialize(record(), metadata=trusted_metadata())
+    payload = adapter.serialize(record(), metadata=trusted_metadata())
+
+    assert payload.data[20:] == b"\x01reused"
+    assert len(created) == 2
+    assert used[0] is used[1]
+
+
+def test_ordinary_decode_failure_returns_same_runtime_for_reuse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[object] = []
+    used: list[object] = []
+    expected = record()
+
+    class ReusableRuntime:
+        def __init__(self) -> None:
+            self.fail_next = len(created) == 1
+            created.append(self)
+
+        def register(self, python_type: type[object], *, type_id: int) -> None:
+            pass
+
+        def deserialize(self, buffer: object, *args: object) -> ConformanceRecord:
+            used.append(self)
+            if self.fail_next:
+                self.fail_next = False
+                raise ValueError("ordinary decode failure")
+            buffer.set_reader_index(len(buffer))
+            return expected
+
+    monkeypatch.setattr(fory_module._pyfory, "Fory", lambda **kwargs: ReusableRuntime())
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_concurrency=1, acquire_timeout_seconds=0.01),
+    )
+    payload = SerializedPayload(metadata=trusted_metadata(), data=envelope(b"\x01"))
+
+    with pytest.raises(MalformedPayloadError):
+        adapter.deserialize(payload, expected_metadata=trusted_metadata())
+    assert adapter.deserialize(payload, expected_metadata=trusted_metadata()) == expected
+
+    assert len(created) == 2
+    assert used[0] is used[1]
