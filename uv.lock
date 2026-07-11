@@ -55,6 +55,9 @@ dev = [
     { name = "bluetape-serde" },
     { name = "bluetape-testing" },
 ]
+fory = [
+    { name = "bluetape-serde", extra = ["fory"] },
+]
 logging = [
     { name = "bluetape-logging" },
 ]
@@ -86,11 +89,12 @@ requires-dist = [
     { name = "bluetape-serde", marker = "extra == 'all'", editable = "packages/bluetape-serde" },
     { name = "bluetape-serde", marker = "extra == 'dev'", editable = "packages/bluetape-serde" },
     { name = "bluetape-serde", marker = "extra == 'serde'", editable = "packages/bluetape-serde" },
+    { name = "bluetape-serde", extras = ["fory"], marker = "extra == 'fory'", editable = "packages/bluetape-serde" },
     { name = "bluetape-testing", marker = "extra == 'all'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "testing", "dev", "all"]
+provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "fory", "testing", "dev", "all"]
 
 [[package]]
 name = "bluetape-async"
@@ -168,6 +172,15 @@ name = "bluetape-serde"
 version = "0.1.0"
 source = { editable = "packages/bluetape-serde" }
 
+[package.optional-dependencies]
+fory = [
+    { name = "pyfory" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pyfory", marker = "extra == 'fory'", specifier = "==1.3.0" }]
+provides-extras = ["fory"]
+
 [[package]]
 name = "bluetape-testing"
 version = "0.1.0"
@@ -213,6 +226,17 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "pyfory"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b8/65/ed87e70c250f2872842e665578b5169aac90c6cd71852ffb66dc48a46195/pyfory-1.3.0-cp313-cp313-macosx_11_0_universal2.whl", hash = "sha256:8c80c12b17708f4f48ae39659f21eb39cd242c667594414d8dba7b0a19404d7d", size = 2405340, upload-time = "2026-06-25T03:38:55.806Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/00/1541d28b1f33dace1771c8351f59cfbad812df8c8ff1db9ea464e6329f1c/pyfory-1.3.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:57d658af2e55ee5c1395be028e7baa194d5a07382cdb26e3a71ecbcbf4b3c9c8", size = 1411777, upload-time = "2026-06-25T03:38:24.521Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/2e/f243f61892a165917d599b7cb52b293032d9c5372ef1b82bbc901c229101/pyfory-1.3.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:232a96413602f939ba3d3ccd264baebb5607bcffa0cf3dd9b6675826c732dbb9", size = 1485530, upload-time = "2026-06-25T03:38:26.203Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/04/a073a28378b280fc4b34b5c8211070818acdc58b69feb18e612451ae3c1d/pyfory-1.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:736760c94d6c131cee70627fb161e9351a96d441dc1fd10d5fdc2ab89945a814", size = 1112508, upload-time = "2026-06-25T03:38:57.231Z" },
 ]
 
 [[package]]

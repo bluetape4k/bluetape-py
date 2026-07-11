@@ -9,17 +9,21 @@ from bluetape.serde import (
     MAX_SUPPORTED_NESTING_DEPTH,
     ContentTypeMismatchError,
     FormatMismatchError,
+    ForyConcurrencyError,
+    ForyRegistrationError,
     InvalidMetadataError,
     JsonValue,
     MalformedPayloadError,
     PayloadLimitError,
     PayloadMetadata,
+    SchemaMismatchError,
     SerdeEncodeError,
     SerdeError,
     SerdeErrorCode,
     SerializedPayload,
     TrustProfile,
     TrustProfileMismatchError,
+    TypeMismatchError,
     UnsupportedVersionError,
     json_deserialize,
     json_serialize,
@@ -32,18 +36,22 @@ EXPECTED_EXPORTS = [
     "MAX_SUPPORTED_NESTING_DEPTH",
     "MAX_JSON_INTEGER_DIGITS",
     "ContentTypeMismatchError",
+    "ForyConcurrencyError",
+    "ForyRegistrationError",
     "FormatMismatchError",
     "InvalidMetadataError",
     "JsonValue",
     "MalformedPayloadError",
     "PayloadLimitError",
     "PayloadMetadata",
+    "SchemaMismatchError",
     "SerializedPayload",
     "SerdeError",
     "SerdeErrorCode",
     "SerdeEncodeError",
     "TrustProfile",
     "TrustProfileMismatchError",
+    "TypeMismatchError",
     "UnsupportedVersionError",
     "json_deserialize",
     "json_serialize",
@@ -55,18 +63,22 @@ EXPECTED_EXPORT_VALUES = [
     MAX_SUPPORTED_NESTING_DEPTH,
     MAX_JSON_INTEGER_DIGITS,
     ContentTypeMismatchError,
+    ForyConcurrencyError,
+    ForyRegistrationError,
     FormatMismatchError,
     InvalidMetadataError,
     JsonValue,
     MalformedPayloadError,
     PayloadLimitError,
     PayloadMetadata,
+    SchemaMismatchError,
     SerializedPayload,
     SerdeError,
     SerdeErrorCode,
     SerdeEncodeError,
     TrustProfile,
     TrustProfileMismatchError,
+    TypeMismatchError,
     UnsupportedVersionError,
     json_deserialize,
     json_serialize,
@@ -111,6 +123,12 @@ ERROR_CASES = [
         SerdeErrorCode.ENCODE_RECURSION,
         "value nesting exceeds encoder recursion support",
     ),
+    (SerdeErrorCode.SCHEMA_MISMATCH, "Fory schema does not match caller registration"),
+    (SerdeErrorCode.TYPE_MISMATCH, "Fory type does not match caller registration"),
+    (SerdeErrorCode.FORY_REGISTRATION, "Fory registration failed"),
+    (SerdeErrorCode.INVALID_FORY, "payload is not valid Fory"),
+    (SerdeErrorCode.FORY_ENCODE, "value cannot be encoded as registered Fory type"),
+    (SerdeErrorCode.FORY_CONCURRENCY_LIMIT, "Fory adapter concurrency limit reached"),
 ]
 
 
@@ -174,6 +192,12 @@ def test_contract_enums_have_exact_public_values() -> None:
         "circular_reference",
         "encode_non_finite_number",
         "encode_recursion",
+        "schema_mismatch",
+        "type_mismatch",
+        "fory_registration",
+        "invalid_fory",
+        "fory_encode",
+        "fory_concurrency_limit",
     ]
 
 
@@ -381,6 +405,26 @@ def test_serde_error_requires_keyword_only_exact_code_type() -> None:
             SerdeErrorCode.TRUST_PROFILE_MISMATCH,
             "payload trust profile does not match caller policy",
         ),
+        (
+            SchemaMismatchError,
+            SerdeErrorCode.SCHEMA_MISMATCH,
+            "Fory schema does not match caller registration",
+        ),
+        (
+            TypeMismatchError,
+            SerdeErrorCode.TYPE_MISMATCH,
+            "Fory type does not match caller registration",
+        ),
+        (
+            ForyRegistrationError,
+            SerdeErrorCode.FORY_REGISTRATION,
+            "Fory registration failed",
+        ),
+        (
+            ForyConcurrencyError,
+            SerdeErrorCode.FORY_CONCURRENCY_LIMIT,
+            "Fory adapter concurrency limit reached",
+        ),
     ],
 )
 def test_fixed_errors_have_exact_code_and_message(
@@ -405,6 +449,10 @@ def test_fixed_errors_have_exact_code_and_message(
         ContentTypeMismatchError,
         UnsupportedVersionError,
         TrustProfileMismatchError,
+        SchemaMismatchError,
+        TypeMismatchError,
+        ForyRegistrationError,
+        ForyConcurrencyError,
     ],
 )
 def test_fixed_errors_reject_all_arguments(error_type: type[SerdeError]) -> None:
@@ -420,6 +468,10 @@ def test_fixed_errors_reject_all_arguments(error_type: type[SerdeError]) -> None
         ContentTypeMismatchError,
         UnsupportedVersionError,
         TrustProfileMismatchError,
+        SchemaMismatchError,
+        TypeMismatchError,
+        ForyRegistrationError,
+        ForyConcurrencyError,
     ],
 )
 @pytest.mark.parametrize(
@@ -472,6 +524,7 @@ VARIABLE_ERROR_CASES = [
         "JSON payload contains a non-finite number",
     ),
     (MalformedPayloadError, SerdeErrorCode.INVALID_JSON, "payload is not valid JSON"),
+    (MalformedPayloadError, SerdeErrorCode.INVALID_FORY, "payload is not valid Fory"),
     (
         SerdeEncodeError,
         SerdeErrorCode.UNSUPPORTED_VALUE,
@@ -492,6 +545,11 @@ VARIABLE_ERROR_CASES = [
         SerdeErrorCode.ENCODE_RECURSION,
         "value nesting exceeds encoder recursion support",
     ),
+    (
+        SerdeEncodeError,
+        SerdeErrorCode.FORY_ENCODE,
+        "value cannot be encoded as registered Fory type",
+    ),
 ]
 
 VARIABLE_ERROR_ALLOWED_CODES = {
@@ -509,6 +567,7 @@ VARIABLE_ERROR_ALLOWED_CODES = {
             SerdeErrorCode.DUPLICATE_KEY,
             SerdeErrorCode.DECODE_NON_FINITE_NUMBER,
             SerdeErrorCode.INVALID_JSON,
+            SerdeErrorCode.INVALID_FORY,
         }
     ),
     SerdeEncodeError: frozenset(
@@ -517,6 +576,7 @@ VARIABLE_ERROR_ALLOWED_CODES = {
             SerdeErrorCode.CIRCULAR_REFERENCE,
             SerdeErrorCode.ENCODE_NON_FINITE_NUMBER,
             SerdeErrorCode.ENCODE_RECURSION,
+            SerdeErrorCode.FORY_ENCODE,
         }
     ),
 }

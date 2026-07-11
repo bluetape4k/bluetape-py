@@ -1,6 +1,6 @@
 # WIP
 
-Snapshot: 2026-07-10 KST
+Snapshot: 2026-07-11 KST
 Scope: `v0.1.0` released foundation and `0.2.0` ecosystem package planning.
 
 ## Current Target
@@ -26,7 +26,8 @@ focused distribution model:
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-serde`: stdlib-only immutable payload contracts and strict,
   bounded JSON v1 serialization, implemented for issue #45 in the source
-  workspace while PyPI publication remains on HOLD.
+  workspace, plus a CPython 3.13-only Apache Fory extra implemented for issue
+  #46. PyPI publication remains on HOLD.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
 
@@ -44,9 +45,10 @@ focused distribution model:
   follow-ups #45 and #46; issues #35 through #44 are not implied by this range.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
-- Issue #45 strict JSON serde is implemented and locally verified in its
-  feature branch, pending PR review and merge. Issue #46 remains the separate
-  Apache Fory follow-up and is blocked by #45 until this contract lands.
+- Issue #45 strict JSON serde is available in the source workspace. Issue #46
+  Apache Fory is implemented and locally verified with Python, Go, Rust, and
+  Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
+  on HOLD.
 
 ## `0.1.0` Scope
 
@@ -123,7 +125,8 @@ Historical release scope; all items are closed.
   Implemented and locally verified in the source workspace; PR review and
   merge are pending.
 - #46 - Apache Fory adapter and Python/Go/Rust/Kotlin conformance. Separate
-  follow-up blocked by #45; not part of the JSON v1 implementation.
+  trusted-internal CPython 3.13 extra implemented and locally verified in the
+  source workspace; PyPI publication remains on HOLD.
 - #11 - Cache and Redis coordination packages.
 - #12 - Resilience policies.
 - #13 - ID, measure, and money value packages.

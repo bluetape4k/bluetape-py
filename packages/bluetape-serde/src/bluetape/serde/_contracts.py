@@ -32,6 +32,12 @@ class SerdeErrorCode(StrEnum):
     CIRCULAR_REFERENCE = "circular_reference"
     ENCODE_NON_FINITE_NUMBER = "encode_non_finite_number"
     ENCODE_RECURSION = "encode_recursion"
+    SCHEMA_MISMATCH = "schema_mismatch"
+    TYPE_MISMATCH = "type_mismatch"
+    FORY_REGISTRATION = "fory_registration"
+    INVALID_FORY = "invalid_fory"
+    FORY_ENCODE = "fory_encode"
+    FORY_CONCURRENCY_LIMIT = "fory_concurrency_limit"
 
 
 _ERROR_MESSAGES: dict[SerdeErrorCode, str] = {
@@ -54,6 +60,12 @@ _ERROR_MESSAGES: dict[SerdeErrorCode, str] = {
     SerdeErrorCode.CIRCULAR_REFERENCE: "value contains a circular reference",
     SerdeErrorCode.ENCODE_NON_FINITE_NUMBER: "value contains a non-finite number",
     SerdeErrorCode.ENCODE_RECURSION: ("value nesting exceeds encoder recursion support"),
+    SerdeErrorCode.SCHEMA_MISMATCH: "Fory schema does not match caller registration",
+    SerdeErrorCode.TYPE_MISMATCH: "Fory type does not match caller registration",
+    SerdeErrorCode.FORY_REGISTRATION: "Fory registration failed",
+    SerdeErrorCode.INVALID_FORY: "payload is not valid Fory",
+    SerdeErrorCode.FORY_ENCODE: "value cannot be encoded as registered Fory type",
+    SerdeErrorCode.FORY_CONCURRENCY_LIMIT: "Fory adapter concurrency limit reached",
 }
 
 
@@ -107,6 +119,34 @@ class TrustProfileMismatchError(SerdeError):
         super().__init__(code=SerdeErrorCode.TRUST_PROFILE_MISMATCH)
 
 
+class SchemaMismatchError(SerdeError):
+    """Report a Fory schema registration mismatch."""
+
+    def __init__(self) -> None:
+        super().__init__(code=SerdeErrorCode.SCHEMA_MISMATCH)
+
+
+class TypeMismatchError(SerdeError):
+    """Report a Fory type registration mismatch."""
+
+    def __init__(self) -> None:
+        super().__init__(code=SerdeErrorCode.TYPE_MISMATCH)
+
+
+class ForyRegistrationError(SerdeError):
+    """Report a Fory registration failure."""
+
+    def __init__(self) -> None:
+        super().__init__(code=SerdeErrorCode.FORY_REGISTRATION)
+
+
+class ForyConcurrencyError(SerdeError):
+    """Report exhaustion of the Fory adapter concurrency bound."""
+
+    def __init__(self) -> None:
+        super().__init__(code=SerdeErrorCode.FORY_CONCURRENCY_LIMIT)
+
+
 class _RestrictedSerdeError(SerdeError):
     allowed_codes: ClassVar[frozenset[SerdeErrorCode]]
 
@@ -140,6 +180,7 @@ class MalformedPayloadError(_RestrictedSerdeError):
             SerdeErrorCode.DUPLICATE_KEY,
             SerdeErrorCode.DECODE_NON_FINITE_NUMBER,
             SerdeErrorCode.INVALID_JSON,
+            SerdeErrorCode.INVALID_FORY,
         }
     )
 
@@ -153,6 +194,7 @@ class SerdeEncodeError(_RestrictedSerdeError):
             SerdeErrorCode.CIRCULAR_REFERENCE,
             SerdeErrorCode.ENCODE_NON_FINITE_NUMBER,
             SerdeErrorCode.ENCODE_RECURSION,
+            SerdeErrorCode.FORY_ENCODE,
         }
     )
 

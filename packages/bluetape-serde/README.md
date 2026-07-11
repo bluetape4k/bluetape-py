@@ -1,6 +1,7 @@
 # bluetape-serde
 
-Strict, bounded payload contracts and JSON serialization for Python 3.13+.
+Strict, bounded payload contracts, JSON serialization, and an optional Apache
+Fory cross-language adapter for Python 3.13+.
 
 `bluetape-serde` is implemented in the source workspace. PyPI publication is
 still on hold, so use the source-workspace or local-wheel commands below today.
@@ -14,6 +15,8 @@ Runnable now from the repository root:
 ```bash
 uv sync --all-packages
 uv run --package bluetape-serde python -c "import bluetape.serde"
+uv sync --all-packages --extra fory --python 3.13.14 --locked
+uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
 uv build --package bluetape-serde
 ```
 
@@ -34,12 +37,35 @@ PyPI commands such as these are intentionally unavailable today:
 ```bash
 pip install bluetape-serde
 pip install "bluetape[serde]"
+pip install "bluetape-serde[fory]"
+pip install "bluetape[fory]"
 ```
 
 The default `bluetape` meta distribution remains core-only. Serde is an
-explicit extra or focused distribution; Apache Fory is not included. Fory is a
-separate follow-up tracked by
-[#46](https://github.com/bluetape4k/bluetape-py/issues/46).
+explicit extra or focused distribution. Apache Fory is available only through
+the explicit `fory` extra and currently requires CPython 3.13; it is excluded
+from the base, `serde`, `dev`, and `all` extras.
+
+| Install target | Includes serde | Includes Apache Fory |
+|---|---:|---:|
+| `bluetape` | no | no |
+| `bluetape[serde]` | yes | no |
+| `bluetape[dev]` | yes | no |
+| `bluetape[all]` | yes | no |
+| `bluetape[fory]` | yes | yes |
+| `bluetape-serde[fory]` | yes | yes |
+
+For a local Fory wheel installation on CPython 3.13:
+
+```bash
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+uv build --package bluetape-serde --out-dir "$tmp_dir/dist"
+wheel_path="$(find "$tmp_dir/dist" -name 'bluetape_serde-*.whl' -print -quit)"
+uv venv --python 3.13.14 "$tmp_dir/venv"
+uv pip install --python "$tmp_dir/venv/bin/python" "${wheel_path}[fory]"
+"$tmp_dir/venv/bin/python" -c 'import bluetape.serde.fory'
+```
 
 ## Public API
 
@@ -53,16 +79,19 @@ Import the public surface from `bluetape.serde`:
   `MAX_JSON_INTEGER_DIGITS`;
 - failures: `SerdeError`, `InvalidMetadataError`, `FormatMismatchError`,
   `ContentTypeMismatchError`, `UnsupportedVersionError`,
-  `TrustProfileMismatchError`, `PayloadLimitError`, `MalformedPayloadError`,
-  `SerdeEncodeError`, and `SerdeErrorCode`.
+  `TrustProfileMismatchError`, `SchemaMismatchError`, `TypeMismatchError`,
+  `ForyRegistrationError`, `ForyConcurrencyError`, `PayloadLimitError`,
+  `MalformedPayloadError`, `SerdeEncodeError`, and `SerdeErrorCode`.
 
-The ordered public surface contains 21 exports and `SerdeErrorCode` contains
-17 fixed codes.
+The ordered root public surface contains 25 exports and `SerdeErrorCode`
+contains 23 fixed codes. The provider-dependent `bluetape.serde.fory` module
+exports `ForyAdapter`, `ForyLimits`, `ForyRegistration`, and its three wire
+constants only when the `fory` extra is installed.
 
 `PayloadMetadata` and `SerializedPayload` are frozen, slotted, keyword-only
 dataclasses. `SerializedPayload.data` accepts exact immutable `bytes`.
 
-The only implemented wire contract is strict JSON v1:
+The base wire contract is strict JSON v1:
 
 | Field | Required value |
 |---|---|
@@ -70,6 +99,82 @@ The only implemented wire contract is strict JSON v1:
 | `version` | `1` |
 | `content_type` | `"application/json"` |
 | `trust_profile` | Caller-selected `TrustProfile.UNTRUSTED` or `TrustProfile.TRUSTED_INTERNAL` |
+
+## Apache Fory
+
+Fory is for authenticated, authorized internal routes only. The application
+owns the immutable `(schema_id, schema_version, type_id)` identity and maps it
+to one exact registered root type. Never select an adapter, registration,
+fallback, class, or schema from payload content. Nested application classes are
+not supported; use scalar fields and containers with one registered root.
+
+```python
+from dataclasses import dataclass
+
+import pyfory
+
+from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+from bluetape.serde.fory import (
+    FORY_CONTENT_TYPE,
+    FORY_FORMAT,
+    FORY_VERSION,
+    ForyAdapter,
+    ForyRegistration,
+)
+
+
+@dataclass(slots=True)
+class OrderAccepted:
+    order_id: pyfory.Int64
+    status: str
+
+
+registration = ForyRegistration(
+    python_type=OrderAccepted,
+    schema_id=0x42544659,
+    schema_version=1,
+    type_id=1001,
+    logical_name="io.bluetape.orders.OrderAccepted",
+)
+adapter = ForyAdapter(registration=registration)
+
+# Producer metadata comes from authenticated route configuration.
+producer_metadata = PayloadMetadata(
+    format=FORY_FORMAT,
+    version=FORY_VERSION,
+    content_type=FORY_CONTENT_TYPE,
+    trust_profile=TrustProfile.TRUSTED_INTERNAL,
+)
+wire = adapter.serialize(
+    OrderAccepted(order_id=pyfory.Int64(42), status="accepted"),
+    metadata=producer_metadata,
+)
+
+# The consumer reconstructs transport data but owns expected metadata and the
+# registration independently. Do not copy policy or routing from the payload.
+received = SerializedPayload(metadata=wire.metadata, data=wire.data)
+consumer_policy = PayloadMetadata(
+    format=FORY_FORMAT,
+    version=FORY_VERSION,
+    content_type=FORY_CONTENT_TYPE,
+    trust_profile=TrustProfile.TRUSTED_INTERNAL,
+)
+decoded = adapter.deserialize(received, expected_metadata=consumer_policy)
+assert decoded == OrderAccepted(order_id=pyfory.Int64(42), status="accepted")
+```
+
+The adapter validates metadata, the fixed envelope, schema identity, type
+identity, body length, and exact body consumption before returning the root.
+It uses a bounded runtime pool and never dynamically imports payload-selected
+types. `ForyLimits` are acceptance and concurrency bounds, not CPU, RSS, or
+wall-clock ceilings. Run the adapter in a separately constrained process when
+hard resource containment is required.
+
+If `pyfory` is absent, importing `bluetape.serde.fory` raises the fixed direct
+message `Install bluetape-serde[fory] with CPython 3.13 to use Apache Fory.`
+If installation succeeds but import still fails, preserve the original
+transitive dependency, ABI, or provider-initialization exception; do not
+misreport it as a missing extra.
 
 ## Caller-Owned Policy
 
@@ -217,9 +322,13 @@ mistakes remain native `TypeError` or `ValueError`; they are not wrapped as
 | `ContentTypeMismatchError` | `CONTENT_TYPE_MISMATCH` |
 | `UnsupportedVersionError` | `UNSUPPORTED_VERSION` |
 | `TrustProfileMismatchError` | `TRUST_PROFILE_MISMATCH` |
+| `SchemaMismatchError` | `SCHEMA_MISMATCH` |
+| `TypeMismatchError` | `TYPE_MISMATCH` |
+| `ForyRegistrationError` | `FORY_REGISTRATION` |
+| `ForyConcurrencyError` | `FORY_CONCURRENCY_LIMIT` |
 | `PayloadLimitError` | `INPUT_LIMIT`, `OUTPUT_LIMIT`, `NESTING_LIMIT`, `INTEGER_DIGIT_LIMIT` |
-| `MalformedPayloadError` | `INVALID_UTF8`, `DUPLICATE_KEY`, `DECODE_NON_FINITE_NUMBER`, `INVALID_JSON` |
-| `SerdeEncodeError` | `UNSUPPORTED_VALUE`, `CIRCULAR_REFERENCE`, `ENCODE_NON_FINITE_NUMBER`, `ENCODE_RECURSION` |
+| `MalformedPayloadError` | `INVALID_UTF8`, `DUPLICATE_KEY`, `DECODE_NON_FINITE_NUMBER`, `INVALID_JSON`, `INVALID_FORY` |
+| `SerdeEncodeError` | `UNSUPPORTED_VALUE`, `CIRCULAR_REFERENCE`, `ENCODE_NON_FINITE_NUMBER`, `ENCODE_RECURSION`, `FORY_ENCODE` |
 
 Metadata mismatches are typed and never fall through to parsing:
 
@@ -348,10 +457,24 @@ version is a hard rejection. If an older format must remain readable, configure
 that older reader explicitly outside this package and route to it by the
 versioned boundary; `bluetape-serde` never performs implicit fallback.
 
+For Fory, allocate a fixed route to each
+`(schema_id, schema_version, type_id)` tuple. A schema change creates a new
+tuple and route after compatibility review: deploy readers first, run dual
+readers, switch the writer, then retain the old reader until drain evidence is
+complete. Predeclare the canary window and error/latency thresholds. A breach
+stops Fory writes; the old codec remains on its separate route and is never an
+automatic payload fallback.
+
+Telemetry must stay low-cardinality. Allowed fields are operation, stable
+error code, envelope byte count, success/failure, latency, and a fixed route
+identifier. Never record payload bytes, decoded values, provider exception
+text, tracebacks, caller-controlled names, or other high-cardinality content.
+
 ## Non-Goals
 
 - payload-selected policy, schema, code, class, or dynamic loading;
 - implicit format detection, version fallback, or legacy-reader dispatch;
 - object graph, pickle, stream/file, encryption, compression, or transport APIs;
 - a hard process-memory guarantee from byte limits alone;
-- Apache Fory in the JSON v1 scope. Fory remains the separate #46 follow-up.
+- untrusted or internet-facing Fory decoding, dynamic registration, or
+  payload-selected codec fallback.

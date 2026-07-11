@@ -1,0 +1,39 @@
+{
+  "application_type_id": 1001,
+  "expected": {
+    "active": true,
+    "name": "blue",
+    "record_id": 7,
+    "scores": [
+      1,
+      2,
+      3
+    ]
+  },
+  "fields": [
+    {
+      "id": 1,
+      "name": "record_id",
+      "type": "int64-varint"
+    },
+    {
+      "id": 2,
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "id": 3,
+      "name": "active",
+      "type": "bool"
+    },
+    {
+      "id": 4,
+      "name": "scores",
+      "type": "list<int32-varint>"
+    }
+  ],
+  "fory_type_id": 1001,
+  "logical_name": "io.bluetape.serde.ConformanceRecord",
+  "schema_id": 1112819289,
+  "schema_version": 1
+}

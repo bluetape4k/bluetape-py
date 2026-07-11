@@ -13,6 +13,7 @@ collections = ["bluetape-collections==0.1.0"]
 compression = ["bluetape-compression==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
 serde = ["bluetape-serde==0.1.0"]
+fory = ["bluetape-serde[fory]==0.1.0"]
 testing = ["bluetape-testing==0.1.0"]
 dev = [
     "bluetape-async==0.1.0",

@@ -37,12 +37,21 @@ document cooperative ownership, cancellation, timeout, and cleanup behavior.
 Compression packages must document wire formats, output bounds,
 malformed-input errors, and optional-backend availability.
 
-`bluetape-serde` is stdlib-only for its current strict JSON v1 contract. Its
-public surface is imported from `bluetape.serde` and is fixed at 21 ordered
-exports plus 17 stable `SerdeErrorCode` values for this slice. JSON integers
-are limited to 640 decimal digits on encode and decode. The Apache Fory adapter and a
-future `fory` extra remain separate follow-up work in issue #46; they must not
-leak into the default meta distribution or become an implicit decoder fallback.
+`bluetape-serde` is stdlib-only for its strict JSON v1 contract. Its root public
+surface is imported from `bluetape.serde` and is fixed at 25 ordered exports
+plus 23 stable `SerdeErrorCode` values. JSON integers are limited to 640 decimal
+digits on encode and decode. The Apache Fory adapter lives in the
+provider-dependent `bluetape.serde.fory` module and is available only through
+the CPython 3.13 `bluetape-serde[fory]` or forwarding `bluetape[fory]` extra.
+It must not leak into the base, `serde`, `dev`, or `all` dependency sets or
+become an implicit decoder fallback.
+
+Applications own Fory route identity as a fixed
+`(schema_id, schema_version, type_id)` tuple mapped to one exact registered root
+type. Schema changes require a new tuple and versioned route, reader-first
+deployment, explicit compatibility review, and drain evidence before retiring
+the old reader. Fory is trusted-internal only; hard CPU/RSS containment belongs
+to a separate constrained process rather than byte limits alone.
 
 ## Future Packages
 
