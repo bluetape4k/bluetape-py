@@ -56,7 +56,7 @@ only `bluetape-core` by default.
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | Redis-backed adapters once cache contracts are proven. |
-| `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | Testcontainers fixtures for integration-heavy packages. |
+| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8 test server lifecycle and connection details. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
 
 ## Design Position
@@ -70,7 +70,7 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Cache and serde are opt-in;
+- The default meta install remains core-only. Cache, serde, and Testcontainers are opt-in;
   Apache Fory is trusted-internal only and available solely through the
   explicit `fory` extra.
 
@@ -92,6 +92,7 @@ pip install "bluetape[logging]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 only
 pip install "bluetape[testing]"
+pip install "bluetape[testcontainers]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
 ```
@@ -109,6 +110,7 @@ pip install bluetape-logging
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 only
 pip install bluetape-testing
+pip install bluetape-testcontainers
 ```
 
 For local development from this repository:
@@ -119,7 +121,12 @@ uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCa
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
+uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 ```
+
+Redis provider and load-coordination tests planned in #54 and #55 consume
+`RedisServer` from this ecosystem wrapper. Those production features remain
+separate follow-up work.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:
@@ -367,6 +374,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
+| `bluetape-testcontainers` | [packages/bluetape-testcontainers/README.md](packages/bluetape-testcontainers/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |
 
 ## Roadmap

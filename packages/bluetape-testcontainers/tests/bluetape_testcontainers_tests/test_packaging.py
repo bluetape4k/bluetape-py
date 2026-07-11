@@ -35,3 +35,16 @@ def test_production_packages_remain_testcontainers_free() -> None:
         project = load_project(ROOT / f"packages/{package}/pyproject.toml")
         dependencies = project["dependencies"]
         assert all("testcontainers" not in dependency for dependency in dependencies)
+
+
+def test_meta_default_does_not_forward_testcontainers() -> None:
+    project = load_project(ROOT / "packages/bluetape/pyproject.toml")
+
+    assert project["dependencies"] == ["bluetape-core==0.1.0"]
+    assert "bluetape-testcontainers" not in project["dependencies"]
+
+
+def test_wrapper_does_not_depend_on_redis_py() -> None:
+    project = load_project(ROOT / "packages/bluetape-testcontainers/pyproject.toml")
+
+    assert all(not dependency.startswith("redis") for dependency in project["dependencies"])

@@ -33,6 +33,10 @@ focused distribution model:
   #46. PyPI publication remains on HOLD.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
+- `bluetape-testcontainers`: ecosystem-owned Redis 8 test server wrapper,
+  implemented for issue #57 with explicit lifecycle, bounded readiness,
+  dynamic connection details, and serial Docker verification. PyPI publication
+  remains on HOLD.
 
 ## Current State
 
@@ -54,8 +58,8 @@ focused distribution model:
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
   on HOLD.
 - Issue #11 remains the cache/Redis umbrella. Issue #50 local caches are
-  implemented by `feat/issue-50-local-cache`; issue #51 Redis coordination is
-  pending.
+  complete. Issue #57 is the implemented Testcontainers prerequisite; #54
+  Redis provider integration and #55 Redis load coordination remain pending.
 
 ## `0.1.0` Scope
 
@@ -139,7 +143,9 @@ Historical release scope; all items are closed.
   `bluetape-cache` on `feat/issue-50-local-cache`; PR review and merge are
   pending.
 - #51 - Redis cache coordination and provider boundary. Pending after the
-  local cache contract is merged.
+  local cache contract; split into #54, #55, #56, and prerequisite #57.
+- #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented and
+  verified on `feat/issue-57-testcontainers-redis`; #54 and #55 remain pending.
 - #12 - Resilience policies.
 - #13 - ID, measure, and money value packages.
 - #14 - SQL, repository, and audit outbox strategy research.

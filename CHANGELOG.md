@@ -9,6 +9,9 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in `bluetape-testcontainers` Redis 8 wrapper with explicit
+  lifecycle, bounded readiness, dynamic connection details, and serial Docker
+  CI coverage.
 - `bluetape-async` source workspace package with bounded structured-concurrency
   helpers under `bluetape.asyncio`, including ordered `map_bounded` execution.
 - `bluetape-collections` source workspace package with eager stdlib-only

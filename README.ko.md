@@ -55,7 +55,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, Redis �
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | cache 계약을 검증한 뒤 추가할 Redis 어댑터. |
-| `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | 통합 테스트가 많은 패키지를 위한 Testcontainers fixture. |
+| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8 테스트 서버 수명주기와 연결 정보. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
 
 ## 설계 방향
@@ -69,7 +69,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, Redis �
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
-- 기본 meta 설치는 계속 core-only입니다. Cache와 serde는 opt-in이며 Apache
+- 기본 meta 설치는 계속 core-only입니다. Cache, serde, Testcontainers는 opt-in이며 Apache
   Fory는 trusted-internal 전용 `fory` extra로만 제공합니다.
 
 ## 설치
@@ -90,6 +90,7 @@ pip install "bluetape[logging]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 전용
 pip install "bluetape[testing]"
+pip install "bluetape[testcontainers]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
 ```
@@ -107,6 +108,7 @@ pip install bluetape-logging
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 전용
 pip install bluetape-testing
+pip install bluetape-testcontainers
 ```
 
 저장소에서 로컬 개발 환경을 만들 때는 다음 명령을 사용합니다.
@@ -117,7 +119,11 @@ uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCa
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
+uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 ```
+
+#54 Redis provider 테스트와 #55 load coordination 테스트는 이 생태계 래퍼의
+`RedisServer`를 사용합니다. 두 production 기능은 별도 후속 작업으로 남아 있습니다.
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
 실행할 수 있습니다.
@@ -364,6 +370,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
+| `bluetape-testcontainers` | [packages/bluetape-testcontainers/README.ko.md](packages/bluetape-testcontainers/README.ko.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |
 
 ## 로드맵
