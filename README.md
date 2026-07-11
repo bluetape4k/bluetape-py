@@ -223,13 +223,31 @@ input iterable can grow and the caller must set a cooperative concurrency cap.
 from bluetape.cache import TTLCache
 
 cache = TTLCache[str, object](default_ttl=30, max_size=100, max_inflight=8)
+calls: list[str] = []
+
+
+def load_order(key: str) -> object:
+    calls.append(key)
+    return {"key": key}
+
+
 order = cache.get_or_load(
     "tenant-blue:42",
-    lambda key: {"key": key},
+    load_order,
     ttl=5,
 )
 assert cache.get("tenant-blue:42") is order
+assert cache.get_or_load("tenant-blue:42", load_order) is order
+assert calls == ["tenant-blue:42"]
+cache.set("none", None)
+assert cache.get("none") is None
 assert cache.invalidate("tenant-blue:42") is True
+assert cache.invalidate("tenant-blue:42") is False
+try:
+    cache.get("tenant-blue:42")
+except KeyError as error:
+    assert error.args == ("tenant-blue:42",)
+assert len(cache) == 1
 ```
 
 ```python
@@ -245,12 +263,25 @@ async def cache_example() -> None:
         max_inflight=8,
     )
 
+    calls: list[str] = []
+
     async def load_order(key: str) -> object:
+        calls.append(key)
         return {"key": key}
 
     order = await cache.get_or_load("tenant-blue:42", load_order, ttl=5)
     assert await cache.get("tenant-blue:42") is order
+    assert await cache.get_or_load("tenant-blue:42", load_order) is order
+    assert calls == ["tenant-blue:42"]
+    await cache.set("none", None)
+    assert await cache.get("none") is None
     assert await cache.invalidate("tenant-blue:42") is True
+    assert await cache.invalidate("tenant-blue:42") is False
+    try:
+        await cache.get("tenant-blue:42")
+    except KeyError as error:
+        assert error.args == ("tenant-blue:42",)
+    assert await cache.size() == 1
 
 
 asyncio.run(cache_example())
