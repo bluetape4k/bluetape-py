@@ -101,6 +101,9 @@ class _CacheState[K: Hashable, V]:
         self.key_versions[key] = version
         return version
 
+    def version(self, key: K) -> int:
+        return self.key_versions.get(key, 0)
+
     def drop_unused_version(self, key: K, *, owned_keys: Set[K]) -> None:
         if key not in self.entries and key not in owned_keys:
             self.key_versions.pop(key, None)
@@ -185,7 +188,15 @@ class _CacheState[K: Hashable, V]:
         self.purge_expired(now, owned_keys=owned_keys)
         return len(self.entries)
 
-    def stats(self, *, now: int, owned_keys: Set[K], inflight_loads: int) -> CacheStats:
+    def stats(
+        self,
+        *,
+        now: int,
+        owned_keys: Set[K],
+        inflight_loads: int,
+        abandoned_loads: int = 0,
+        superseded_loads: int = 0,
+    ) -> CacheStats:
         self.purge_expired(now, owned_keys=owned_keys)
         return CacheStats(
             hits=self.hits,
@@ -198,6 +209,6 @@ class _CacheState[K: Hashable, V]:
             expirations=self.expirations,
             invalidations=self.invalidations,
             inflight_loads=inflight_loads,
-            abandoned_loads=self.abandoned_loads,
-            superseded_loads=self.superseded_loads,
+            abandoned_loads=abandoned_loads,
+            superseded_loads=superseded_loads,
         )
