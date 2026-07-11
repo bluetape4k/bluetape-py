@@ -19,6 +19,7 @@ from docker.errors import DockerException, ImageNotFound
 from ._support import ContainerFactory, FakeContainer
 
 REAL_PULL_IMAGE = redis_module._pull_image
+REAL_START_WITHOUT_REAPER = redis_module._start_without_reaper
 
 
 @pytest.fixture(autouse=True)
@@ -28,9 +29,17 @@ def avoid_real_image_pull(monkeypatch: pytest.MonkeyPatch) -> None:
         "_pull_image",
         lambda container, image, startup_timeout: None,
     )
+    monkeypatch.setattr(
+        redis_module,
+        "_start_without_reaper",
+        lambda container: container.start(),
+    )
 
 
-@pytest.mark.parametrize("image", ["", " ", "redis", "redis:latest", "registry/redis:latest"])
+@pytest.mark.parametrize(
+    "image",
+    ["", " ", "redis", "redis:", "redis@sha256:", "redis:latest", "registry/redis:latest"],
+)
 def test_rejects_unpinned_or_blank_image(image: str) -> None:
     with pytest.raises(ValueError):
         RedisServer(image=image)
@@ -80,6 +89,7 @@ def test_container_factory_applies_redis_runtime_contract(
     strategy.with_startup_timeout.return_value = strategy
     wait_strategy = Mock(return_value=strategy)
     container = Mock()
+    container.with_kwargs.return_value = container
     container.with_exposed_ports.return_value = container
     container.waiting_for.return_value = container
     docker_container = Mock(return_value=container)
@@ -95,8 +105,49 @@ def test_container_factory_applies_redis_runtime_contract(
         "redis:8",
         docker_client_kw={"timeout": 7.0},
     )
+    container.with_kwargs.assert_called_once_with(
+        labels={"com.bluetape.testcontainers.redis": "true"}
+    )
     container.with_exposed_ports.assert_called_once_with(6379)
     container.waiting_for.assert_called_once_with(strategy)
+
+
+def test_container_start_skips_ryuk_and_provider_auto_pull() -> None:
+    created = Mock()
+    containers = Mock()
+    containers.create.return_value = created
+    docker_client = SimpleNamespace(client=SimpleNamespace(containers=containers))
+    wait_strategy = Mock()
+    container = SimpleNamespace(
+        image="redis:8",
+        env={},
+        ports={6379: None},
+        volumes={},
+        _command=None,
+        _name=None,
+        _kwargs={"labels": {"com.bluetape.testcontainers.redis": "true"}},
+        _container=None,
+        _wait_strategy=wait_strategy,
+        _configure=Mock(),
+        get_docker_client=Mock(return_value=docker_client),
+    )
+
+    started = REAL_START_WITHOUT_REAPER(container)
+
+    assert started is container
+    container._configure.assert_called_once_with()
+    containers.create.assert_called_once_with(
+        "redis:8",
+        command=None,
+        environment={},
+        ports={6379: None},
+        name=None,
+        volumes={},
+        labels={"com.bluetape.testcontainers.redis": "true"},
+    )
+    created.start.assert_called_once_with()
+    wait_strategy.wait_until_ready.assert_called_once_with(container)
+    assert container._container is created
 
 
 def test_start_is_idempotent_and_details_are_stable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,12 +244,29 @@ def test_context_body_exception_is_not_masked_by_cleanup_failure(
 ) -> None:
     container = FakeContainer(stop_error=RuntimeError("cleanup secret-marker"))
     monkeypatch.setattr(redis_module, "_new_container", ContainerFactory(container))
+    server = RedisServer()
 
     with pytest.raises(ValueError, match="body failure") as raised:
-        with RedisServer():
+        with server:
             raise ValueError("body failure")
 
-    assert any("cleanup also failed" in note for note in raised.value.__notes__)
+    assert any("call close() to retry" in note for note in raised.value.__notes__)
+    container.stop_error = None
+    server.close()
+    assert container.stops == 2
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("127.0.0.1", "redis://127.0.0.1:46379"),
+        ("docker.internal", "redis://docker.internal:46379"),
+        ("::1", "redis://[::1]:46379"),
+        ("[::1]", "redis://[::1]:46379"),
+    ],
+)
+def test_connection_url_formats_ipv4_hostname_and_ipv6(host: str, expected: str) -> None:
+    assert redis_module._connection_url(host, 46379) == expected
 
 
 def test_explicit_close_failure_is_typed_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
