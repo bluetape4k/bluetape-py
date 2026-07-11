@@ -28,6 +28,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "bluetape-async" },
+    { name = "bluetape-cache" },
     { name = "bluetape-codec" },
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
@@ -37,6 +38,9 @@ all = [
 ]
 asyncio = [
     { name = "bluetape-async" },
+]
+cache = [
+    { name = "bluetape-cache" },
 ]
 codec = [
     { name = "bluetape-codec" },
@@ -49,6 +53,7 @@ compression = [
 ]
 dev = [
     { name = "bluetape-async" },
+    { name = "bluetape-cache" },
     { name = "bluetape-codec" },
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
@@ -74,6 +79,9 @@ requires-dist = [
     { name = "bluetape-async", marker = "extra == 'all'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'asyncio'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'dev'", editable = "packages/bluetape-async" },
+    { name = "bluetape-cache", marker = "extra == 'all'", editable = "packages/bluetape-cache" },
+    { name = "bluetape-cache", marker = "extra == 'cache'", editable = "packages/bluetape-cache" },
+    { name = "bluetape-cache", marker = "extra == 'dev'", editable = "packages/bluetape-cache" },
     { name = "bluetape-codec", marker = "extra == 'all'", editable = "packages/bluetape-codec" },
     { name = "bluetape-codec", marker = "extra == 'codec'", editable = "packages/bluetape-codec" },
     { name = "bluetape-codec", marker = "extra == 'dev'", editable = "packages/bluetape-codec" },
@@ -95,7 +103,7 @@ requires-dist = [
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "codec", "collections", "compression", "logging", "serde", "fory", "testing", "dev", "all"]
+provides-extras = ["asyncio", "cache", "codec", "collections", "compression", "logging", "serde", "fory", "testing", "dev", "all"]
 
 [[package]]
 name = "bluetape-async"
