@@ -4,11 +4,31 @@ from __future__ import annotations
 
 import math
 import re
+import struct
+import threading
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Any
+
+from ._contracts import (
+    ContentTypeMismatchError,
+    FormatMismatchError,
+    ForyConcurrencyError,
+    ForyRegistrationError,
+    PayloadLimitError,
+    PayloadMetadata,
+    SerdeEncodeError,
+    SerdeErrorCode,
+    SerializedPayload,
+    TrustProfile,
+    TrustProfileMismatchError,
+    TypeMismatchError,
+    UnsupportedVersionError,
+)
 
 _missing_provider = False
 try:
-    import pyfory as _pyfory  # noqa: F401 - provider use begins with ForyAdapter
+    import pyfory as _pyfory
 except ModuleNotFoundError as error:
     if error.name != "pyfory":
         raise
@@ -29,11 +49,18 @@ __all__ = [
     "FORY_CONTENT_TYPE",
     "FORY_FORMAT",
     "FORY_VERSION",
+    "ForyAdapter",
     "ForyLimits",
     "ForyRegistration",
 ]
 
 _LOGICAL_NAME = re.compile(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", re.ASCII)
+_ENVELOPE = struct.Struct(">4sBBIHII")
+_FATAL_EXCEPTIONS = (MemoryError, KeyboardInterrupt, SystemExit)
+
+
+class _ForyRegistrationFailureError(Exception):
+    pass
 
 
 def _require_exact_int(name: str, value: object, minimum: int, maximum: int) -> None:
@@ -116,3 +143,153 @@ class ForyLimits:
             raise TypeError("reference_tracking must be an exact bool")
         if self.reference_tracking:
             raise ValueError("reference_tracking must be False")
+
+
+_ErrorSpec = tuple[type[Exception], SerdeErrorCode | str | None]
+
+
+def _new_error(spec: _ErrorSpec) -> Exception:
+    error_type, detail = spec
+    if error_type is TypeError:
+        return TypeError(detail)
+    if error_type in {PayloadLimitError, SerdeEncodeError}:
+        return error_type(code=detail)
+    return error_type()
+
+
+def _metadata_error(metadata: object) -> _ErrorSpec | None:
+    if type(metadata) is not PayloadMetadata:
+        return (TypeError, "metadata must be an exact PayloadMetadata")
+    if metadata.format != FORY_FORMAT:
+        return (FormatMismatchError, None)
+    if metadata.version != FORY_VERSION:
+        return (UnsupportedVersionError, None)
+    if metadata.content_type != FORY_CONTENT_TYPE:
+        return (ContentTypeMismatchError, None)
+    if metadata.trust_profile is not TrustProfile.TRUSTED_INTERNAL:
+        return (TrustProfileMismatchError, None)
+    return None
+
+
+class ForyAdapter[T]:
+    """Serialize one statically registered root type with bounded Fory runtimes."""
+
+    __slots__ = (
+        "_pool",
+        "_provider_config",
+        "_semaphore",
+        "limits",
+        "registration",
+    )
+
+    def __init__(
+        self,
+        *,
+        registration: ForyRegistration[T],
+        limits: ForyLimits | None = None,
+    ) -> None:
+        if type(registration) is not ForyRegistration:
+            raise TypeError("registration must be an exact ForyRegistration")
+        if limits is not None and type(limits) is not ForyLimits:
+            raise TypeError("limits must be an exact ForyLimits or None")
+        self.registration = registration
+        self.limits = limits or ForyLimits()
+        self._provider_config = MappingProxyType(
+            {
+                "xlang": True,
+                "strict": True,
+                "ref": False,
+                "compatible": False,
+                "max_depth": self.limits.max_depth,
+                "max_type_fields": self.limits.max_type_fields,
+                "max_type_meta_bytes": self.limits.max_type_meta_bytes,
+                "max_schema_versions_per_type": self.limits.max_schema_versions_per_type,
+                "max_average_schema_versions_per_type": (
+                    self.limits.max_average_schema_versions_per_type
+                ),
+            }
+        )
+        self._semaphore = threading.BoundedSemaphore(self.limits.max_concurrency)
+
+        registration_failed = False
+        try:
+            self._new_runtime()
+        except _ForyRegistrationFailureError:
+            registration_failed = True
+        if registration_failed:
+            raise ForyRegistrationError
+
+        self._pool = _pyfory.ThreadSafeFory(fory_factory=self._new_runtime)
+
+    def _new_runtime(self) -> Any:
+        runtime = _pyfory.Fory(**self._provider_config)
+        registration_failed = False
+        try:
+            runtime.register(
+                self.registration.python_type,
+                type_id=self.registration.type_id,
+            )
+        except _FATAL_EXCEPTIONS:
+            raise
+        except Exception:
+            registration_failed = True
+        if registration_failed:
+            raise _ForyRegistrationFailureError
+        return runtime
+
+    def serialize(
+        self,
+        value: T,
+        *,
+        metadata: PayloadMetadata,
+    ) -> SerializedPayload:
+        """Serialize an exact registered root under trusted caller metadata."""
+        payload, error_spec = self._try_serialize(value, metadata)
+        del value, metadata
+        if error_spec is not None:
+            raise _new_error(error_spec)
+        if payload is None:  # pragma: no cover - internal completeness invariant
+            raise RuntimeError("Fory serialization produced no result")
+        return payload
+
+    def _try_serialize(
+        self,
+        value: T,
+        metadata: PayloadMetadata,
+    ) -> tuple[SerializedPayload | None, _ErrorSpec | None]:
+        error_spec = _metadata_error(metadata)
+        if error_spec is not None:
+            return None, error_spec
+        if type(value) is not self.registration.python_type:
+            return None, (TypeMismatchError, None)
+        if not self._semaphore.acquire(timeout=self.limits.acquire_timeout_seconds):
+            return None, (ForyConcurrencyError, None)
+
+        body: bytes | None = None
+        try:
+            try:
+                provider_body = self._pool.serialize(value)
+            except _FATAL_EXCEPTIONS:
+                raise
+            except _ForyRegistrationFailureError:
+                return None, (ForyRegistrationError, None)
+            except Exception:
+                return None, (SerdeEncodeError, SerdeErrorCode.FORY_ENCODE)
+            if type(provider_body) is not bytes:
+                return None, (SerdeEncodeError, SerdeErrorCode.FORY_ENCODE)
+            body = provider_body
+            if _ENVELOPE.size + len(body) > self.limits.max_output_size:
+                return None, (PayloadLimitError, SerdeErrorCode.OUTPUT_LIMIT)
+            header = _ENVELOPE.pack(
+                b"BTFY",
+                FORY_VERSION,
+                0,
+                self.registration.schema_id,
+                self.registration.schema_version,
+                self.registration.type_id,
+                len(body),
+            )
+            return SerializedPayload(metadata=metadata, data=header + body), None
+        finally:
+            body = None
+            self._semaphore.release()

@@ -1,22 +1,47 @@
 import importlib.util
 import math
+import struct
 import sys
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import bluetape.serde.fory as fory_module
+import pyfory
 import pytest
+from bluetape.serde import (
+    ContentTypeMismatchError,
+    FormatMismatchError,
+    ForyRegistrationError,
+    PayloadLimitError,
+    PayloadMetadata,
+    SerdeEncodeError,
+    SerdeErrorCode,
+    TrustProfile,
+    TrustProfileMismatchError,
+    TypeMismatchError,
+    UnsupportedVersionError,
+)
 from bluetape.serde.fory import (
     FORY_CONTENT_TYPE,
     FORY_FORMAT,
     FORY_VERSION,
+    ForyAdapter,
     ForyLimits,
     ForyRegistration,
 )
 
 
+@dataclass(slots=True)
 class ConformanceRecord:
+    record_id: pyfory.Int64
+    name: str
+    active: bool
+    scores: list[pyfory.Int32]
+
+
+class ConformanceRecordChild(ConformanceRecord):
     pass
 
 
@@ -30,6 +55,26 @@ def registration(**overrides: Any) -> ForyRegistration[ConformanceRecord]:
     }
     values.update(overrides)
     return ForyRegistration(**values)
+
+
+def trusted_metadata(**overrides: Any) -> PayloadMetadata:
+    values: dict[str, Any] = {
+        "format": FORY_FORMAT,
+        "version": FORY_VERSION,
+        "content_type": FORY_CONTENT_TYPE,
+        "trust_profile": TrustProfile.TRUSTED_INTERNAL,
+    }
+    values.update(overrides)
+    return PayloadMetadata(**values)
+
+
+def record() -> ConformanceRecord:
+    return ConformanceRecord(
+        record_id=pyfory.Int64(7),
+        name="Ada",
+        active=True,
+        scores=[pyfory.Int32(10), pyfory.Int32(20)],
+    )
 
 
 def test_fory_public_constants_and_values_are_exact_and_immutable() -> None:
@@ -293,3 +338,256 @@ def test_non_direct_provider_import_failures_propagate_unchanged(
 
     assert caught.value is provider_error
     assert "Install bluetape-serde[fory]" not in str(caught.value)
+
+
+class _SpyRuntime:
+    def __init__(self, registrations: list[tuple[type[object], int]], *, fail: bool = False):
+        self._registrations = registrations
+        self._fail = fail
+
+    def register(self, python_type: type[object], *, type_id: int) -> None:
+        self._registrations.append((python_type, type_id))
+        if self._fail:
+            raise ValueError("secret provider registration failure")
+
+
+class _SpyPool:
+    def __init__(self, *, fory_factory: Any):
+        self.fory_factory = fory_factory
+        self.serialize_calls = 0
+
+    def serialize(self, value: object) -> bytes:
+        self.serialize_calls += 1
+        return b"body"
+
+
+def test_fory_adapter_constructs_probe_and_pool_with_fixed_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configs: list[dict[str, object]] = []
+    registrations: list[tuple[type[object], int]] = []
+    pools: list[_SpyPool] = []
+
+    def new_runtime(**kwargs: object) -> _SpyRuntime:
+        configs.append(kwargs)
+        return _SpyRuntime(registrations)
+
+    def new_pool(*, fory_factory: Any) -> _SpyPool:
+        pool = _SpyPool(fory_factory=fory_factory)
+        pools.append(pool)
+        return pool
+
+    monkeypatch.setattr(fory_module._pyfory, "Fory", new_runtime)
+    monkeypatch.setattr(fory_module._pyfory, "ThreadSafeFory", new_pool)
+
+    limits = ForyLimits()
+    adapter = ForyAdapter(registration=registration(), limits=limits)
+
+    assert adapter.registration == registration()
+    assert adapter.limits is limits
+    assert configs == [
+        {
+            "xlang": True,
+            "strict": True,
+            "ref": False,
+            "compatible": False,
+            "max_depth": 64,
+            "max_type_fields": 256,
+            "max_type_meta_bytes": 4096,
+            "max_schema_versions_per_type": 8,
+            "max_average_schema_versions_per_type": 2,
+        }
+    ]
+    assert registrations == [(ConformanceRecord, 1001)]
+    assert len(pools) == 1
+    pooled_runtime = pools[0].fory_factory()
+    assert isinstance(pooled_runtime, _SpyRuntime)
+    assert configs[1] == configs[0]
+    assert registrations == [(ConformanceRecord, 1001), (ConformanceRecord, 1001)]
+
+
+def test_fory_adapter_translates_only_registration_callback_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        fory_module._pyfory,
+        "Fory",
+        lambda **kwargs: _SpyRuntime([], fail=True),
+    )
+
+    with pytest.raises(ForyRegistrationError) as caught:
+        ForyAdapter(registration=registration())
+
+    assert str(caught.value) == "Fory registration failed"
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+
+
+def test_fory_adapter_propagates_provider_construction_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure = RuntimeError("provider construction failed")
+
+    def fail_construction(**kwargs: object) -> _SpyRuntime:
+        raise failure
+
+    monkeypatch.setattr(fory_module._pyfory, "Fory", fail_construction)
+
+    with pytest.raises(RuntimeError) as caught:
+        ForyAdapter(registration=registration())
+
+    assert caught.value is failure
+
+
+@pytest.mark.parametrize(
+    ("metadata", "error_type"),
+    [
+        (trusted_metadata(format="json"), FormatMismatchError),
+        (trusted_metadata(version=2), UnsupportedVersionError),
+        (trusted_metadata(content_type="application/json"), ContentTypeMismatchError),
+        (
+            trusted_metadata(trust_profile=TrustProfile.UNTRUSTED),
+            TrustProfileMismatchError,
+        ),
+    ],
+)
+def test_fory_serialize_rejects_invalid_metadata_before_provider_access(
+    monkeypatch: pytest.MonkeyPatch,
+    metadata: PayloadMetadata,
+    error_type: type[Exception],
+) -> None:
+    pools: list[_SpyPool] = []
+    monkeypatch.setattr(
+        fory_module._pyfory,
+        "Fory",
+        lambda **kwargs: _SpyRuntime([]),
+    )
+
+    def new_pool(*, fory_factory: Any) -> _SpyPool:
+        pool = _SpyPool(fory_factory=fory_factory)
+        pools.append(pool)
+        return pool
+
+    monkeypatch.setattr(fory_module._pyfory, "ThreadSafeFory", new_pool)
+    adapter = ForyAdapter(registration=registration())
+
+    with pytest.raises(error_type):
+        adapter.serialize(record(), metadata=metadata)
+
+    assert pools[0].serialize_calls == 0
+
+
+def test_fory_serialize_requires_exact_registered_root_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pools: list[_SpyPool] = []
+    monkeypatch.setattr(
+        fory_module._pyfory,
+        "Fory",
+        lambda **kwargs: _SpyRuntime([]),
+    )
+
+    def new_pool(*, fory_factory: Any) -> _SpyPool:
+        pool = _SpyPool(fory_factory=fory_factory)
+        pools.append(pool)
+        return pool
+
+    monkeypatch.setattr(fory_module._pyfory, "ThreadSafeFory", new_pool)
+    adapter = ForyAdapter(registration=registration())
+    child = ConformanceRecordChild(
+        record_id=pyfory.Int64(7),
+        name="Ada",
+        active=True,
+        scores=[],
+    )
+
+    with pytest.raises(TypeMismatchError):
+        adapter.serialize(child, metadata=trusted_metadata())
+
+    assert pools[0].serialize_calls == 0
+
+
+def test_fory_serialize_writes_canonical_header_and_decodable_body() -> None:
+    adapter = ForyAdapter(registration=registration())
+    value = record()
+
+    payload = adapter.serialize(value, metadata=trusted_metadata())
+
+    body = payload.data[20:]
+    expected_header = struct.Struct(">4sBBIHII").pack(
+        b"BTFY",
+        1,
+        0,
+        0x42544659,
+        1,
+        1001,
+        len(body),
+    )
+    assert payload.metadata == trusted_metadata()
+    assert payload.data[:20] == expected_header
+    assert len(body) > 0
+
+    raw_fory = pyfory.Fory(
+        xlang=True,
+        strict=True,
+        ref=False,
+        compatible=False,
+        max_depth=64,
+        max_type_fields=256,
+        max_type_meta_bytes=4096,
+        max_schema_versions_per_type=8,
+        max_average_schema_versions_per_type=2,
+    )
+    raw_fory.register(ConformanceRecord, type_id=1001)
+    assert raw_fory.deserialize(body) == value
+
+
+def test_fory_serialize_enforces_total_output_limit() -> None:
+    adapter = ForyAdapter(
+        registration=registration(),
+        limits=ForyLimits(max_output_size=20),
+    )
+
+    with pytest.raises(PayloadLimitError) as caught:
+        adapter.serialize(record(), metadata=trusted_metadata())
+
+    assert caught.value.code is SerdeErrorCode.OUTPUT_LIMIT
+
+
+def test_fory_serialize_sanitizes_provider_failure_without_logging(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    marker = "caller-secret-marker"
+
+    class FailingPool(_SpyPool):
+        def serialize(self, value: object) -> bytes:
+            raise ValueError(f"provider rejected {marker}")
+
+    monkeypatch.setattr(
+        fory_module._pyfory,
+        "Fory",
+        lambda **kwargs: _SpyRuntime([]),
+    )
+    monkeypatch.setattr(fory_module._pyfory, "ThreadSafeFory", FailingPool)
+    adapter = ForyAdapter(registration=registration())
+    value = record()
+    value.name = marker
+
+    with pytest.raises(SerdeEncodeError) as caught:
+        adapter.serialize(value, metadata=trusted_metadata())
+
+    assert caught.value.code is SerdeErrorCode.FORY_ENCODE
+    assert str(caught.value) == "value cannot be encoded as registered Fory type"
+    assert caught.value.__cause__ is None
+    assert caught.value.__context__ is None
+    assert marker not in str(caught.value)
+    traceback = caught.value.__traceback__
+    while traceback is not None:
+        if traceback.tb_frame.f_code.co_filename.endswith("/bluetape/serde/fory.py"):
+            assert all(
+                marker not in repr(local_value)
+                for local_value in traceback.tb_frame.f_locals.values()
+            )
+        traceback = traceback.tb_next
+    assert not caplog.records
