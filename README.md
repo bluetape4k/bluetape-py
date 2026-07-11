@@ -31,7 +31,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem planning and first expansion work, including strict JSON serde from #45. |
+| `0.2.0` | Active ecosystem work, including strict JSON serde from #45 and trusted-internal Apache Fory from #46. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -52,7 +52,7 @@ only `bluetape-core` by default.
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Bounded gzip, zlib, and raw-DEFLATE byte helpers. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
-| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict payload contracts and bounded JSON v1 serialization. |
+| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | planned | Cache abstractions and in-memory helpers. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | Redis-backed adapters once cache contracts are proven. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | Testcontainers fixtures for integration-heavy packages. |
@@ -69,8 +69,8 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Serde is opt-in, and Apache Fory
-  remains a separate planned follow-up in issue #46.
+- The default meta install remains core-only. Serde is opt-in; Apache Fory is
+  trusted-internal only and available solely through the explicit `fory` extra.
 
 ## Install
 
@@ -87,6 +87,7 @@ pip install "bluetape[collections]"
 pip install "bluetape[compression]"
 pip install "bluetape[logging]"
 pip install "bluetape[serde]"
+pip install "bluetape[fory]"  # CPython 3.13 only
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
@@ -102,6 +103,7 @@ pip install bluetape-collections
 pip install bluetape-compression
 pip install bluetape-logging
 pip install bluetape-serde
+pip install "bluetape-serde[fory]"  # CPython 3.13 only
 pip install bluetape-testing
 ```
 
@@ -110,6 +112,8 @@ For local development from this repository:
 ```bash
 uv sync --all-packages
 uv run --package bluetape-serde python -c "import bluetape.serde"
+uv sync --all-packages --extra fory --python 3.13.14 --locked
+uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
 ```
 
 Build the current focused wheel, install it into an isolated environment, and
@@ -125,8 +129,8 @@ uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serd
 ```
 
 Only the local workspace and local-wheel paths are runnable today. The `pip`
-commands above, including the future `serde` extra, remain unavailable from
-PyPI until publication is enabled.
+commands above remain unavailable from PyPI until publication is enabled.
+Fory is not pulled by the base, `serde`, `dev`, or `all` extras.
 
 ## Usage
 
@@ -249,6 +253,23 @@ These byte limits are not a fixed process-memory guarantee. See the package
 README for error handling and versioned rollout/rollback guidance.
 `SerdeError` covers stable serde domain failures; caller type and configuration
 mistakes remain native `TypeError` or `ValueError`.
+
+### Trusted-internal Apache Fory
+
+Install the explicit `fory` extra only on CPython 3.13. Each application route
+owns a fixed `(schema_id, schema_version, type_id)` tuple and one exact root
+type. Consumers construct expected metadata and registration independently;
+payloads never select an adapter, class, schema, or fallback. Deploy readers
+before writers, move schema changes to a new versioned route, and stop Fory
+writes when predeclared canary error or latency thresholds are breached. Keep
+the old codec on a separate route until drain evidence is complete.
+
+Fory is limited to authenticated and authorized internal producers. Its byte,
+depth, schema, and concurrency limits are acceptance bounds, not hard CPU/RSS
+ceilings; use a separately constrained process for hard containment. Telemetry
+may include only operation, stable error code, envelope size, success/failure,
+latency, and a fixed route ID. Do not record payloads, decoded values, provider
+exception text, tracebacks, or caller-controlled high-cardinality names.
 
 ## Package Documentation
 

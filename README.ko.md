@@ -29,7 +29,7 @@ Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니�
 | 트랙 | 범위 |
 |---|---|
 | `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
-| `0.2.0` | 진행 중인 ecosystem planning과 #45의 strict JSON serde를 포함한 첫 확장 작업. |
+| `0.2.0` | #45 strict JSON serde와 #46 trusted-internal Apache Fory를 포함한 생태계 작업. |
 | PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
@@ -50,7 +50,7 @@ Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니�
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | 제한된 gzip, zlib, raw-DEFLATE byte 헬퍼. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
-| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | 엄격한 payload 계약과 bounded JSON v1 serialization. |
+| `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | planned | 캐시 추상화와 인메모리 헬퍼. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | cache 계약을 검증한 뒤 추가할 Redis 어댑터. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | 통합 테스트가 많은 패키지를 위한 Testcontainers fixture. |
@@ -68,7 +68,7 @@ Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니�
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
 - 기본 meta 설치는 계속 core-only입니다. Serde는 opt-in이며 Apache Fory는
-  #46의 별도 후속 작업으로 남겨 둡니다.
+  trusted-internal 전용 `fory` extra로만 제공합니다.
 
 ## 설치
 
@@ -85,6 +85,7 @@ pip install "bluetape[collections]"
 pip install "bluetape[compression]"
 pip install "bluetape[logging]"
 pip install "bluetape[serde]"
+pip install "bluetape[fory]"  # CPython 3.13 전용
 pip install "bluetape[testing]"
 pip install "bluetape[dev]"
 pip install "bluetape[all]"
@@ -100,6 +101,7 @@ pip install bluetape-collections
 pip install bluetape-compression
 pip install bluetape-logging
 pip install bluetape-serde
+pip install "bluetape-serde[fory]"  # CPython 3.13 전용
 pip install bluetape-testing
 ```
 
@@ -108,6 +110,8 @@ pip install bluetape-testing
 ```bash
 uv sync --all-packages
 uv run --package bluetape-serde python -c "import bluetape.serde"
+uv sync --all-packages --extra fory --python 3.13.14 --locked
+uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
 ```
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
@@ -122,8 +126,9 @@ uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serd
 "$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"order_id": 42}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"order_id": 42}'
 ```
 
-현재 실행 가능한 경로는 로컬 workspace와 로컬 wheel뿐입니다. 위 `pip` 명령과
-향후 `serde` extra는 PyPI 배포가 활성화되기 전에는 registry에서 사용할 수 없습니다.
+현재 실행 가능한 경로는 로컬 workspace와 로컬 wheel뿐입니다. 위 `pip` 명령은
+PyPI 배포가 활성화되기 전에는 registry에서 사용할 수 없습니다. Fory는 base,
+`serde`, `dev`, `all` extra에 포함되지 않습니다.
 
 ## 사용 예
 
@@ -245,6 +250,23 @@ Byte 제한만으로 process memory 상한이 보장되지는 않습니다. 오�
 rollout/rollback은 package README를 참고하십시오.
 `SerdeError`는 안정된 serde domain failure를 나타내며, 호출자의 type/configuration
 오류는 native `TypeError` 또는 `ValueError`로 유지됩니다.
+
+### Trusted-internal Apache Fory
+
+명시적인 `fory` extra는 CPython 3.13에서만 설치합니다. 각 application route가 고정
+`(schema_id, schema_version, type_id)` tuple과 하나의 정확한 root type을 소유합니다.
+Consumer는 expected metadata와 registration을 독립적으로 구성하며 payload가 adapter,
+class, schema, fallback을 선택하게 해서는 안 됩니다. Reader를 writer보다 먼저
+배포하고 schema 변경은 새 versioned route로 이동합니다. 미리 정한 canary 오류율 또는
+latency threshold를 넘으면 Fory write를 중단하고 drain evidence가 확보될 때까지 기존
+codec을 별도 route에 유지합니다.
+
+Fory는 인증·인가된 내부 producer에만 허용합니다. Byte, depth, schema, concurrency
+제한은 acceptance bound이지 CPU/RSS hard ceiling이 아니므로 hard containment가
+필요하면 별도 제한 process를 사용합니다. Telemetry에는 operation, stable error code,
+envelope size, success/failure, latency, fixed route ID만 허용합니다. Payload, decoded
+value, provider exception text, traceback, caller-controlled high-cardinality name은
+기록하지 않습니다.
 
 ## 패키지 문서
 

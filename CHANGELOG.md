@@ -23,6 +23,11 @@ and this project uses semantic versioning once the first tag is published.
   serialization under `bluetape.serde`, including bounded `bytearray` output
   assembly, source-free public error tracebacks, and a deterministic 640-digit
   JSON integer limit.
+- Optional `bluetape-serde[fory]` and `bluetape[fory]` CPython 3.13 extras with
+  a trusted-internal Apache Fory adapter, fixed schema/type envelopes, bounded
+  runtime concurrency, stable errors, and Python/Go/Rust/Kotlin conformance
+  artifacts. Fory remains excluded from the base, `serde`, `dev`, and `all`
+  extras.
 
 ## [v0.1.0] - 2026-07-10
 

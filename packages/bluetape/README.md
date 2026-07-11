@@ -14,6 +14,7 @@ pip install "bluetape[collections]"
 pip install "bluetape[compression]"
 pip install "bluetape[logging]"
 pip install "bluetape[serde]"
+pip install "bluetape[fory]"
 pip install "bluetape[testing]"
 pip install "bluetape[all]"
 ```
@@ -33,9 +34,11 @@ bounded gzip/zlib/raw-DEFLATE helpers respectively. They remain optional and
 never change the default dependency set.
 
 The `serde` extra installs strict payload contracts and bounded JSON v1
-serialization. Apache Fory is not included; it is planned separately in issue
-#46. The full extra list is `asyncio`, `codec`, `collections`, `compression`,
-`logging`, `serde`, `testing`, `dev`, and `all`.
+serialization. The separate `fory` extra installs `bluetape-serde[fory]` and
+currently requires CPython 3.13. Fory is intentionally excluded from the base,
+`serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `codec`,
+`collections`, `compression`, `logging`, `serde`, `fory`, `testing`, `dev`,
+and `all`.
 
 PyPI publication is currently on hold for this repository. The commands above
 describe the intended public install shape after publishing is enabled and are
@@ -52,7 +55,9 @@ uv pip install --python "$tmp_dir/venv/bin/python" "$tmp_dir"/dist/bluetape_serd
 "$tmp_dir/venv/bin/python" -c 'from bluetape.serde import PayloadMetadata, TrustProfile, json_deserialize, json_serialize; m = PayloadMetadata(format="json", version=1, content_type="application/json", trust_profile=TrustProfile.UNTRUSTED); p = json_serialize({"ok": True}, metadata=m); assert json_deserialize(p, expected_metadata=m) == {"ok": True}'
 ```
 
-The serde surface has 21 ordered exports and 17 stable domain error codes,
+The serde surface has 25 ordered exports and 23 stable domain error codes,
 including the fixed 640-decimal-digit JSON integer limit. Caller type and
 configuration mistakes remain native `TypeError`/`ValueError` rather than
-`SerdeError` domain failures.
+`SerdeError` domain failures. Apache Fory remains trusted-internal only and
+requires caller-owned fixed schema/type registration; it never selects a codec
+or fallback from payload content.
