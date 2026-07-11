@@ -1,7 +1,7 @@
 # Issue #46 Apache Fory Adapter Implementation Plan
 
 Date: 2026-07-11
-Status: Step 3-R reviewed — P0=0 P1=0
+Status: Step 6-R reviewed — P0=0 P1=0; PR/CI pending
 Scope: `bluetape-serde[fory]`, Python/Go/Rust/Kotlin conformance, CI, and docs
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
@@ -124,7 +124,7 @@ implementing task and blocks dependent tasks when its named signal appears.
 - Modify: `packages/bluetape-serde/src/bluetape/serde/_contracts.py`
 - Modify: `packages/bluetape-serde/src/bluetape/serde/__init__.py`
 
-- [ ] **Step 1: Write failing enum, message, class, and export tests**
+- [x] **Step 1: Write failing enum, message, class, and export tests**
 
 Extend `ERROR_CASES`, exact enum-value assertions, and ordered public exports
 with these six codes and four fixed classes:
@@ -151,7 +151,7 @@ Assert that `MalformedPayloadError` accepts only `INVALID_FORY` in addition to
 its current codes, `SerdeEncodeError` accepts only `FORY_ENCODE` in addition to
 its current codes, and all fixed classes reject positional/code overrides.
 
-- [ ] **Step 2: Run the contract test red**
+- [x] **Step 2: Run the contract test red**
 
 Run:
 
@@ -161,7 +161,7 @@ uv run pytest packages/bluetape-serde/tests/test_contracts.py -q
 
 Expected: collection/import failure for the new names.
 
-- [ ] **Step 3: Implement the exact base contract**
+- [x] **Step 3: Implement the exact base contract**
 
 Add enum values/messages, update restricted `allowed_codes`, and implement
 fixed constructors equivalent to:
@@ -190,7 +190,7 @@ class ForyConcurrencyError(SerdeError):
 Re-export only provider-independent contracts from `bluetape.serde`. Do not
 import `bluetape.serde.fory` from the base initializer.
 
-- [ ] **Step 4: Run focused tests green and commit**
+- [x] **Step 4: Run focused tests green and commit**
 
 Run the same focused test and expect all cases to pass. Commit:
 
@@ -213,7 +213,7 @@ Tested: uv run pytest packages/bluetape-serde/tests/test_contracts.py -q
 - Create: `.python-version`
 - Modify: `uv.lock`
 
-- [ ] **Step 1: Write failing optional-import and value-contract tests**
+- [x] **Step 1: Write failing optional-import and value-contract tests**
 
 Under a CPython 3.13 provider environment, test constants and frozen/slotted/
 keyword-only values:
@@ -248,7 +248,7 @@ transitive `ModuleNotFoundError` naming another module, provider ABI
 `ImportError`/`OSError`, and provider initialization failure must retain their
 original type and message and must not gain the missing-extra guidance.
 
-- [ ] **Step 2: Add the exact dependency and resolve the lock**
+- [x] **Step 2: Add the exact dependency and resolve the lock**
 
 Add:
 
@@ -271,7 +271,7 @@ uv sync --package bluetape-serde --extra fory --python 3.13.14 --locked
 Expected: CPython 3.13.14 and `pyfory==1.3.0` resolve; no root/default
 dependency gains `pyfory`.
 
-- [ ] **Step 3: Implement import isolation and immutable values**
+- [x] **Step 3: Implement import isolation and immutable values**
 
 At module import, catch only a direct missing provider:
 
@@ -296,7 +296,7 @@ Delete the caught exception before the fresh raise. Implement
 dataclasses with the exact ranges from the spec. Use a full-match ASCII logical
 name check plus explicit leading/trailing/repeated-dot rejection.
 
-- [ ] **Step 4: Run provider tests green and commit**
+- [x] **Step 4: Run provider tests green and commit**
 
 Run:
 
@@ -315,7 +315,7 @@ record both commands in `Tested:`.
 - Modify: `packages/bluetape-serde/tests/test_fory.py`
 - Modify: `packages/bluetape-serde/src/bluetape/serde/fory.py`
 
-- [ ] **Step 1: Write failing construction and serialization tests**
+- [x] **Step 1: Write failing construction and serialization tests**
 
 Cover exact root type, subclass rejection, trusted metadata, eager registration
 failure, fixed configuration, header bytes, IDs, big-endian body length,
@@ -333,7 +333,7 @@ Inject a provider factory that records constructor kwargs and registration
 calls. Assert `xlang=True`, `strict=True`, `ref=False`, `compatible=False`, and
 every upstream-supported metadata/depth limit.
 
-- [ ] **Step 2: Run serialization tests red**
+- [x] **Step 2: Run serialization tests red**
 
 Run the named serialization subset and expect missing adapter behavior:
 
@@ -341,7 +341,7 @@ Run the named serialization subset and expect missing adapter behavior:
 uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bluetape-serde/tests/test_fory.py -q -k 'construct or serialize or output'
 ```
 
-- [ ] **Step 3: Implement eager registration and bounded serialization**
+- [x] **Step 3: Implement eager registration and bounded serialization**
 
 Use a private provider factory so `ThreadSafeFory` never needs a mutable
 post-construction registry:
@@ -381,7 +381,7 @@ Test that encode failures disclose neither a caller marker nor provider
 message, have no `__cause__`/`__context__`, expose no sensitive traceback
 locals, and emit no library log records.
 
-- [ ] **Step 4: Verify serialization green and commit**
+- [x] **Step 4: Verify serialization green and commit**
 
 Run the focused subset, then the whole provider test file. Commit with intent
 `feat: encode registered Fory values behind a bounded pool`.
@@ -393,7 +393,7 @@ Run the focused subset, then the whole provider test file. Commit with intent
 - Modify: `packages/bluetape-serde/tests/test_fory.py`
 - Modify: `packages/bluetape-serde/src/bluetape/serde/fory.py`
 
-- [ ] **Step 1: Write the ordered decode-gate tests**
+- [x] **Step 1: Write the ordered decode-gate tests**
 
 Add named tests for:
 
@@ -419,7 +419,7 @@ Add named tests for:
 
 Use a spy factory to assert the provider is untouched for every envelope gate.
 
-- [ ] **Step 2: Run decode tests red**
+- [x] **Step 2: Run decode tests red**
 
 ```bash
 uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bluetape-serde/tests/test_fory.py -q -k 'deserialize or malformed or mismatch or trailing or out_of_band'
@@ -427,7 +427,7 @@ uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bl
 
 Expected: missing decode behavior.
 
-- [ ] **Step 3: Implement the ordered decode path**
+- [x] **Step 3: Implement the ordered decode path**
 
 Unpack only after metadata/input/header checks:
 
@@ -457,7 +457,7 @@ raising. Parameterize all pre-provider error families and
 `ForyConcurrencyError` to prove caller markers are absent from library traceback
 locals and that `__cause__`, `__context__`, and library log records are empty.
 
-- [ ] **Step 4: Add deterministic concurrency and reuse tests**
+- [x] **Step 4: Add deterministic concurrency and reuse tests**
 
 Use `threading.Barrier`, `threading.Event`, and `ThreadPoolExecutor` to prove:
 
@@ -485,7 +485,7 @@ For the failed-runtime reuse case, set `max_concurrency=1`, record runtime
 identity in the public factory seam and provider method spy, and prove the exact
 same reset instance handles the ordinary failure and subsequent success.
 
-- [ ] **Step 5: Run provider tests green and commit**
+- [x] **Step 5: Run provider tests green and commit**
 
 ```bash
 uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bluetape-serde/tests/test_fory.py -q
@@ -500,7 +500,7 @@ Commit with intent `feat: reject untrusted Fory envelopes before reconstruction`
 - Create: `packages/bluetape-serde/tests/test_fory_performance.py`
 - Create: `docs/review/2026-07-11-issue-46-apache-fory-tdd-evidence.md`
 
-- [ ] **Step 1: Add non-absolute smoke measurements**
+- [x] **Step 1: Add non-absolute smoke measurements**
 
 Measure 1000 warm serializations/deserializations with `timeit`, small/large
 payload `tracemalloc` peaks, encoded sizes, and post-contention runtime reuse.
@@ -514,7 +514,7 @@ construction reused across operations, and retained runtime count at or below
 `max_concurrency`. Record timing/RSS as evidence; do not assert absolute
 latency or RSS values.
 
-- [ ] **Step 2: Run and record evidence**
+- [x] **Step 2: Run and record evidence**
 
 ```bash
 uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bluetape-serde/tests/test_fory_performance.py -q -s
@@ -533,7 +533,7 @@ the TDD evidence artifact. Commit with intent
 - Create: `packages/bluetape-serde/tests/test_fory_packaging.py`
 - Modify: `uv.lock`
 
-- [ ] **Step 1: Add the forwarding extra without widening existing extras**
+- [x] **Step 1: Add the forwarding extra without widening existing extras**
 
 Add only:
 
@@ -544,7 +544,7 @@ fory = ["bluetape-serde[fory]==0.1.0"]
 Keep `serde`, `dev`, and `all` entries exactly unchanged. Reassert that the
 `.python-version` created in Task 2 is still exactly `3.13.14`.
 
-- [ ] **Step 2: Add subprocess/wheel tests**
+- [x] **Step 2: Add subprocess/wheel tests**
 
 Build focused `bluetape-serde` and `bluetape` wheels, then verify:
 
@@ -563,7 +563,7 @@ Build focused `bluetape-serde` and `bluetape` wheels, then verify:
    installed meta extra resolves the local `bluetape-serde` wheel and performs
    the canonical round-trip without contacting PyPI during installation.
 
-- [ ] **Step 3: Run packaging checks and commit**
+- [x] **Step 3: Run packaging checks and commit**
 
 ```bash
 uv lock --check
@@ -583,7 +583,7 @@ Commit with intent `build: forward Fory only through its explicit extras`.
 - Create: `packages/bluetape-serde/conformance/fory/verify_manifest.py`
 - Create: `packages/bluetape-serde/conformance/fory/fixtures/python.bin`
 
-- [ ] **Step 1: Commit the exact schema source**
+- [x] **Step 1: Commit the exact schema source**
 
 Use sorted canonical JSON with these values:
 
@@ -622,14 +622,14 @@ class ConformanceRecord:
 
 `pyfory.Int64`/`Int32` are `VARINT64`/`VARINT32` in v1.3.0.
 
-- [ ] **Step 2: Implement Python `generate` and `verify` commands**
+- [x] **Step 2: Implement Python `generate` and `verify` commands**
 
 `generate OUTPUT` serializes through `ForyAdapter` and atomically writes the
 full envelope. `verify INPUT` constructs an independent expected metadata value,
 decodes, checks the exact dataclass value, and exits nonzero on trailing bytes,
 wrong IDs, or semantic mismatch.
 
-- [ ] **Step 3: Implement canonical manifest verification**
+- [x] **Step 3: Implement canonical manifest verification**
 
 `verify_manifest.py` accepts four producer paths plus manifest path, recomputes
 SHA-256, validates sorted JSON/schema/toolchain/dependency fields, compares each
@@ -640,7 +640,7 @@ manifest before all producer fixtures exist. `--write` is allowed only for
 intentional fixture regeneration; ordinary CI verification writes temporary
 outputs only.
 
-- [ ] **Step 4: Prove fresh-process determinism and commit**
+- [x] **Step 4: Prove fresh-process determinism and commit**
 
 Generate twice under `LC_ALL=C.UTF-8 TZ=UTC` into two temporary files, compare
 them, then intentionally write only the canonical Python fixture. Commit with
@@ -664,7 +664,7 @@ uv run --package bluetape-serde --extra fory --python 3.13.14 python python/conf
 - Create: `packages/bluetape-serde/conformance/fory/go/main.go`
 - Create: `packages/bluetape-serde/conformance/fory/fixtures/go.bin`
 
-- [ ] **Step 1: Pin and implement the Go CLI**
+- [x] **Step 1: Pin and implement the Go CLI**
 
 Pin `go 1.26.5` and `github.com/apache/fory/go/fory v1.3.0`. Use plain varint
 fields—no fixed tags:
@@ -697,7 +697,7 @@ adds the exact 20-byte envelope with `encoding/binary.BigEndian`, and writes it.
 `verify INPUT` validates/strips the envelope and calls
 `Deserialize(body, &result)` before exact semantic comparison.
 
-- [ ] **Step 2: Prove both directions and commit**
+- [x] **Step 2: Prove both directions and commit**
 
 ```bash
 tmpdir="$(mktemp -d)"
@@ -723,7 +723,7 @@ yet. Commit with intent `test: prove Go Fory exchange against Python`.
 - Create: `packages/bluetape-serde/conformance/fory/rust/src/main.rs`
 - Create: `packages/bluetape-serde/conformance/fory/fixtures/rust.bin`
 
-- [ ] **Step 1: Pin and implement the Rust CLI**
+- [x] **Step 1: Pin and implement the Rust CLI**
 
 Use edition 2021, `rust-version = "1.96.1"`, and
 `fory = { version = "=1.3.0", default-features = false }`. Use the approved
@@ -755,7 +755,7 @@ fory.register::<ConformanceRecord>(1001)?;
 `deserialize_from`, and `reader.get_cursor() == body.len()` so release builds
 reject trailing bytes. Build/validate the outer envelope separately.
 
-- [ ] **Step 2: Prove both directions and commit**
+- [x] **Step 2: Prove both directions and commit**
 
 Run two fresh processes, compare their outputs, and verify both directions:
 
@@ -785,7 +785,7 @@ Update only the canonical Rust fixture and commit with intent
 - Create: `packages/bluetape-serde/conformance/fory/fixtures/kotlin.bin`
 - Create: `packages/bluetape-serde/conformance/fory/manifest.json`
 
-- [ ] **Step 1: Pin Gradle, Kotlin, KSP, JDK, and Fory**
+- [x] **Step 1: Pin Gradle, Kotlin, KSP, JDK, and Fory**
 
 Use Kotlin `2.3.20`, KSP `2.3.7`, Java toolchain 21,
 `fory-kotlin:1.3.0`, and `fory-kotlin-ksp:1.3.0`. The Gradle 9.6.0 wrapper must
@@ -801,7 +801,7 @@ Enable `dependencyLocking { lockAllConfigurations() }`, generate
 `gradle.lockfile` with `./gradlew dependencies --write-locks`, and require
 ordinary builds to use the committed lock without rewriting it.
 
-- [ ] **Step 2: Implement the generated serializer and CLI**
+- [x] **Step 2: Implement the generated serializer and CLI**
 
 Use plain varint `Long`/`Int`; do not use `@Fixed`:
 
@@ -832,7 +832,7 @@ val fory = ForyKotlin.builder()
 and strips the envelope, calls typed `deserialize(body,
 ConformanceRecord::class.java)`, and compares the exact value.
 
-- [ ] **Step 3: Prove both directions and commit**
+- [x] **Step 3: Prove both directions and commit**
 
 Fail unless `$JAVA_HOME/bin/java -version` reports Temurin `21.0.11+10`, then
 run two no-daemon processes with a fixed environment and distinct outputs:
@@ -859,7 +859,7 @@ paths, and sign off its hashes/toolchain/dependency fields. Commit with intent
 - Create: `.github/workflows/fory-conformance.yml`
 - Modify: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Add a path-gated least-privilege workflow**
+- [x] **Step 1: Add a path-gated least-privilege workflow**
 
 Set `permissions: contents: read`; `pull_request` targeting `develop`;
 `push.branches: [develop]`; and exact path filters covering `.python-version`,
@@ -886,7 +886,7 @@ actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
 actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
 ```
 
-- [ ] **Step 2: Implement four producer jobs**
+- [x] **Step 2: Implement four producer jobs**
 
 Use timeouts Python 10, Go 10, Rust 15, Kotlin 20 minutes. Install the exact
 toolchain, print/fail on version drift, generate twice in separate processes,
@@ -918,7 +918,7 @@ Do not use broad restore-key prefixes across toolchain or lock changes. Restored
 caches are accelerators only; locked resolution and explicit version checks
 remain authoritative on every run.
 
-- [ ] **Step 3: Implement the final conformance job**
+- [x] **Step 3: Implement the final conformance job**
 
 Use `needs: [python, go, rust, kotlin]`, timeout 15 minutes, set up CPython
 3.13.14 and Temurin 21.0.11+10, and download the
@@ -931,7 +931,7 @@ downloaded Python artifact. Assert the extracted Go/Rust binaries and Kotlin
 launcher retain executable mode before invoking them.
 Changing only `manifest.json` must fail.
 
-- [ ] **Step 4: Keep base CI provider-free, then run cheap fixture gates**
+- [x] **Step 4: Keep base CI provider-free, then run cheap fixture gates**
 
 In the normal CPython 3.13.14 job, first assert `pyfory` is absent after the
 ordinary workspace sync. Then explicitly sync `bluetape-serde[fory]`, verify
@@ -958,7 +958,7 @@ Commit with intent `ci: require four-language Fory artifact proof`.
 - Modify: `CHANGELOG.md`
 - Modify: `docs/package-layout.md`
 
-- [ ] **Step 1: Document install and caller-owned routing**
+- [x] **Step 1: Document install and caller-owned routing**
 
 Add the exact source, local-wheel, and future PyPI commands; CPython 3.13-only
 provider boundary; base/serde/dev/all/fory matrix; and the complete independent
@@ -978,7 +978,7 @@ CPython `3.13.14`, the `pyfory==1.3.0` wheel tag/ABI and lock, recreate the
 environment once, and escalate the original unchanged error instead of looping
 on extra reinstallation.
 
-- [ ] **Step 2: Document security, errors, and operations**
+- [x] **Step 2: Document security, errors, and operations**
 
 Document trusted-internal-only use, exact root/schema/type checks, no nested
 application classes, no payload-selected adapter, no fallback, resource-limit
@@ -1011,13 +1011,13 @@ new read path is healthy, and retire the old route after evidence-backed drain.
 Update package public-API/error tables and every fixed export/error-code count
 for the new Fory contracts.
 
-- [ ] **Step 3: Update project status in both root locales**
+- [x] **Step 3: Update project status in both root locales**
 
 Mark Issue #46 implemented in the source workspace but still subject to the
 PyPI publication hold. Keep `README.md` and `README.ko.md` semantically aligned;
 update package layout and changelog with the explicit extra and conformance gate.
 
-- [ ] **Step 4: Verify docs and commit**
+- [x] **Step 4: Verify docs and commit**
 
 Compare every command/API name against source, run `git diff --check`, and
 commit with intent `docs: define safe Fory adoption and rollback`.
@@ -1030,7 +1030,7 @@ commit with intent `docs: define safe Fory adoption and rollback`.
 - Create: `docs/lessons/2026-07-11-issue-46-apache-fory.md`
 - Update: `docs/superpowers/plans/2026-07-11-issue-46-apache-fory-implementation-plan.md`
 
-- [ ] **Step 1: Run focused and full local gates**
+- [x] **Step 1: Run focused and full local gates**
 
 ```bash
 uv run --package bluetape-serde --extra fory --python 3.13.14 pytest packages/bluetape-serde/tests/test_contracts.py packages/bluetape-serde/tests/test_fory.py packages/bluetape-serde/tests/test_fory_packaging.py -q
@@ -1049,14 +1049,14 @@ then `verify_manifest.py` across all committed fixtures. Confirm `git status`
 contains only the intentional tracked change set and no generated `.first`,
 `.second`, build, wheelhouse, or verifier artifacts.
 
-- [ ] **Step 2: Run Step 5/6 verification and Step 6-R convergence**
+- [x] **Step 2: Run Step 5/6 verification and Step 6-R convergence**
 
 Verify every spec DoD and plan checkbox with fresh evidence. Run six independent
 performance, stability, security, operator, developer/API, and caller/user
 reviews plus main-session integration. Fix and rerun affected lanes until
 `P0=0 P1=0`; record P2/P3 decisions without expanding scope.
 
-- [ ] **Step 3: Commit lessons before PR**
+- [x] **Step 3: Commit lessons before PR**
 
 Record root cause, varint annotation correction, provider exception-boundary
 decision, public Buffer exact-consumption evidence, bounded-pool proof,
@@ -1070,7 +1070,7 @@ Push the feature branch, create an English PR assigned to `debop`, set milestone
 stored body, actual PR diff, formal Step 7-R review, and CI. Do not merge; deliver
 the Step 9 DoD report and request user merge approval.
 
-- [ ] **Step 5: Preserve research and knowledge**
+- [x] **Step 5: Preserve research and knowledge**
 
 Write a copyright-safe Korean research note in
 `/Users/debop/work/bluetape4k/bluetape4k-wiki/research/2026-07-11-apache-fory-1-3-xlang.md`
@@ -1081,14 +1081,14 @@ commit/push the wiki artifact as the durable research record.
 
 ## Plan Definition of Done
 
-- [ ] Every approved spec requirement maps to a task above.
-- [ ] The base serde contract imports and tests without `pyfory`.
-- [ ] The explicit provider extra passes all contract/security/concurrency tests on CPython 3.13.14.
-- [ ] CPython 3.14 base install succeeds and provider-extra resolution fails explicitly.
-- [ ] Python, Go, Rust, and Kotlin committed fixtures regenerate deterministically.
-- [ ] Bidirectional artifact verification passes under exact toolchain/dependency pins.
-- [ ] Ruff, full pytest, all-package build, actionlint, and diff checks pass.
-- [ ] README locale set, package docs, WIP, changelog, layout, review, and lessons are current.
+- [x] Every approved spec requirement maps to a task above.
+- [x] The base serde contract imports and tests without `pyfory`.
+- [x] The explicit provider extra passes all contract/security/concurrency tests on CPython 3.13.14.
+- [x] CPython 3.14 base install succeeds and provider-extra resolution fails explicitly.
+- [x] Python, Go, Rust, and Kotlin committed fixtures regenerate deterministically.
+- [x] Bidirectional artifact verification passes under exact toolchain/dependency pins.
+- [x] Ruff, full pytest, all-package build, actionlint, and diff checks pass.
+- [x] README locale set, package docs, WIP, changelog, layout, review, and lessons are current.
 - [ ] Step 6-R and Step 7-R finish with P0=0 and P1=0.
 - [ ] PR/CI evidence is complete and merge remains user-approved only.
-- [ ] External research is preserved and indexed in `bluetape4k-wiki`.
+- [x] External research is preserved and indexed in `bluetape4k-wiki`.
