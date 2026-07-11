@@ -55,14 +55,14 @@ jobs:
         run: |
           test "$(python --version)" = "Python 3.13.14"
           uv sync --package bluetape-serde --extra fory --python 3.13.14 --locked
-          uv run python -c 'import pyfory; assert pyfory.__version__ == "1.3.0"'
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python -c 'import pyfory; assert pyfory.__version__ == "1.3.0"'
       - name: Generate deterministic Python artifact
         run: |
           mkdir -p staging/fixtures
-          LC_ALL=C.UTF-8 TZ=UTC uv run python "$CONFORMANCE/python/conformance_cli.py" generate staging/python.first
-          LC_ALL=C.UTF-8 TZ=UTC uv run python "$CONFORMANCE/python/conformance_cli.py" generate staging/python.second
+          LC_ALL=C.UTF-8 TZ=UTC uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" generate staging/python.first
+          LC_ALL=C.UTF-8 TZ=UTC uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" generate staging/python.second
           cmp staging/python.first staging/python.second
-          uv run python "$CONFORMANCE/python/conformance_cli.py" verify staging/python.first
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" verify staging/python.first
           cmp staging/python.first "$CONFORMANCE/fixtures/python.bin"
           cp staging/python.first staging/fixtures/python.bin
           python - <<'PY'
@@ -116,7 +116,7 @@ jobs:
       - name: Verify Go artifact with Python and write fragment
         run: |
           uv sync --package bluetape-serde --extra fory --python 3.13.14 --locked
-          uv run python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/go.bin"
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/go.bin"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -167,7 +167,7 @@ jobs:
       - name: Verify Rust artifact with Python and write fragment
         run: |
           uv sync --package bluetape-serde --extra fory --python 3.13.14 --locked
-          uv run python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/rust.bin"
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/rust.bin"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -224,7 +224,7 @@ jobs:
       - name: Verify Kotlin artifact with Python and write fragment
         run: |
           uv sync --package bluetape-serde --extra fory --python 3.13.14 --locked
-          uv run python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/kotlin.bin"
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/python/conformance_cli.py" verify "$CONFORMANCE/staging/fixtures/kotlin.bin"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -275,7 +275,7 @@ jobs:
               fragment = json.loads(Path(f"downloaded/{producer}-fragment.json").read_text())
               assert fragment == manifest["producers"][producer]
           PY
-          uv run python "$CONFORMANCE/verify_manifest.py" \
+          uv run --package bluetape-serde --extra fory --python 3.13.14 python "$CONFORMANCE/verify_manifest.py" \
             --manifest "$CONFORMANCE/manifest.json" \
             --python downloaded/fixtures/python.bin \
             --go downloaded/fixtures/go.bin \

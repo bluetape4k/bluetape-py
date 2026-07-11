@@ -54,7 +54,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Test
-        run: uv run pytest
+        run: uv run --package bluetape-serde --extra fory --python 3.13.14 pytest
 
       - name: Build distributions
         run: uv build --all-packages

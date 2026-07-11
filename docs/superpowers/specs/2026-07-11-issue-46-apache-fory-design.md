@@ -263,7 +263,7 @@ registration = ForyRegistration(
     type_id=1001,
     logical_name="io.bluetape.serde.ConformanceRecord",
 )
-adapter = ForyAdapter(registration)
+adapter = ForyAdapter(registration=registration)
 value = ConformanceRecord(7, "blue", True, [1, 2, 3])
 
 # Producer configuration owns metadata; it is not derived from the value.
