@@ -17,13 +17,14 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed. The collections, codec, compression, and serde packages are
-available from the source workspace; registry install commands describe the
-intended post-publication shape only.
+are confirmed. The collections, codec, compression, cache, and serde packages
+are available from the source workspace; registry install commands describe
+the intended post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
-ecosystem issues #7 through #34 plus serialization follow-ups #45 and #46.
+ecosystem issues #7 through #34, serialization follow-ups #45/#46, local cache
+#50, and Redis follow-up #51.
 Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
@@ -31,7 +32,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem work, including strict JSON serde from #45 and trusted-internal Apache Fory from #46. |
+| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, and Redis follow-up #51. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -53,7 +54,7 @@ only `bluetape-core` by default.
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
-| `bluetape-cache` | `bluetape.cache` | no | planned | Cache abstractions and in-memory helpers. |
+| `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | Redis-backed adapters once cache contracts are proven. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | Testcontainers fixtures for integration-heavy packages. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
@@ -69,8 +70,9 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Serde is opt-in; Apache Fory is
-  trusted-internal only and available solely through the explicit `fory` extra.
+- The default meta install remains core-only. Cache and serde are opt-in;
+  Apache Fory is trusted-internal only and available solely through the
+  explicit `fory` extra.
 
 ## Install
 
@@ -82,6 +84,7 @@ The public install shape after the first PyPI release is:
 ```bash
 pip install bluetape
 pip install "bluetape[asyncio]"
+pip install "bluetape[cache]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -98,6 +101,7 @@ Focused distributions can also be installed directly:
 ```bash
 pip install bluetape-core
 pip install bluetape-async
+pip install bluetape-cache
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -110,7 +114,8 @@ pip install bluetape-testing
 For local development from this repository:
 
 ```bash
-uv sync --all-packages
+uv sync --all-packages --locked
+uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
@@ -212,6 +217,53 @@ Use a synchronous loop for simple sequential work and `asyncio.gather` only
 when the coroutine set is already small and bounded. Use `map_bounded` when an
 input iterable can grow and the caller must set a cooperative concurrency cap.
 
+### Local TTL cache
+
+```python
+from bluetape.cache import TTLCache
+
+cache = TTLCache[str, object](default_ttl=30, max_size=100, max_inflight=8)
+order = cache.get_or_load(
+    "tenant-blue:42",
+    lambda key: {"key": key},
+    ttl=5,
+)
+assert cache.get("tenant-blue:42") is order
+assert cache.invalidate("tenant-blue:42") is True
+```
+
+```python
+import asyncio
+
+from bluetape.cache import AsyncTTLCache
+
+
+async def cache_example() -> None:
+    cache = AsyncTTLCache[str, object](
+        default_ttl=30,
+        max_size=100,
+        max_inflight=8,
+    )
+
+    async def load_order(key: str) -> object:
+        return {"key": key}
+
+    order = await cache.get_or_load("tenant-blue:42", load_order, ttl=5)
+    assert await cache.get("tenant-blue:42") is order
+    assert await cache.invalidate("tenant-blue:42") is True
+
+
+asyncio.run(cache_example())
+```
+
+The sync and async caches share bounded LRU/TTL, cached-`None`, same-key loader
+coalescing, mutation supersession, and immutable statistics semantics. Include
+tenant and authorization context in keys, redact `KeyError(key)` and loader
+exceptions before logging, and give async callers deadlines because a
+cancellation-resistant loader keeps its `max_inflight` slot until terminal.
+Redis integration remains separate in issue #51. See the package README for
+the complete ownership and monitoring contract.
+
 ### Strict JSON serde
 
 ```python
@@ -277,6 +329,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
@@ -290,7 +343,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem issues #7-#34 plus serialization follow-ups #45/#46, with research gates before broad adapters. |
+| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, Redis follow-up #51, and serialization #45/#46. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

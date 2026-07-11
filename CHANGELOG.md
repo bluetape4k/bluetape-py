@@ -18,6 +18,11 @@ and this project uses semantic versioning once the first tag is published.
   Base64 and hexadecimal helpers under `bluetape.codec`.
 - `bluetape-compression` source workspace package with bounded gzip,
   zlib-wrapped, and raw-DEFLATE helpers under `bluetape.compression`.
+- `bluetape-cache` source workspace package with stdlib-only bounded
+  synchronous and async local TTL loading caches under `bluetape.cache`,
+  including LRU capacity, same-key load coalescing, mutation supersession,
+  in-flight load limits, and immutable statistics. This is a new API and needs
+  no migration alias or compatibility shim; Redis remains tracked by issue #51.
 - `bluetape-serde` source workspace package with immutable payload contracts,
   caller-owned trust policy, fixed typed errors, and strict bounded JSON v1
   serialization under `bluetape.serde`, including bounded `bytearray` output

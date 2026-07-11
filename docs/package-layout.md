@@ -17,6 +17,7 @@ Current public distributions:
 
 - `bluetape`
 - `bluetape-async`
+- `bluetape-cache`
 - `bluetape-codec`
 - `bluetape-collections`
 - `bluetape-compression`
@@ -36,6 +37,13 @@ extra; it is never part of the core-only default install. Async packages must
 document cooperative ownership, cancellation, timeout, and cleanup behavior.
 Compression packages must document wire formats, output bounds,
 malformed-input errors, and optional-backend availability.
+
+`bluetape-cache` owns `bluetape.cache` and is available from the focused
+distribution or the explicit future `bluetape[cache]` meta extra. It is
+stdlib-only and provides bounded sync and async local TTL loading caches. It is
+not part of the core-only default meta install and does not add a root
+`bluetape` import surface. Redis coordination belongs to the separate issue #51
+distribution boundary.
 
 `bluetape-serde` is stdlib-only for its strict JSON v1 contract. Its root public
 surface is imported from `bluetape.serde` and is fixed at 25 ordered exports

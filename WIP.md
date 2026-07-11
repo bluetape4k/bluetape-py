@@ -19,6 +19,9 @@ focused distribution model:
   for issue #7 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-async`: stdlib-only bounded `asyncio` helpers, added for issue #8
   in the source workspace while PyPI publication remains on HOLD.
+- `bluetape-cache`: stdlib-only bounded synchronous and async local TTL loading
+  caches, implemented for issue #50 on `feat/issue-50-local-cache` while PyPI
+  publication remains on HOLD. Redis coordination is tracked separately in #51.
 - `bluetape-codec`: strict URL-safe Base64 and hexadecimal helpers, added for
   issue #9 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers, added
@@ -41,14 +44,18 @@ focused distribution model:
   and release preflight scope.
 - PyPI publication remains on HOLD until project ownership and trusted
   publishing are confirmed outside this repository.
-- Milestone `0.2.0` tracks ecosystem issues #7 through #34 plus serialization
-  follow-ups #45 and #46; issues #35 through #44 are not implied by this range.
+- Milestone `0.2.0` tracks ecosystem issues #7 through #34, serialization
+  follow-ups #45/#46, local cache #50, and Redis follow-up #51; issues #35
+  through #44 and #47 through #49 are not implied by these explicit ranges.
 - Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
   source-backed package boundary decisions before implementation starts.
 - Issue #45 strict JSON serde is available in the source workspace. Issue #46
   Apache Fory is implemented and locally verified with Python, Go, Rust, and
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
   on HOLD.
+- Issue #11 remains the cache/Redis umbrella. Issue #50 local caches are
+  implemented by `feat/issue-50-local-cache`; issue #51 Redis coordination is
+  pending.
 
 ## `0.1.0` Scope
 
@@ -127,7 +134,12 @@ Historical release scope; all items are closed.
 - #46 - Apache Fory adapter and Python/Go/Rust/Kotlin conformance. Separate
   trusted-internal CPython 3.13 extra implemented and locally verified in the
   source workspace; PyPI publication remains on HOLD.
-- #11 - Cache and Redis coordination packages.
+- #11 - Cache and Redis coordination umbrella.
+- #50 - Bounded sync and async local TTL loading caches. Implemented by
+  `bluetape-cache` on `feat/issue-50-local-cache`; PR review and merge are
+  pending.
+- #51 - Redis cache coordination and provider boundary. Pending after the
+  local cache contract is merged.
 - #12 - Resilience policies.
 - #13 - ID, measure, and money value packages.
 - #14 - SQL, repository, and audit outbox strategy research.

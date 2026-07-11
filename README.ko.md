@@ -17,19 +17,21 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, serde 패키지는 source workspace에서 사용할 수
-있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
+collections, codec, compression, cache, serde 패키지는 source workspace에서
+사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를
+설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
-Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니다. 자세한 계획은
+Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, Redis 후속
+#51을 추적합니다. 자세한 계획은
 [`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
 
 | 트랙 | 범위 |
 |---|---|
 | `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
-| `0.2.0` | #45 strict JSON serde와 #46 trusted-internal Apache Fory를 포함한 생태계 작업. |
+| `0.2.0` | Serde #45/#46, local cache #50, Redis 후속 #51을 포함한 생태계 작업. |
 | PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
@@ -51,7 +53,7 @@ Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니�
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
-| `bluetape-cache` | `bluetape.cache` | no | planned | 캐시 추상화와 인메모리 헬퍼. |
+| `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
 | `bluetape-redis` | `bluetape.redis` | no | planned | cache 계약을 검증한 뒤 추가할 Redis 어댑터. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | planned | 통합 테스트가 많은 패키지를 위한 Testcontainers fixture. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
@@ -67,8 +69,8 @@ Ecosystem 이슈 #7-#34와 serialization 후속 이슈 #45/#46을 추적합니�
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
-- 기본 meta 설치는 계속 core-only입니다. Serde는 opt-in이며 Apache Fory는
-  trusted-internal 전용 `fory` extra로만 제공합니다.
+- 기본 meta 설치는 계속 core-only입니다. Cache와 serde는 opt-in이며 Apache
+  Fory는 trusted-internal 전용 `fory` extra로만 제공합니다.
 
 ## 설치
 
@@ -80,6 +82,7 @@ PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 r
 ```bash
 pip install bluetape
 pip install "bluetape[asyncio]"
+pip install "bluetape[cache]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -96,6 +99,7 @@ pip install "bluetape[all]"
 ```bash
 pip install bluetape-core
 pip install bluetape-async
+pip install bluetape-cache
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -108,7 +112,8 @@ pip install bluetape-testing
 저장소에서 로컬 개발 환경을 만들 때는 다음 명령을 사용합니다.
 
 ```bash
-uv sync --all-packages
+uv sync --all-packages --locked
+uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
@@ -210,6 +215,53 @@ asyncio.run(main())
 집합에만 `asyncio.gather`를 사용합니다. 입력 iterable이 커질 수 있고 호출자가
 cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합니다.
 
+### Local TTL cache
+
+```python
+from bluetape.cache import TTLCache
+
+cache = TTLCache[str, object](default_ttl=30, max_size=100, max_inflight=8)
+order = cache.get_or_load(
+    "tenant-blue:42",
+    lambda key: {"key": key},
+    ttl=5,
+)
+assert cache.get("tenant-blue:42") is order
+assert cache.invalidate("tenant-blue:42") is True
+```
+
+```python
+import asyncio
+
+from bluetape.cache import AsyncTTLCache
+
+
+async def cache_example() -> None:
+    cache = AsyncTTLCache[str, object](
+        default_ttl=30,
+        max_size=100,
+        max_inflight=8,
+    )
+
+    async def load_order(key: str) -> object:
+        return {"key": key}
+
+    order = await cache.get_or_load("tenant-blue:42", load_order, ttl=5)
+    assert await cache.get("tenant-blue:42") is order
+    assert await cache.invalidate("tenant-blue:42") is True
+
+
+asyncio.run(cache_example())
+```
+
+Sync/async cache는 bounded LRU/TTL, cached `None`, same-key loader coalescing,
+mutation supersession, immutable statistics 의미를 공유합니다. Key에는 tenant와
+authorization context를 포함하고, `KeyError(key)`와 loader exception은 logging 전에
+redact해야 합니다. Cancellation-resistant loader는 terminal 상태가 될 때까지
+`max_inflight` slot을 유지하므로 async caller가 deadline을 소유해야 합니다. Redis
+integration은 이슈 #51로 분리되어 있습니다. 전체 ownership과 monitoring 계약은
+package README를 참고하십시오.
+
 ### Strict JSON serde
 
 ```python
@@ -274,6 +326,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
@@ -287,7 +340,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | 트랙 | 계획 |
 |---|---|
 | `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
-| `0.2.0` | Ecosystem 이슈 #7-#34와 serialization 후속 #45/#46을 추적하며, broad adapter는 research gate를 먼저 둡니다. |
+| `0.2.0` | Ecosystem 이슈 #7-#34, local cache #50, Redis 후속 #51, serialization #45/#46을 추적합니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.

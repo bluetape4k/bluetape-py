@@ -9,6 +9,7 @@ The default install depends only on `bluetape-core`.
 ```bash
 pip install bluetape
 pip install "bluetape[asyncio]"
+pip install "bluetape[cache]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -21,9 +22,24 @@ pip install "bluetape[all]"
 
 The meta distribution intentionally publishes no root `bluetape` import module.
 Focused packages own focused import paths such as `bluetape.asyncio`,
-`bluetape.codec`, `bluetape.collections`, `bluetape.compression`,
-`bluetape.core`, `bluetape.logging`, `bluetape.serde`, and
-`bluetape.testing`.
+`bluetape.cache`, `bluetape.codec`, `bluetape.collections`,
+`bluetape.compression`, `bluetape.core`, `bluetape.logging`, `bluetape.serde`,
+and `bluetape.testing`.
+
+| Extra | Focused distribution | Import path | Default install |
+|---|---|---|---:|
+| `asyncio` | `bluetape-async` | `bluetape.asyncio` | no |
+| `cache` | `bluetape-cache` | `bluetape.cache` | no |
+| `codec` | `bluetape-codec` | `bluetape.codec` | no |
+| `collections` | `bluetape-collections` | `bluetape.collections` | no |
+| `compression` | `bluetape-compression` | `bluetape.compression` | no |
+| `logging` | `bluetape-logging` | `bluetape.logging` | no |
+| `serde` | `bluetape-serde` | `bluetape.serde` | no |
+| `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
+| `testing` | `bluetape-testing` | `bluetape.testing` | no |
+
+The `cache` extra installs the stdlib-only bounded sync and async local TTL
+loading caches. Redis remains a separate future distribution under issue #51.
 
 The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited
@@ -36,15 +52,15 @@ never change the default dependency set.
 The `serde` extra installs strict payload contracts and bounded JSON v1
 serialization. The separate `fory` extra installs `bluetape-serde[fory]` and
 currently requires CPython 3.13. Fory is intentionally excluded from the base,
-`serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `codec`,
-`collections`, `compression`, `logging`, `serde`, `fory`, `testing`, `dev`,
-and `all`.
+`serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `cache`,
+`codec`, `collections`, `compression`, `logging`, `serde`, `fory`, `testing`,
+`dev`, and `all`.
 
 PyPI publication is currently on hold for this repository. The commands above
 describe the intended public install shape after publishing is enabled and are
 not runnable from PyPI today. From the source workspace, run
-`uv sync --all-packages`; a locally built focused wheel can also be installed
-directly.
+`uv sync --all-packages --locked`; a locally built focused wheel can also be
+installed directly.
 
 ```bash
 tmp_dir="$(mktemp -d)"
