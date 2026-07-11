@@ -17,9 +17,9 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed. The collections, codec, compression, cache, and serde packages
-are available from the source workspace; registry install commands describe
-the intended post-publication shape only.
+are confirmed. The collections, codec, compression, cache, serde, and
+testcontainers packages are available from the source workspace; registry
+install commands describe the intended post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks

@@ -17,9 +17,9 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, cache, serde 패키지는 source workspace에서
-사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를
-설명합니다.
+collections, codec, compression, cache, serde, testcontainers 패키지는 source
+workspace에서 사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의
+목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.

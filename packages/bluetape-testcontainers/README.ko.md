@@ -24,8 +24,8 @@ redis-py에 의존하지 않습니다.
 ```python
 from bluetape.testcontainers import RedisServer
 
-with RedisServer() as redis:
-    configure_test(redis_url=redis.url)
+with RedisServer() as server:
+    print(server.url)
 ```
 
 - 기본 image: `redis:8`
@@ -37,8 +37,8 @@ with RedisServer() as redis:
 - tag나 digest를 지정한 image override는 허용하지만 `latest`는 거절
 
 Image override는 실행 가능한 테스트 인프라입니다. 신뢰할 수 있는 설정에서만 받고,
-신뢰하지 않는 PR이나 request 입력을 그대로 사용하면 안 됩니다. CI에서 불변 증거가
-필요하면 digest reference를 사용합니다.
+신뢰하지 않는 PR이나 request 입력을 그대로 사용하면 안 됩니다. CI에서 재현 가능한
+고정 이미지가 필요하면 digest reference를 사용합니다.
 
 객체를 생성할 때는 Docker에 접근하지 않습니다. `start()`가 성공하면 `close()`를
 호출할 때까지 `host`, `port`, `url`, 불변 `details`에서 매핑된 endpoint를 읽을 수
