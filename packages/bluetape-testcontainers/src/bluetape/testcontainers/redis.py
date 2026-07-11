@@ -95,6 +95,8 @@ def _validated_image(image: str) -> str:
         raise TypeError("image must be a string")
     if not image or image != image.strip():
         raise ValueError("image must be non-blank without surrounding whitespace")
+    if not image.isascii():
+        raise ValueError("image must use an ASCII Docker reference")
     if any(
         character.isspace() or ord(character) < 32 or ord(character) == 127 for character in image
     ):
