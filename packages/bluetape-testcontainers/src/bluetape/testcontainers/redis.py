@@ -7,6 +7,8 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Self
 
+from docker.errors import DockerException, ImageNotFound
+
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import ExecWaitStrategy
 
@@ -19,6 +21,25 @@ class _ServerState(StrEnum):
     STARTING = "starting"
     RUNNING = "running"
     CLOSED = "closed"
+
+
+class StartFailureKind(StrEnum):
+    RUNTIME_UNAVAILABLE = "runtime-unavailable"
+    IMAGE_PULL = "image-pull"
+    READINESS_TIMEOUT = "readiness-timeout"
+    WRAPPER_FAILURE = "wrapper-failure"
+
+
+class TestcontainerStartError(RuntimeError):
+    __test__ = False
+
+    def __init__(self, kind: StartFailureKind, image: str) -> None:
+        self._kind = kind
+        super().__init__(f"Redis test container start failed ({kind.value}, image={image})")
+
+    @property
+    def kind(self) -> StartFailureKind:
+        return self._kind
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +76,25 @@ def _new_container(image: str, startup_timeout: float) -> DockerContainer:
         timedelta(seconds=startup_timeout)
     )
     return DockerContainer(image).with_exposed_ports(REDIS_PORT).waiting_for(strategy)
+
+
+def _failure_kind(error: Exception) -> StartFailureKind:
+    if isinstance(error, ImageNotFound):
+        return StartFailureKind.IMAGE_PULL
+    if isinstance(error, TimeoutError):
+        return StartFailureKind.READINESS_TIMEOUT
+    if isinstance(error, DockerException):
+        return StartFailureKind.RUNTIME_UNAVAILABLE
+    return StartFailureKind.WRAPPER_FAILURE
+
+
+def _stop_after_failure(container: DockerContainer | None, primary: BaseException) -> None:
+    if container is None:
+        return
+    try:
+        container.stop()
+    except Exception:
+        primary.add_note("Redis test container cleanup also failed")
 
 
 class RedisServer:
@@ -101,12 +141,27 @@ class RedisServer:
             raise RuntimeError("RedisServer is already starting")
 
         self._state = _ServerState.STARTING
-        container = _new_container(self._image, self._startup_timeout)
-        self._container = container
-        container.start()
-        host = container.get_container_host_ip()
-        port = int(container.get_exposed_port(REDIS_PORT))
-        self._details = RedisConnectionDetails(host=host, port=port, url=f"redis://{host}:{port}")
+        container: DockerContainer | None = None
+        try:
+            container = _new_container(self._image, self._startup_timeout)
+            self._container = container
+            container.start()
+            host = container.get_container_host_ip()
+            port = int(container.get_exposed_port(REDIS_PORT))
+            self._details = RedisConnectionDetails(
+                host=host,
+                port=port,
+                url=f"redis://{host}:{port}",
+            )
+        except BaseException as error:
+            self._container = None
+            self._details = None
+            self._state = _ServerState.CLOSED
+            _stop_after_failure(container, error)
+            if not isinstance(error, Exception):
+                raise
+            raise TestcontainerStartError(_failure_kind(error), self._image) from error
+
         self._state = _ServerState.RUNNING
         return self
 
@@ -117,8 +172,12 @@ class RedisServer:
         self._container = None
         self._details = None
         self._state = _ServerState.CLOSED
-        if container is not None:
+        if container is None:
+            return
+        try:
             container.stop()
+        except Exception as error:
+            raise RuntimeError("Redis test container cleanup failed") from error
 
     def __enter__(self) -> Self:
         return self.start()
@@ -129,4 +188,9 @@ class RedisServer:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            if exc is None:
+                raise
+            exc.add_note("Redis test container cleanup also failed")
