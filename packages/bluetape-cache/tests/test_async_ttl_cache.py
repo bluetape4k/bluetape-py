@@ -3,10 +3,11 @@
 import asyncio
 import inspect
 import threading
+from collections.abc import Awaitable, Callable
 from typing import get_type_hints
 
 import pytest
-from bluetape.cache import AsyncTTLCache
+from bluetape.cache import AsyncTTLCache, RecursiveLoadError
 
 from ._support import FakeClock
 
@@ -21,6 +22,13 @@ class CountingClock(FakeClock):
     def __call__(self) -> int:
         self.calls += 1
         return super().__call__()
+
+
+async def _cancel_and_gather[V](tasks: list[asyncio.Task[V]]) -> None:
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 1)
 
 
 def test_non_loading_state_method_signatures_match_public_contract() -> None:
@@ -279,3 +287,237 @@ def test_simultaneous_first_use_has_one_winning_loop() -> None:
         "AsyncTTLCache is bound to a different event loop",
         "winner",
     ]
+
+
+def test_async_get_or_load_signature_matches_public_contract() -> None:
+    parameters = inspect.signature(AsyncTTLCache.get_or_load).parameters
+
+    assert list(parameters) == ["self", "key", "loader", "ttl"]
+    assert parameters["ttl"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters["ttl"].default is None
+    hints = get_type_hints(AsyncTTLCache.get_or_load)
+    assert (
+        hints["loader"]
+        == Callable[[AsyncTTLCache.__parameters__[0]], Awaitable[AsyncTTLCache.__parameters__[1]]]
+    )
+    assert hints["ttl"] == float | None
+    assert hints["return"].__name__ == "V"
+
+
+@pytest.mark.asyncio
+async def test_async_same_key_uses_one_owner_loader_and_ttl() -> None:
+    clock = FakeClock()
+    cache = AsyncTTLCache[str, object](default_ttl=1, max_size=2, clock=clock)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    owner_value = object()
+    calls: list[str] = []
+    tasks: list[asyncio.Task[object]] = []
+
+    async def owner_loader(key: str) -> object:
+        calls.append(key)
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return owner_value
+
+    async def unused_loader(_: str) -> object:
+        pytest.fail("coalesced loader must not run")
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", owner_loader, ttl=10e-9)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(asyncio.create_task(cache.get_or_load("key", unused_loader, ttl=100)))
+        async with asyncio.timeout(1):
+            while (await cache.stats()).coalesced_waiters != 1:
+                await asyncio.sleep(0)
+        release.set()
+        results = await asyncio.wait_for(asyncio.gather(*tasks), 1)
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+
+    assert results == [owner_value, owner_value]
+    assert calls == ["key"]
+    clock.now_ns = 9
+    assert await cache.get("key") is owner_value
+    clock.now_ns = 10
+    with pytest.raises(KeyError):
+        await cache.get("key")
+
+
+@pytest.mark.asyncio
+async def test_async_different_key_loader_bodies_progress_together() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2)
+    both_started = asyncio.Event()
+    started = 0
+    tasks: list[asyncio.Task[str]] = []
+
+    async def loader(key: str) -> str:
+        nonlocal started
+        started += 1
+        if started == 2:
+            both_started.set()
+        await asyncio.wait_for(both_started.wait(), 1)
+        return key
+
+    try:
+        tasks = [asyncio.create_task(cache.get_or_load(key, loader)) for key in ("a", "b")]
+        await asyncio.wait_for(both_started.wait(), 1)
+        results = await asyncio.wait_for(asyncio.gather(*tasks), 1)
+    finally:
+        both_started.set()
+        await _cancel_and_gather(tasks)
+
+    assert sorted(results) == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_async_loader_failure_is_shared_not_cached() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    failure = LookupError("original")
+    tasks: list[asyncio.Task[str]] = []
+
+    async def failing_loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        raise failure
+
+    async def unused_loader(_: str) -> str:
+        pytest.fail("coalesced loader must not run")
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", failing_loader)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(asyncio.create_task(cache.get_or_load("key", unused_loader)))
+        async with asyncio.timeout(1):
+            while (await cache.stats()).coalesced_waiters != 1:
+                await asyncio.sleep(0)
+        release.set()
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            1,
+        )
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+
+    assert outcomes == [failure, failure]
+    assert outcomes[0] is failure
+    assert outcomes[1] is failure
+    assert (await cache.stats()).load_failures == 1
+    assert await cache.get_or_load("key", lambda _: asyncio.sleep(0, result="recovered")) == (
+        "recovered"
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_owner_only_terminal_paths_cleanup() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+    failure = RuntimeError("failed")
+
+    async def failing_loader(_: str) -> str:
+        raise failure
+
+    assert await cache.get_or_load("success", lambda _: asyncio.sleep(0, result="value")) == (
+        "value"
+    )
+    with pytest.raises(RuntimeError) as caught:
+        await cache.get_or_load("failure", failing_loader)
+    assert caught.value is failure
+
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+    assert "failure" not in cache._state.key_versions
+    assert (await cache.stats()).inflight_loads == 0
+
+
+@pytest.mark.asyncio
+async def test_inherited_child_task_same_key_recursion_is_rejected() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+
+    async def recursive_loader(key: str) -> str:
+        child = asyncio.create_task(
+            cache.get_or_load(key, lambda _: asyncio.sleep(0, result="unreachable"))
+        )
+        try:
+            return await asyncio.wait_for(child, 1)
+        finally:
+            await _cancel_and_gather([child])
+
+    with pytest.raises(RecursiveLoadError, match="recursive load for the same cache key"):
+        await asyncio.wait_for(cache.get_or_load("key", recursive_loader), 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["set", "invalidate", "clear"])
+async def test_async_mutations_prevent_stale_publication(mutation: str) -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    task: asyncio.Task[str] | None = None
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return "loaded"
+
+    try:
+        task = asyncio.create_task(cache.get_or_load("key", loader))
+        await asyncio.wait_for(started.wait(), 1)
+        if mutation == "set":
+            await cache.set("key", "explicit")
+        elif mutation == "invalidate":
+            await cache.invalidate("key")
+        else:
+            await cache.clear()
+        release.set()
+        assert await asyncio.wait_for(task, 1) == "loaded"
+    finally:
+        release.set()
+        if task is not None:
+            await _cancel_and_gather([task])
+
+    if mutation == "set":
+        assert await cache.get("key") == "explicit"
+    else:
+        with pytest.raises(KeyError):
+            await cache.get("key")
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+
+
+@pytest.mark.asyncio
+async def test_async_post_mutation_caller_uses_new_generation() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2)
+    old_started = asyncio.Event()
+    old_release = asyncio.Event()
+    new_started = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def old_loader(_: str) -> str:
+        old_started.set()
+        await asyncio.wait_for(old_release.wait(), 1)
+        return "old"
+
+    async def new_loader(_: str) -> str:
+        new_started.set()
+        return "new"
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", old_loader)))
+        await asyncio.wait_for(old_started.wait(), 1)
+        assert await cache.invalidate("key") is False
+        tasks.append(asyncio.create_task(cache.get_or_load("key", new_loader)))
+        await asyncio.wait_for(new_started.wait(), 1)
+        assert await asyncio.wait_for(tasks[1], 1) == "new"
+        old_release.set()
+        assert await asyncio.wait_for(tasks[0], 1) == "old"
+    finally:
+        old_release.set()
+        await _cancel_and_gather(tasks)
+
+    assert await cache.get("key") == "new"
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
