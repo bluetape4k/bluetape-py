@@ -40,9 +40,11 @@ def _run_in_thread[V](
     return thread
 
 
-def _join(thread: threading.Thread) -> None:
-    thread.join(2)
-    assert not thread.is_alive()
+def _join_all(threads: list[threading.Thread]) -> None:
+    for thread in threads:
+        thread.join(2)
+    survivors = [thread.name for thread in threads if thread.is_alive()]
+    assert not survivors, f"cache helper threads still alive: {', '.join(survivors)}"
 
 
 def _wait_until(predicate: Callable[[], bool]) -> None:
@@ -51,6 +53,29 @@ def _wait_until(predicate: Callable[[], bool]) -> None:
         if time.monotonic() >= deadline:
             pytest.fail("timed out waiting for concurrent cache transition")
         time.sleep(0.001)
+
+
+def test_join_all_attempts_every_join_before_reporting_survivors() -> None:
+    joined: list[str] = []
+
+    class RecordingThread:
+        def __init__(self, name: str, *, alive: bool) -> None:
+            self.name = name
+            self._alive = alive
+
+        def join(self, timeout: float) -> None:
+            assert timeout == 2
+            joined.append(self.name)
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    threads = [RecordingThread("survivor", alive=True), RecordingThread("done", alive=False)]
+
+    with pytest.raises(AssertionError, match="survivor"):
+        _join_all(threads)  # type: ignore[arg-type]
+
+    assert joined == ["survivor", "done"]
 
 
 def test_non_loading_state_method_signatures_match_public_contract() -> None:
@@ -279,8 +304,7 @@ def test_same_key_uses_one_owner_loader_and_ttl() -> None:
         release.set()
     finally:
         release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert errors == []
     assert results == [owner_value, owner_value]
@@ -311,8 +335,7 @@ def test_different_key_loader_bodies_enter_concurrently() -> None:
         _wait_until(lambda: len(results) + len(errors) == 2)
     finally:
         barrier.abort()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert errors == []
     assert sorted(results) == ["a", "b"]
@@ -344,8 +367,7 @@ def test_loader_failure_is_shared_not_cached_and_preserves_exception() -> None:
         release.set()
     finally:
         release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert results == []
     assert len(errors) == 2
@@ -409,8 +431,7 @@ def test_set_invalidate_and_clear_supersede_without_stale_publication(mutation: 
         release.set()
     finally:
         release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert errors == []
     assert results == ["stale"]
@@ -448,8 +469,7 @@ def test_post_mutation_caller_never_joins_superseded_flight() -> None:
         old_release.set()
     finally:
         old_release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert errors == []
     assert old_results == ["old"]
@@ -490,8 +510,7 @@ def test_active_and_superseded_flights_consume_limit_until_terminal() -> None:
     finally:
         new_release.set()
         old_release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     assert errors == []
     assert sorted(results) == ["new", "old"]
@@ -530,8 +549,7 @@ def test_sync_loading_stats_change_at_exact_ownership_transitions() -> None:
         release.set()
     finally:
         release.set()
-        for thread in threads:
-            _join(thread)
+        _join_all(threads)
 
     terminal = cache.stats()
     assert errors == []
