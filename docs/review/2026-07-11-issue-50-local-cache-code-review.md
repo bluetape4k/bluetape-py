@@ -59,4 +59,3 @@ against the current integrated diff and raw benchmark/package evidence.
   until terminal; callers must provide cooperative cancellation and deadlines.
 
 Final gate: **P0=0 P1=0**.
-

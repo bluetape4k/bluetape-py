@@ -47,4 +47,3 @@ git diff --check                           PASS
 
 The new collected-test delta is exactly `857 - 737 = 120`, matching the cache
 package suite.
-
