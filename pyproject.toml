@@ -58,6 +58,9 @@ members = [
 testpaths = ["packages"]
 addopts = "-ra"
 asyncio_mode = "auto"
+markers = [
+    "testcontainers: requires a Docker-compatible Testcontainers runtime and runs serially",
+]
 
 [tool.ruff]
 target-version = "py313"

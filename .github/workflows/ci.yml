@@ -54,7 +54,27 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Test
-        run: uv run --package bluetape-serde --extra fory --python 3.13.14 pytest
+        run: uv run --package bluetape-serde --extra fory --python 3.13.14 pytest -m "not testcontainers"
 
       - name: Build distributions
         run: uv build --all-packages
+
+  testcontainers-redis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13.14"
+
+      - name: Sync wrapper dependencies
+        run: uv sync --all-packages --locked --python 3.13.14
+
+      - name: Test Redis wrapper serially
+        run: uv run --python 3.13.14 pytest -m testcontainers packages/bluetape-testcontainers -q

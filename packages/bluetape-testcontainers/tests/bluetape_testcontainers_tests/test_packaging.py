@@ -2,7 +2,7 @@ import importlib.util
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).parents[3]
+ROOT = Path(__file__).parents[4]
 
 
 def load_project(path: Path) -> dict[str, object]:
