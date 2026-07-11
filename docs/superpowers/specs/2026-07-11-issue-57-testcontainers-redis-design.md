@@ -194,7 +194,7 @@ Error message는 failure kind와 validated image identifier만 포함한다. Doc
 Constructor validation taxonomy:
 
 - non-string image/startup timeout: `TypeError`
-- blank/whitespace/control-character image, `latest`, non-finite/non-positive timeout: `ValueError`
+- blank/non-ASCII/whitespace/control-character image, empty tag/digest, `latest`, non-finite/non-positive timeout: `ValueError`
 - connection details before/after live interval: `RuntimeError`
 
 ## Pytest Integration

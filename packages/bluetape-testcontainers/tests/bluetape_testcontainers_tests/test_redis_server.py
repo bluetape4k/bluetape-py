@@ -51,7 +51,16 @@ def test_rejects_non_string_image(image: object) -> None:
         RedisServer(image=image)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("image", ["redis:8 forged", "redis:8\nforged", "redis:8\tforged"])
+@pytest.mark.parametrize(
+    "image",
+    [
+        "redis:8 forged",
+        "redis:8\nforged",
+        "redis:8\tforged",
+        "redis:8\u202e",
+        "redis:8\u2066",
+    ],
+)
 def test_rejects_image_whitespace_and_control_characters(image: str) -> None:
     with pytest.raises(ValueError):
         RedisServer(image=image)
