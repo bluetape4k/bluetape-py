@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import get_type_hints
 
 import pytest
-from bluetape.cache import AsyncTTLCache, RecursiveLoadError
+from bluetape.cache import AsyncTTLCache, CacheLoadLimitError, RecursiveLoadError
 
 from ._support import FakeClock
 
@@ -29,6 +29,20 @@ async def _cancel_and_gather[V](tasks: list[asyncio.Task[V]]) -> None:
         if not task.done():
             task.cancel()
     await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 1)
+
+
+def _named_cache_tasks() -> list[asyncio.Task[object]]:
+    return [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task() and task.get_name().startswith("bluetape-cache-load-")
+    ]
+
+
+async def _assert_no_named_cache_task() -> None:
+    async with asyncio.timeout(1):
+        while _named_cache_tasks():
+            await asyncio.sleep(0)
 
 
 def test_non_loading_state_method_signatures_match_public_contract() -> None:
@@ -620,5 +634,319 @@ async def test_async_post_mutation_caller_uses_new_generation() -> None:
         await _cancel_and_gather(tasks)
 
     assert await cache.get("key") == "new"
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_waiter_does_not_cancel_surviving_waiter_load() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return "value"
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", loader)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(asyncio.create_task(cache.get_or_load("key", loader)))
+        async with asyncio.timeout(1):
+            while cache._active_flights["key"].waiters != 2:
+                await asyncio.sleep(0)
+        tasks[0].cancel()
+        cancelled = await asyncio.wait_for(asyncio.gather(tasks[0], return_exceptions=True), 1)
+        assert isinstance(cancelled[0], asyncio.CancelledError)
+        release.set()
+        assert await asyncio.wait_for(tasks[1], 1) == "value"
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_last_waiter_cancellation_returns_before_slow_loader_cleanup() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+    started = asyncio.Event()
+    cancellation_seen = asyncio.Event()
+    cleanup_release = asyncio.Event()
+    caller: asyncio.Task[str] | None = None
+
+    async def loader(_: str) -> str:
+        started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            cancellation_seen.set()
+            await asyncio.wait_for(cleanup_release.wait(), 1)
+            return "late"
+
+    try:
+        caller = asyncio.create_task(cache.get_or_load("key", loader))
+        await asyncio.wait_for(started.wait(), 1)
+        caller.cancel()
+        outcome = await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 0.2)
+        assert isinstance(outcome[0], asyncio.CancelledError)
+        await asyncio.wait_for(cancellation_seen.wait(), 1)
+        stats = await cache.stats()
+        assert stats.inflight_loads == 1
+        assert stats.abandoned_loads == 1
+    finally:
+        cleanup_release.set()
+        if caller is not None:
+            await _cancel_and_gather([caller])
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_suppressing_loader_cannot_publish_and_keeps_slot() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1, max_inflight=1)
+    started = asyncio.Event()
+    cancellation_seen = asyncio.Event()
+    terminal_release = asyncio.Event()
+    caller: asyncio.Task[str] | None = None
+
+    async def stubborn_loader(_: str) -> str:
+        started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            cancellation_seen.set()
+            await asyncio.wait_for(terminal_release.wait(), 1)
+            return "stale"
+
+    try:
+        caller = asyncio.create_task(cache.get_or_load("secret", stubborn_loader))
+        await asyncio.wait_for(started.wait(), 1)
+        caller.cancel()
+        outcome = await asyncio.wait_for(asyncio.gather(caller, return_exceptions=True), 0.2)
+        assert isinstance(outcome[0], asyncio.CancelledError)
+        await asyncio.wait_for(cancellation_seen.wait(), 1)
+        with pytest.raises(CacheLoadLimitError, match="maximum in-flight cache loads reached"):
+            await cache.get_or_load("other", lambda _: asyncio.sleep(0, result="other"))
+        terminal_release.set()
+        await _assert_no_named_cache_task()
+        with pytest.raises(KeyError):
+            await cache.get("secret")
+        assert await cache.get_or_load("other", lambda _: asyncio.sleep(0, result="fresh")) == (
+            "fresh"
+        )
+    finally:
+        terminal_release.set()
+        if caller is not None:
+            await _cancel_and_gather([caller])
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_new_generation_never_joins_abandoned_or_superseded_flight() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2, max_inflight=3)
+    abandoned_started = asyncio.Event()
+    abandoned_cancelled = asyncio.Event()
+    abandoned_release = asyncio.Event()
+    superseded_started = asyncio.Event()
+    superseded_release = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def abandoned_loader(_: str) -> str:
+        abandoned_started.set()
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            abandoned_cancelled.set()
+            await asyncio.wait_for(abandoned_release.wait(), 1)
+            return "abandoned"
+
+    async def superseded_loader(_: str) -> str:
+        superseded_started.set()
+        await asyncio.wait_for(superseded_release.wait(), 1)
+        return "superseded"
+
+    try:
+        abandoned_caller = asyncio.create_task(cache.get_or_load("a", abandoned_loader))
+        tasks.append(abandoned_caller)
+        await asyncio.wait_for(abandoned_started.wait(), 1)
+        abandoned_caller.cancel()
+        await asyncio.wait_for(asyncio.gather(abandoned_caller, return_exceptions=True), 0.2)
+        await asyncio.wait_for(abandoned_cancelled.wait(), 1)
+        assert await cache.get_or_load("a", lambda _: asyncio.sleep(0, result="new-a")) == "new-a"
+
+        tasks.append(asyncio.create_task(cache.get_or_load("b", superseded_loader)))
+        await asyncio.wait_for(superseded_started.wait(), 1)
+        assert await cache.invalidate("b") is False
+        assert await cache.get_or_load("b", lambda _: asyncio.sleep(0, result="new-b")) == "new-b"
+        superseded_release.set()
+        assert await asyncio.wait_for(tasks[-1], 1) == "superseded"
+        abandoned_release.set()
+        await _assert_no_named_cache_task()
+    finally:
+        abandoned_release.set()
+        superseded_release.set()
+        await _cancel_and_gather(tasks)
+        await _assert_no_named_cache_task()
+
+    assert await cache.get("a") == "new-a"
+    assert await cache.get("b") == "new-b"
+
+
+@pytest.mark.asyncio
+async def test_loader_self_cancellation_cleans_owned_state_and_counts_failure() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+
+    async def self_cancelling_loader(_: str) -> str:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(cache.get_or_load("key", self_cancelling_loader), 1)
+
+    await _assert_no_named_cache_task()
+    stats = await cache.stats()
+    assert stats.loads == 1
+    assert stats.load_failures == 1
+    assert stats.inflight_loads == 0
+    assert cache._active_flights == {}
+    assert cache._owned_flights == set()
+
+
+@pytest.mark.asyncio
+async def test_async_saturation_allows_joiners_rejects_new_keys_and_recovers() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=2, max_inflight=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return "shared"
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", loader)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(
+            asyncio.create_task(
+                cache.get_or_load("key", lambda _: asyncio.sleep(0, result="unused"))
+            )
+        )
+        async with asyncio.timeout(1):
+            while cache._active_flights["key"].waiters != 2:
+                await asyncio.sleep(0)
+        with pytest.raises(CacheLoadLimitError, match="maximum in-flight cache loads reached"):
+            await cache.get_or_load("other", lambda _: asyncio.sleep(0, result="other"))
+        release.set()
+        assert await asyncio.wait_for(asyncio.gather(*tasks), 1) == ["shared", "shared"]
+        assert await cache.get_or_load("other", lambda _: asyncio.sleep(0, result="recovered")) == (
+            "recovered"
+        )
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_async_loading_counters_and_current_gauges_are_exact() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1, max_inflight=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    tasks: list[asyncio.Task[str]] = []
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return "value"
+
+    try:
+        tasks.append(asyncio.create_task(cache.get_or_load("key", loader)))
+        await asyncio.wait_for(started.wait(), 1)
+        tasks.append(
+            asyncio.create_task(
+                cache.get_or_load("key", lambda _: asyncio.sleep(0, result="unused"))
+            )
+        )
+        async with asyncio.timeout(1):
+            while cache._active_flights["key"].waiters != 2:
+                await asyncio.sleep(0)
+        assert await cache.invalidate("key") is False
+        current = await cache.stats()
+        assert current.loads == 1
+        assert current.coalesced_waiters == 1
+        assert current.inflight_loads == 1
+        assert current.abandoned_loads == 0
+        assert current.superseded_loads == 1
+        with pytest.raises(CacheLoadLimitError):
+            await cache.get_or_load("other", lambda _: asyncio.sleep(0, result="other"))
+        assert (await cache.stats()).load_rejections == 1
+        release.set()
+        assert await asyncio.wait_for(asyncio.gather(*tasks), 1) == ["value", "value"]
+    finally:
+        release.set()
+        await _cancel_and_gather(tasks)
+        await _assert_no_named_cache_task()
+
+    terminal = await cache.stats()
+    assert terminal.loads == 1
+    assert terminal.load_failures == 0
+    assert terminal.load_rejections == 1
+    assert terminal.coalesced_waiters == 1
+    assert terminal.inflight_loads == 0
+    assert terminal.abandoned_loads == 0
+    assert terminal.superseded_loads == 0
+
+
+@pytest.mark.asyncio
+async def test_task_names_and_stats_never_expose_secret_sentinel() -> None:
+    secret = "SECRET-SENTINEL-9b4520"
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    task: asyncio.Task[str] | None = None
+
+    async def loader(_: str) -> str:
+        started.set()
+        await asyncio.wait_for(release.wait(), 1)
+        return secret
+
+    try:
+        task = asyncio.create_task(cache.get_or_load(secret, loader))
+        await asyncio.wait_for(started.wait(), 1)
+        assert _named_cache_tasks()
+        assert all(secret not in named.get_name() for named in _named_cache_tasks())
+        assert secret not in repr(await cache.stats())
+        release.set()
+        assert await asyncio.wait_for(task, 1) == secret
+    finally:
+        release.set()
+        if task is not None:
+            await _cancel_and_gather([task])
+        await _assert_no_named_cache_task()
+
+
+@pytest.mark.asyncio
+async def test_every_terminal_scenario_leaves_no_named_cache_task() -> None:
+    cache = AsyncTTLCache[str, str](default_ttl=1, max_size=3)
+
+    assert await cache.get_or_load("success", lambda _: asyncio.sleep(0, result="ok")) == "ok"
+
+    failure = RuntimeError("failure")
+
+    async def failing(_: str) -> str:
+        raise failure
+
+    with pytest.raises(RuntimeError) as caught:
+        await cache.get_or_load("failure", failing)
+    assert caught.value is failure
+
+    async def self_cancel(_: str) -> str:
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await cache.get_or_load("cancel", self_cancel)
+
+    await _assert_no_named_cache_task()
     assert cache._active_flights == {}
     assert cache._owned_flights == set()

@@ -11,6 +11,7 @@ from threading import Lock
 from typing import Generic, TypeVar, cast
 
 from bluetape.cache._core import (
+    CacheLoadLimitError,
     CacheStats,
     RecursiveLoadError,
     _CacheState,
@@ -146,6 +147,10 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
                 flight.waiters += 1
                 self._state.coalesced_waiters += 1
             else:
+                if len(self._owned_flights) >= self._max_inflight:
+                    self._state.load_rejections += 1
+                    raise CacheLoadLimitError("maximum in-flight cache loads reached")
+
                 self._flight_sequence += 1
                 flight = _AsyncFlight[K, V](
                     key=key,
@@ -167,16 +172,26 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
                     loader_coroutine.close()
                     self._complete_async_flight(flight, result=None, publish=False)
                     raise
+                flight.task.add_done_callback(self._observe_task)
                 self._state.loads += 1
 
         task = flight.task
         if task is None:  # pragma: no cover - task is installed before lock release
             raise RuntimeError("cache flight task was not initialized")
+        task_to_cancel: asyncio.Task[V] | None = None
         try:
-            return await task
+            return await asyncio.shield(task)
         finally:
             async with lock:
                 flight.waiters -= 1
+                if flight.waiters == 0 and not task.done():
+                    flight.abandoned = True
+                    if self._active_flights.get(flight.key) is flight:
+                        del self._active_flights[flight.key]
+                    self._state.bump_version(flight.key)
+                    task_to_cancel = task
+            if task_to_cancel is not None:
+                task_to_cancel.cancel()
 
     async def stats(self) -> CacheStats:
         async with self._bound_lock():
@@ -184,6 +199,7 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
                 now=self._now(),
                 owned_keys=self._owned_keys(),
                 inflight_loads=len(self._owned_flights),
+                abandoned_loads=sum(flight.abandoned for flight in self._owned_flights),
                 superseded_loads=sum(flight.superseded for flight in self._owned_flights),
             )
 
@@ -205,6 +221,13 @@ class AsyncTTLCache(Generic[K, V]):  # noqa: UP046 - public generics intentional
             and self._state.version(flight.key) == flight.version
             and self._active_flights.get(flight.key) is flight
         )
+
+    @staticmethod
+    def _observe_task(task: asyncio.Task[V]) -> None:
+        try:
+            task.exception()
+        except asyncio.CancelledError:
+            pass
 
     def _complete_async_flight(
         self,
