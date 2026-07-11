@@ -1,7 +1,7 @@
 # Issue #46 Apache Fory Adapter Implementation Plan
 
 Date: 2026-07-11
-Status: Step 6-R reviewed — P0=0 P1=0; PR/CI pending
+Status: Step 7-R reviewed — P0=0 P1=0; merge approval pending
 Scope: `bluetape-serde[fory]`, Python/Go/Rust/Kotlin conformance, CI, and docs
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
@@ -1063,7 +1063,7 @@ decision, public Buffer exact-consumption evidence, bounded-pool proof,
 cross-language fixture results, review misses, and future guards. Commit with
 intent `docs: preserve Apache Fory integration lessons`.
 
-- [ ] **Step 4: Create and verify the PR**
+- [x] **Step 4: Create and verify the PR**
 
 Push the feature branch, create an English PR assigned to `debop`, set milestone
 `0.2.0`, copy relevant labels, and end the body with `## DoD Status`. Verify the
@@ -1089,6 +1089,6 @@ commit/push the wiki artifact as the durable research record.
 - [x] Bidirectional artifact verification passes under exact toolchain/dependency pins.
 - [x] Ruff, full pytest, all-package build, actionlint, and diff checks pass.
 - [x] README locale set, package docs, WIP, changelog, layout, review, and lessons are current.
-- [ ] Step 6-R and Step 7-R finish with P0=0 and P1=0.
-- [ ] PR/CI evidence is complete and merge remains user-approved only.
+- [x] Step 6-R and Step 7-R finish with P0=0 and P1=0.
+- [x] PR/CI evidence is complete and merge remains user-approved only.
 - [x] External research is preserved and indexed in `bluetape4k-wiki`.
