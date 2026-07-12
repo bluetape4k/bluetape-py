@@ -150,6 +150,7 @@ name = "bluetape-cache-redis"
 version = "0.1.0"
 source = { editable = "packages/bluetape-cache-redis" }
 dependencies = [
+    { name = "bluetape-cache" },
     { name = "bluetape-compression" },
     { name = "bluetape-serde" },
     { name = "redis" },
@@ -164,6 +165,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bluetape-cache", editable = "packages/bluetape-cache" },
     { name = "bluetape-compression", editable = "packages/bluetape-compression" },
     { name = "bluetape-serde", editable = "packages/bluetape-serde" },
     { name = "redis", specifier = "==8.0.1" },

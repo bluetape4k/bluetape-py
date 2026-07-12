@@ -1,5 +1,6 @@
 """Public structural contracts and stable failures for Redis result providers."""
 
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -7,6 +8,10 @@ from typing import Protocol
 from bluetape.serde import PayloadMetadata, SerializedPayload
 
 DEFAULT_MAX_ENCODED_SIZE = 16 * 1024 * 1024
+MAX_COORDINATION_MARKER_SIZE = 138
+_MAX_COORDINATION_DURATION = 3600.0
+_MIN_POLL_INTERVAL = 0.001
+_MAX_POLL_BUDGET = 10_000
 _TOKEN_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._~-")
 _ALGORITHM_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-_.")
 
@@ -56,6 +61,8 @@ class RedisOperation(StrEnum):
     SET_IF_ABSENT = "set-if-absent"
     DELETE = "delete"
     DELETE_IF_VALUE = "delete-if-value"
+    COORDINATION_SNAPSHOT = "coordination-snapshot"
+    PUBLISH_IF_VALUE = "publish-if-value"
     CLOSE = "close"
 
 
@@ -89,6 +96,36 @@ class EnvelopeErrorCode(StrEnum):
     UNKNOWN_ALGORITHM = "unknown-algorithm"
     COMPRESSION_FAILURE = "compression-failure"
     PAYLOAD_CODEC_FAILURE = "payload-codec-failure"
+
+
+class RedisCoordinationOperation(StrEnum):
+    """Stable public load-coordination operation."""
+
+    GET_OR_LOAD = "get-or-load"
+
+
+class RedisCoordinationOutcome(StrEnum):
+    """Stable terminal outcome for one cache-owned distributed flight."""
+
+    LOADED = "loaded"
+    RESULT_REUSED = "result-reused"
+    LEASE_LOST = "lease-lost"
+    TIMEOUT = "timeout"
+    FAILURE = "failure"
+    CANCELLED = "cancelled"
+
+
+class RedisCoordinationErrorCode(StrEnum):
+    """Stable machine-readable load-coordination failure."""
+
+    ATTEMPTS_EXHAUSTED = "attempts-exhausted"
+    POLLS_EXHAUSTED = "polls-exhausted"
+    DEADLINE_EXCEEDED = "deadline-exceeded"
+    INVALID_ARTIFACT = "invalid-artifact"
+    PROVIDER_FAILURE = "provider-failure"
+    ENVELOPE_FAILURE = "envelope-failure"
+    LOADER_FAILURE = "loader-failure"
+    CLEANUP_FAILURE = "cleanup-failure"
 
 
 def _validate_owner_token(token: object) -> None:
@@ -131,6 +168,124 @@ class ResultEnvelope:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ResultEnvelopeMatch[T]:
+    """Distinguish a matching decoded value from an owner-token mismatch."""
+
+    value: T
+
+
+def _finite_positive(value: object, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"{field} must be a real number")
+    result = float(value)
+    if not math.isfinite(result) or result <= 0:
+        raise ValueError(f"{field} must be finite and positive")
+    return result
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RedisCommandPolicy:
+    """Finite no-retry command bounds inspected from a Redis connection pool."""
+
+    connect_timeout: float
+    socket_timeout: float
+    max_retries: int = 0
+
+    def __post_init__(self) -> None:
+        _finite_positive(self.connect_timeout, field="connect_timeout")
+        _finite_positive(self.socket_timeout, field="socket_timeout")
+        if type(self.max_retries) is not int:
+            raise TypeError("max_retries must be an exact int")
+        if self.max_retries != 0:
+            raise ValueError("max_retries must be zero")
+
+    @property
+    def max_command_time(self) -> float:
+        """Return the maximum connect plus socket duration."""
+        return float(self.connect_timeout) + float(self.socket_timeout)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RedisCoordinationSnapshot:
+    """Bounded atomic marker/result snapshot returned by a provider."""
+
+    marker: bytes | None
+    result: bytes | None
+    marker_oversized: bool
+    result_oversized: bool
+
+    def __post_init__(self) -> None:
+        if self.marker is not None and type(self.marker) is not bytes:
+            raise TypeError("marker must be exact bytes or None")
+        if self.result is not None and type(self.result) is not bytes:
+            raise TypeError("result must be exact bytes or None")
+        if type(self.marker_oversized) is not bool:
+            raise TypeError("marker_oversized must be an exact bool")
+        if type(self.result_oversized) is not bool:
+            raise TypeError("result_oversized must be an exact bool")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RedisLoadOptions:
+    """Exact bounded settings for Redis-backed load coordination."""
+
+    namespace: str
+    lease_ttl: float = 5.0
+    result_ttl: float = 1.0
+    poll_interval: float = 0.01
+    max_poll_interval: float = 0.25
+    wait_timeout: float = 10.0
+    max_attempts: int = 3
+    max_polls: int = 100
+    redis_io_timeout: float = 1.0
+
+    def __post_init__(self) -> None:
+        if type(self.namespace) is not str:
+            raise TypeError("namespace must be an exact str")
+        encoded = self.namespace.encode("utf-8")
+        if (
+            not self.namespace
+            or self.namespace != self.namespace.strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in self.namespace)
+            or not 1 <= len(encoded) <= 256
+        ):
+            raise ValueError(
+                "namespace must be 1..256 UTF-8 bytes without surrounding whitespace "
+                "or control characters"
+            )
+
+        durations = {
+            "lease_ttl": self.lease_ttl,
+            "result_ttl": self.result_ttl,
+            "poll_interval": self.poll_interval,
+            "max_poll_interval": self.max_poll_interval,
+            "wait_timeout": self.wait_timeout,
+            "redis_io_timeout": self.redis_io_timeout,
+        }
+        normalized = {
+            field: _finite_positive(value, field=field) for field, value in durations.items()
+        }
+        if any(value > _MAX_COORDINATION_DURATION for value in normalized.values()):
+            raise ValueError("coordination durations must not exceed 3600 seconds")
+        if normalized["poll_interval"] < _MIN_POLL_INTERVAL:
+            raise ValueError("poll_interval is below the minimum")
+        if normalized["poll_interval"] > normalized["max_poll_interval"]:
+            raise ValueError("poll_interval must not exceed max_poll_interval")
+        if normalized["max_poll_interval"] > normalized["wait_timeout"]:
+            raise ValueError("max_poll_interval must not exceed wait_timeout")
+        if normalized["max_poll_interval"] > normalized["result_ttl"]:
+            raise ValueError("max_poll_interval must not exceed result_ttl")
+        for field, value, maximum in (
+            ("max_attempts", self.max_attempts, 100),
+            ("max_polls", self.max_polls, _MAX_POLL_BUDGET),
+        ):
+            if type(value) is not int:
+                raise TypeError(f"{field} must be an exact int")
+            if not 1 <= value <= maximum:
+                raise ValueError(f"{field} is outside its supported range")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RedisEvent:
     """Low-cardinality terminal observation for one provider attempt."""
 
@@ -155,11 +310,54 @@ class RedisEvent:
             raise ValueError("elapsed_ns must be non-negative")
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RedisCoordinationEvent:
+    """Low-cardinality terminal observation for one distributed flight."""
+
+    mode: RedisMode
+    operation: RedisCoordinationOperation
+    outcome: RedisCoordinationOutcome
+    error_code: RedisCoordinationErrorCode | None
+    attempts: int
+    polls: int
+    cleanup_failed: bool
+    elapsed_ns: int
+
+    def __post_init__(self) -> None:
+        if type(self.mode) is not RedisMode:
+            raise TypeError("mode must be an exact RedisMode")
+        if type(self.operation) is not RedisCoordinationOperation:
+            raise TypeError("operation must be an exact RedisCoordinationOperation")
+        if type(self.outcome) is not RedisCoordinationOutcome:
+            raise TypeError("outcome must be an exact RedisCoordinationOutcome")
+        if self.error_code is not None and type(self.error_code) is not RedisCoordinationErrorCode:
+            raise TypeError("error_code must be an exact RedisCoordinationErrorCode or None")
+        for field, value in (
+            ("attempts", self.attempts),
+            ("polls", self.polls),
+            ("elapsed_ns", self.elapsed_ns),
+        ):
+            if type(value) is not int:
+                raise TypeError(f"{field} must be an exact int")
+            if value < 0:
+                raise ValueError(f"{field} must be non-negative")
+        if type(self.cleanup_failed) is not bool:
+            raise TypeError("cleanup_failed must be an exact bool")
+
+
 class RedisObserver(Protocol):
     """Receive low-cardinality terminal provider events."""
 
     def on_event(self, event: RedisEvent) -> None:
         """Observe one terminal provider event."""
+        ...
+
+
+class RedisCoordinationObserver(Protocol):
+    """Receive one redacted terminal event per distributed flight."""
+
+    def on_event(self, event: RedisCoordinationEvent) -> None:
+        """Observe a terminal load-coordination event."""
         ...
 
 
@@ -227,3 +425,34 @@ class EnvelopeDecodeError(EnvelopeError):
     """Report a redacted envelope decoding failure."""
 
     _message = "Result envelope decoding failed"
+
+
+class RedisCoordinationError(RuntimeError):
+    """Report a redacted load-coordination failure."""
+
+    def __init__(self, *, code: RedisCoordinationErrorCode) -> None:
+        if type(code) is not RedisCoordinationErrorCode:
+            raise TypeError("code must be an exact RedisCoordinationErrorCode")
+        self._code = code
+        super().__init__("Redis load coordination failed")
+
+    @property
+    def code(self) -> RedisCoordinationErrorCode:
+        """Return the stable failure code."""
+        return self._code
+
+
+class RedisCoordinationTimeoutError(RedisCoordinationError):
+    """Report exhaustion of a bounded coordination wait."""
+
+    def __init__(self, *, code: RedisCoordinationErrorCode) -> None:
+        if type(code) is not RedisCoordinationErrorCode:
+            raise TypeError("code must be an exact RedisCoordinationErrorCode")
+        if code not in {
+            RedisCoordinationErrorCode.ATTEMPTS_EXHAUSTED,
+            RedisCoordinationErrorCode.POLLS_EXHAUSTED,
+            RedisCoordinationErrorCode.DEADLINE_EXCEEDED,
+        }:
+            raise ValueError("timeout error requires a timeout code")
+        super().__init__(code=code)
+        self.args = ("Redis load coordination timed out",)

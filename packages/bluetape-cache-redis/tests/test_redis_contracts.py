@@ -5,6 +5,7 @@ from typing import get_type_hints
 
 import pytest
 from bluetape.cache.redis import (
+    MAX_COORDINATION_MARKER_SIZE,
     EnvelopeDecodeError,
     EnvelopeEncodeError,
     EnvelopeError,
@@ -13,8 +14,17 @@ from bluetape.cache.redis import (
     EnvelopeSizeError,
     PayloadCodec,
     ProviderClosedError,
+    RedisCommandPolicy,
+    RedisCoordinationError,
+    RedisCoordinationErrorCode,
+    RedisCoordinationEvent,
+    RedisCoordinationOperation,
+    RedisCoordinationOutcome,
+    RedisCoordinationSnapshot,
+    RedisCoordinationTimeoutError,
     RedisErrorCode,
     RedisEvent,
+    RedisLoadOptions,
     RedisMode,
     RedisOperation,
     RedisOutcome,
@@ -60,6 +70,18 @@ def test_public_exports_are_ordered_and_exact() -> None:
         "ResultEnvelopeCodec",
         "SyncRedisProvider",
         "AsyncRedisProvider",
+        "RedisCommandPolicy",
+        "ResultEnvelopeMatch",
+        "MAX_COORDINATION_MARKER_SIZE",
+        "RedisCoordinationSnapshot",
+        "RedisCoordinationOperation",
+        "RedisCoordinationOutcome",
+        "RedisCoordinationErrorCode",
+        "RedisCoordinationEvent",
+        "RedisCoordinationObserver",
+        "RedisCoordinationError",
+        "RedisCoordinationTimeoutError",
+        "RedisLoadOptions",
     ]
 
 
@@ -138,6 +160,8 @@ def test_stable_enum_values_are_exact() -> None:
         "set-if-absent",
         "delete",
         "delete-if-value",
+        "coordination-snapshot",
+        "publish-if-value",
         "close",
     ]
     assert [item.value for item in RedisOutcome] == ["success", "failure", "cancelled"]
@@ -209,3 +233,99 @@ def test_envelope_errors_expose_only_stable_codes(
     assert error.code is code
     assert code.value not in repr(error)
     assert "envelope" in str(error).lower()
+
+
+def test_redis_command_policy_is_exact_immutable_and_bounded() -> None:
+    policy = RedisCommandPolicy(connect_timeout=0.25, socket_timeout=0.75)
+    assert policy.max_command_time == 1.0
+    assert policy.max_retries == 0
+    assert not hasattr(policy, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        policy.socket_timeout = 1.0  # type: ignore[misc]
+    with pytest.raises(TypeError):
+        RedisCommandPolicy(connect_timeout=True, socket_timeout=1.0)
+    with pytest.raises(ValueError):
+        RedisCommandPolicy(connect_timeout=1.0, socket_timeout=1.0, max_retries=1)
+
+
+def test_coordination_snapshot_is_bounded_immutable_data() -> None:
+    snapshot = RedisCoordinationSnapshot(
+        marker=b"active:owner",
+        result=None,
+        marker_oversized=False,
+        result_oversized=False,
+    )
+    assert MAX_COORDINATION_MARKER_SIZE == 138
+    assert not hasattr(snapshot, "__dict__")
+    with pytest.raises(TypeError):
+        replace(snapshot, marker_oversized=1)
+
+
+def test_coordination_enums_are_stable_and_ordered() -> None:
+    assert [item.value for item in RedisCoordinationOperation] == ["get-or-load"]
+    assert [item.value for item in RedisCoordinationOutcome] == [
+        "loaded",
+        "result-reused",
+        "lease-lost",
+        "timeout",
+        "failure",
+        "cancelled",
+    ]
+    assert [item.value for item in RedisCoordinationErrorCode] == [
+        "attempts-exhausted",
+        "polls-exhausted",
+        "deadline-exceeded",
+        "invalid-artifact",
+        "provider-failure",
+        "envelope-failure",
+        "loader-failure",
+        "cleanup-failure",
+    ]
+
+
+def test_coordination_event_and_errors_are_exact_and_redacted() -> None:
+    event = RedisCoordinationEvent(
+        mode=RedisMode.SYNC,
+        operation=RedisCoordinationOperation.GET_OR_LOAD,
+        outcome=RedisCoordinationOutcome.LOADED,
+        error_code=None,
+        attempts=1,
+        polls=0,
+        cleanup_failed=False,
+        elapsed_ns=7,
+    )
+    assert not hasattr(event, "__dict__")
+    with pytest.raises(ValueError):
+        replace(event, polls=-1)
+    with pytest.raises(TypeError):
+        replace(event, cleanup_failed=0)
+
+    failure = RedisCoordinationError(code=RedisCoordinationErrorCode.PROVIDER_FAILURE)
+    assert str(failure) == "Redis load coordination failed"
+    assert failure.code is RedisCoordinationErrorCode.PROVIDER_FAILURE
+    timeout = RedisCoordinationTimeoutError(code=RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
+    assert str(timeout) == "Redis load coordination timed out"
+    with pytest.raises(ValueError):
+        RedisCoordinationTimeoutError(code=RedisCoordinationErrorCode.PROVIDER_FAILURE)
+
+
+def test_load_options_validate_exact_bounds_and_relationships() -> None:
+    options = RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3")
+    assert options.lease_ttl == 5.0
+    assert options.result_ttl == 1.0
+    assert options.max_attempts == 3
+    assert options.max_polls == 100
+    assert not hasattr(options, "__dict__")
+
+    with pytest.raises(TypeError):
+        replace(options, max_polls=True)
+    with pytest.raises(ValueError):
+        replace(options, namespace=" ")
+    with pytest.raises(ValueError):
+        replace(options, namespace="가" * 86)
+    with pytest.raises(ValueError):
+        replace(options, poll_interval=0.000_9)
+    with pytest.raises(ValueError):
+        replace(options, max_poll_interval=options.result_ttl + 0.001)
+    with pytest.raises(ValueError):
+        replace(options, redis_io_timeout=3600.1)

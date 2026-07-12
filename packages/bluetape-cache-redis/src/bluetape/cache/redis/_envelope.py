@@ -17,6 +17,7 @@ from ._contracts import (
     EnvelopeSizeError,
     PayloadCodec,
     ResultEnvelope,
+    ResultEnvelopeMatch,
     _validate_algorithm,
     _validate_owner_token,
 )
@@ -128,7 +129,14 @@ class ResultEnvelopeCodec[T]:
         return encoded
 
     def decode(self, data: bytes, *, expected_owner_token: str) -> T | None:
-        """Decode one envelope with exact token and algorithm selection and no fallback."""
+        """Decode a matching envelope while preserving the legacy mismatch sentinel."""
+        match = self.decode_matching(data, expected_owner_token=expected_owner_token)
+        return None if match is None else match.value
+
+    def decode_matching(
+        self, data: bytes, *, expected_owner_token: str
+    ) -> ResultEnvelopeMatch[T] | None:
+        """Decode one envelope and distinguish token mismatch from a decoded ``None``."""
         if type(data) is not bytes:
             raise TypeError("data must be exact bytes")
         _validate_owner_token(expected_owner_token)
@@ -160,7 +168,7 @@ class ResultEnvelopeCodec[T]:
                 raise EnvelopeDecodeError(code=EnvelopeErrorCode.COMPRESSION_FAILURE)
         serialized = SerializedPayload(metadata=envelope.metadata, data=logical)
         try:
-            return self.payload_codec.decode(serialized)
+            return ResultEnvelopeMatch(value=self.payload_codec.decode(serialized))
         except EnvelopeError:
             raise
         except Exception as error:

@@ -11,6 +11,7 @@ from bluetape.cache.redis import (
     JsonEnvelopeFormat,
     ResultEnvelope,
     ResultEnvelopeCodec,
+    ResultEnvelopeMatch,
 )
 from bluetape.compression import DeflateCompressor, GzipCompressor, ZlibCompressor
 from bluetape.serde import SerializedPayload
@@ -95,6 +96,22 @@ def test_token_mismatch_does_not_decompress_or_decode() -> None:
     assert writer.decode(encoded, expected_owner_token="other") is None
     assert compressor.decompressed_inputs == []
     assert payload_codec.decoded_payloads == []
+
+
+def test_decode_matching_distinguishes_legitimate_none_from_mismatch() -> None:
+    class NonePayloadCodec(RecordingPayloadCodec):
+        def decode(self, payload: SerializedPayload) -> None:
+            self.decoded_payloads.append(payload)
+            return None
+
+    codec = ResultEnvelopeCodec(payload_codec=NonePayloadCodec())
+    encoded = codec.encode("owner-1", object())
+
+    assert codec.decode_matching(encoded, expected_owner_token="owner-1") == ResultEnvelopeMatch(
+        value=None
+    )
+    assert codec.decode_matching(encoded, expected_owner_token="owner-2") is None
+    assert codec.decode(encoded, expected_owner_token="owner-1") is None
 
 
 def test_explicit_migration_reader_selects_only_recorded_algorithm() -> None:
