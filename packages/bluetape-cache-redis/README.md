@@ -87,6 +87,105 @@ supports reader-first compression migrations without content sniffing. Native
 LZ4, Snappy, and Zstandard compressors remain explicit
 `bluetape-compression` extras.
 
+## Redis Load Coordination
+
+`SyncRedisLoadCoordinator` and `AsyncRedisLoadCoordinator` combine a caller-owned
+local cache, Redis provider, result codec, and observer. A local hit performs no
+Redis I/O. A cold miss joins the local same-key flight, then uses a bounded Redis
+snapshot/lease/load/atomic-publish state machine so independent processes
+usually run one loader. Install with `pip install bluetape-cache-redis` or
+`pip install "bluetape[cache-redis]"`. The focused package depends on
+`bluetape-cache==0.1.0`; the default meta install remains core-only and
+Redis-free. Both focused install forms install `bluetape-cache` transitively.
+
+The namespace is part of the wire contract. Use a versioned pseudonym such as
+`orders:prod:tenant-a:order-v3`, and share one compatible codec and coordination
+configuration among participants. The `ttl` argument controls only the local
+cache entry; Redis result and lease TTLs come from `RedisLoadOptions`.
+
+<!-- sync-coordination-example -->
+```python
+from bluetape.cache import TTLCache
+from bluetape.cache.redis import RedisLoadOptions, ResultEnvelopeCodec, SyncRedisLoadCoordinator, SyncRedisProvider
+
+cache = TTLCache[str, str](default_ttl=60.0, max_size=1_000)
+provider = SyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
+coordinator = SyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
+value = coordinator.get_or_load("order-42", load_order, ttl=30.0)
+provider.close()
+```
+
+<!-- async-coordination-example -->
+```python
+from bluetape.cache import AsyncTTLCache
+from bluetape.cache.redis import AsyncRedisLoadCoordinator, AsyncRedisProvider, RedisLoadOptions, ResultEnvelopeCodec
+
+async def coordinated_load() -> str:
+    cache = AsyncTTLCache[str, str](default_ttl=60.0, max_size=1_000)
+    provider = AsyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
+    coordinator = AsyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
+    try:
+        return await coordinator.get_or_load("order-42", load_order, ttl=30.0)
+    finally:
+        await provider.aclose()
+```
+
+Attempts, polls, command time, and encoded artifacts are bounded. Redis failures
+do not silently fall back to an uncoordinated cold load. A sync timeout cannot
+interrupt a loader after lease acquisition. Async waiters may cancel
+independently; last-waiter cancellation follows the cache-owned flight and
+shielded-cleanup contract. Lease loss prevents publish. This is no L2 cache and
+no fencing mechanism; it is no distributed invalidation or transaction around
+loader side effects.
+
+Events contain bounded fields and redacted key digests. `cleanup_failed` reports
+best-effort cleanup failure without exposing raw keys or values. Do not put
+sensitive identifiers in namespaces or keys. Production Redis must not be
+unauthenticated: use TLS and an ACL principal that allows required key commands
+and `EVAL` for the fixed scripts.
+
+To roll back, stop coordinated writers, restore the previous version, retain
+compatible readers, wait at least
+`max(lease_ttl, result_ttl) + redis_io_timeout`, use bounded `SCAN` over the
+retired namespace, remove confirmed remnants with `UNLINK`, and retire old
+readers only after expiry and telemetry evidence.
+
+### Contract and operations checklist
+
+- The cache, provider, codec, and observer are borrowed. The coordinator has no
+  `close()` method; close only the resources your application owns.
+- Use one local cache and one coordinator configuration per logical cache.
+  Conflicting configurations are unsupported. Every participant must use
+  compatible codecs and options.
+- The namespace must identify application, environment or tenant, and schema
+  version. Its SHA-256 digest and each key digest are pseudonyms, not
+  confidentiality. Redis artifacts are unauthenticated, so caller codecs must
+  validate expected metadata and must not perform unsafe deserialization.
+- Local cache mutation is not distributed invalidation. A two-namespace rollout
+  may run duplicate loaders (`loader_count == 2`); deploy compatible readers
+  before switching writers and keep the overlap bounded.
+- Local hits emit no coordination event. Each cache-owned distributed flight
+  emits exactly one terminal event. Alert on stable provider or coordination
+  error codes with attempts, polls, elapsed time, and `cleanup_failed`. Attach
+  static external route labels; diagnostics must exclude raw namespaces, keys,
+  tokens, endpoints, exceptions, and artifact metadata.
+- Redis command policy must use finite connect/socket timeouts with zero retry.
+  TLS must not downgrade. The runtime ACL should restrict `GET`, `SET`, `DEL`,
+  `EXISTS`, `STRLEN`, `GETRANGE`, and `EVAL` to
+  `bluetape:cache:coord:<sha256(namespace)>:*`. Grant `SCAN` and `UNLINK` only
+  to the bounded rollback operator.
+- Stable `RedisProviderError`, `EnvelopeError`, `RedisCoordinationError`, and
+  their error codes are the caller handling surface.
+
+Rollback is a quiescence gate: (1) stop old participants or route all traffic
+to the new namespace; (2) wait the TTL/I/O interval above; (3) verify event and
+readiness quiescence, aborting immediately if traffic resumes; (4) bounded
+`SCAN` only the retired digest prefix; (5) batch `UNLINK`, or bounded `DEL`
+fallback, never `KEYS` or the active namespace; (6) record scanned, deleted,
+and remaining counts, then recheck quiescence; (7) on cleanup/recovery failure,
+alert on stable codes and keep traffic disabled until readiness and
+remaining-count checks pass.
+
 ## Redis Providers
 
 `SyncRedisProvider` and `AsyncRedisProvider` expose the same byte-only
@@ -135,8 +234,8 @@ never changes the provider result.
 Applications should version key namespaces, deploy readers before writers when
 changing an envelope format or compression algorithm, keep TTLs bounded, and
 scan TTL-aware namespaces for retirement evidence. Do not use unbounded
-`KEYS`. This package provides byte storage and result envelopes only; Redis
-load coordination, leases, and stampede control remain issue #55 work.
+`KEYS`. Coordination follows the same versioned namespace and bounded TTL
+rules. Local mutation remains local and is not distributed invalidation.
 
 ## Development
 

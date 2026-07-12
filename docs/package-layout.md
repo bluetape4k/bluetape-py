@@ -67,16 +67,24 @@ not part of the core-only default meta install and does not add a root
 `bluetape.cache` package extends its namespace path so the focused Redis wheel
 can add the nested import without adding Redis to `bluetape-cache`. The Redis
 package is available only through a direct focused install or
-`bluetape[cache-redis]`; it depends on redis-py, serde, and compression and is
-excluded from the default, `dev`, and `all` dependency sets.
+`bluetape[cache-redis]`; it depends on `bluetape-cache==0.1.0`, redis-py, serde,
+and compression and is excluded from the default, `dev`, and `all` dependency
+sets.
+
+The milestone release must reconcile this exact cache pin in the lock and wheel
+metadata, then publish and verify the `bluetape-cache` artifact before
+`bluetape-cache-redis`.
 
 The Redis surface is byte-only and keeps application serialization,
 compression, key naming, and rollout policy explicit. Built-in binary and JSON
 v1 envelopes enforce complete parsing and encoded-size bounds. Sync and async
 providers require positive TTL writes, use atomic `SET NX PX`, and use a fixed
 Lua compare-and-delete operation without a racy fallback. Factory-created
-clients are owned; constructor-injected clients are borrowed. Redis load
-coordination, leases, and stampede control remain issue #55 work.
+clients are owned; constructor-injected clients are borrowed. Issue #55 adds
+bounded sync/async same-key load coordination with expiring Redis leases,
+atomic token-checked publication, bounded polling, and explicit failure
+semantics. It is not an L2 cache, fencing primitive, or distributed
+invalidation system.
 
 `bluetape-serde` is stdlib-only for its strict JSON v1 contract. Its root public
 surface is imported from `bluetape.serde` and is fixed at 25 ordered exports

@@ -22,10 +22,9 @@ focused distribution model:
 - `bluetape-cache`: stdlib-only bounded synchronous and async local TTL loading
   caches, implemented for issue #50 on `feat/issue-50-local-cache` while PyPI
   publication remains on HOLD. Redis coordination is tracked separately in #51.
-- `bluetape-cache-redis`: byte-only sync and async Redis providers plus strict,
-  bounded binary/JSON result envelopes, implemented for issue #54 on
-  `feat/issue-54-redis-provider` while PyPI publication remains on HOLD. Redis
-  load coordination remains issue #55 work.
+- `bluetape-cache-redis`: byte-only sync and async Redis providers, strict
+  bounded result envelopes, and bounded Redis lease load coordination,
+  implemented for issues #54 and #55 while PyPI publication remains on HOLD.
 - `bluetape-codec`: strict URL-safe Base64 and hexadecimal helpers, added for
   issue #9 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers from #9,
@@ -65,8 +64,8 @@ focused distribution model:
 - Issue #11 remains the cache/Redis umbrella. Issue #50 local caches are
   complete. Issue #57 is the implemented Testcontainers prerequisite, and #59
   provides the compressor contracts needed to reduce Redis payloads. #54 Redis
-  provider integration is implemented on its source branch; #55 Redis load
-  coordination remains pending.
+  provider integration is implemented, and #55 Redis load coordination is
+  implemented with sync/async parity and real Redis verification.
 
 ## `0.1.0` Scope
 
@@ -158,7 +157,8 @@ Historical release scope; all items are closed.
 - #54 - Redis byte provider and bounded result-envelope substrate. Implemented
   and locally verified on `feat/issue-54-redis-provider`; PR review and merge
   remain pending.
-- #55 - Redis load coordination. Pending on the #54 provider substrate.
+- #55 - Bounded sync/async Redis load coordination. Implemented on the #54
+  provider substrate with expiring leases and atomic token-checked publish.
 - #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented and
   verified on `feat/issue-57-testcontainers-redis`; consumed by #54 integration
   tests and retained for #55.
