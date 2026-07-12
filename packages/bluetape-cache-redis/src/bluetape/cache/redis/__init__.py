@@ -32,6 +32,7 @@ from ._contracts import (
     ResultEnvelope,
     ResultEnvelopeMatch,
 )
+from ._coordination import SyncRedisLoadCoordinator
 from ._envelope import ResultEnvelopeCodec
 from ._formats import BinaryEnvelopeFormat, JsonEnvelopeFormat
 from ._provider import SyncRedisProvider
@@ -71,4 +72,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "RedisCoordinationError",
     "RedisCoordinationTimeoutError",
     "RedisLoadOptions",
+    "SyncRedisLoadCoordinator",
 ]
