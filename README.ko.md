@@ -40,7 +40,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 
 저장소는 하나의 `uv` 워크스페이스이며, 여러 개의 목적별 배포 패키지를 가집니다.
 메타 패키지는 의도적으로 작게 유지합니다. `pip install bluetape`는 기본적으로
-`bluetape-core`만 설치합니다.
+`bluetape-core`만 설치하므로 core-only 기본 설치는 Redis-free입니다.
 
 | 배포 패키지 | Import 경로 | 기본 설치 | 상태 | 목적 |
 |---|---|---:|---|---|
@@ -54,7 +54,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
-| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only sync/async Redis provider와 크기 제한 result envelope. |
+| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis provider, 크기 제한 result envelope, sync/async load coordinator. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8 테스트 서버 수명주기와 연결 정보. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
 
@@ -137,8 +137,8 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 
 #54 Redis provider 테스트는 생태계 래퍼의 `RedisServer`를 사용해 Redis 8 command,
 TTL, NX, Lua compare-and-delete, lifecycle, ACL, redaction 동작을 검증합니다. Value는
-명시적인 `serialize -> compress -> store` 조합을 사용합니다. Load coordination은
-issue #55 범위입니다.
+명시적인 `serialize -> compress -> store` 조합을 사용합니다. Issue #55는 opt-in
+패키지 경계를 유지하면서 bounded sync/async Redis lease coordination을 추가합니다.
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
 실행할 수 있습니다.

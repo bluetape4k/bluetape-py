@@ -41,7 +41,7 @@ Detailed planning lives in
 
 The repository is a single `uv` workspace with multiple focused distributions.
 The meta package remains intentionally small: `pip install bluetape` installs
-only `bluetape-core` by default.
+only `bluetape-core` by default, so the core-only default is Redis-free.
 
 | Distribution | Import path | Default install | Status | Purpose |
 |---|---|---:|---|---|
@@ -55,7 +55,7 @@ only `bluetape-core` by default.
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
-| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only sync/async Redis providers and bounded result envelopes. |
+| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis providers, bounded result envelopes, and sync/async load coordinators. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8 test server lifecycle and connection details. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
 
@@ -139,7 +139,8 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 The #54 Redis provider tests consume `RedisServer` from the ecosystem wrapper
 and verify Redis 8 commands, TTL, NX, Lua compare-and-delete, lifecycle, ACL,
 and redaction behavior. Values use explicit `serialize -> compress -> store`
-composition. Load coordination remains separate issue #55 work.
+composition. Issue #55 adds bounded sync/async Redis lease coordination while
+preserving the opt-in package boundary.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:

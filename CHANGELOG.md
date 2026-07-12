@@ -14,7 +14,11 @@ and this project uses semantic versioning once the first tag is published.
   compression migration readers, atomic TTL/NX/compare-delete operations,
   redacted stable failures, and owned/borrowed lifecycle contracts. The focused
   package and `cache-redis` meta extra remain outside the default, `dev`, and
-  `all` dependency sets; load coordination remains issue #55 work.
+  `all` dependency sets.
+- Add bounded sync and async Redis load coordinators with local same-key
+  coalescing, expiring leases, atomic token-checked result publication, bounded
+  polling, redacted observations, cancellation-safe cleanup, and real Redis
+  contention verification.
 - Add the opt-in `bluetape-testcontainers` Redis 8 wrapper with explicit
   lifecycle, bounded readiness, dynamic connection details, and serial Docker
   CI coverage.
