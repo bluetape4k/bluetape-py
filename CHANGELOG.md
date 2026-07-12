@@ -7,6 +7,15 @@ and this project uses semantic versioning once the first tag is published.
 
 ## [Unreleased]
 
+### Changed
+
+- Remove the never-emitted `RedisCoordinationErrorCode.CLEANUP_FAILURE` before
+  API stabilization. Cleanup failures continue to preserve the original
+  exception or cancellation and are reported only through the static note and
+  low-cardinality `cleanup_failed` observation. Consumers should remove enum
+  matches for the deleted member, handle the original exception or cancellation,
+  and use `event.cleanup_failed` for cleanup-failure telemetry.
+
 ### Added
 
 - Add the opt-in `bluetape-cache-redis` package with byte-only sync and async

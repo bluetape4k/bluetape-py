@@ -405,13 +405,14 @@ recognize strict markers; decode only completed matching results; use private
 injected clock/sleep/jitter for tests; emit one terminal event.
 
 On primary failure run one compare-delete, preserve primary type/cause, add one
-static PEP 678 note and `cleanup_failed=True` on dual failure. Cleanup-only
-failure raises `CLEANUP_FAILURE` from provider failure. Cleanup is permitted
-only after this flight has successfully acquired and still tracks its active
-marker: constructor, validation, acquire-loss, and snapshot failures perform
-zero cleanups; acquired loader/codec/publication failures perform at most one.
-Task 3 tests assert both sides. Export `SyncRedisLoadCoordinator` here and lock
-its exact signature/order without yet asserting the future async export.
+static PEP 678 note and `cleanup_failed=True` on dual failure. Issue #64 removed
+the never-emitted `CLEANUP_FAILURE`; cleanup never replaces the primary failure.
+Cleanup is permitted only after this flight has successfully acquired and still
+tracks its active marker: constructor, validation, acquire-loss, and snapshot
+failures perform zero cleanups; acquired loader/codec/publication failures
+perform at most one. Task 3 tests assert both sides. Export
+`SyncRedisLoadCoordinator` here and lock its exact signature/order without yet
+asserting the future async export.
 
 - [ ] **Step 4: Run GREEN, repeat races, commit**
 
@@ -519,9 +520,9 @@ raise first_cancelled
 ```
 
 Do not catch cancellation under `Exception`, start late wait commands, or
-retain a task after terminal cache flight. A cleanup failure without a primary
-cancellation/failure raises `CLEANUP_FAILURE`; it never replaces an existing
-loader, codec, publication, or cancellation primary.
+retain a task after terminal cache flight. Issue #64 removed the never-emitted
+cleanup-only error code; cleanup never replaces an existing loader, codec,
+publication, or cancellation primary.
 
 - [ ] **Step 4: Run GREEN, repeat cancellation, commit**
 

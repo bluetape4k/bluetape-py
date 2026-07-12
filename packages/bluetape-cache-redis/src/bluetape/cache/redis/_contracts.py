@@ -125,7 +125,6 @@ class RedisCoordinationErrorCode(StrEnum):
     PROVIDER_FAILURE = "provider-failure"
     ENVELOPE_FAILURE = "envelope-failure"
     LOADER_FAILURE = "loader-failure"
-    CLEANUP_FAILURE = "cleanup-failure"
 
 
 def _validate_owner_token(token: object) -> None:

@@ -221,8 +221,10 @@ distributed invalidation이나 loader side effect transaction이 아닙니다.
 
 Event에는 제한된 low-cardinality field만 포함합니다. `cleanup_failed`는 raw key나
 value 없이 best-effort cleanup 실패를 알리고, caller가 static external route
-label을 붙입니다. Namespace나 key에 민감한 식별자를 넣지 않습니다. 운영 Redis는
-unauthenticated 상태로 두지 않습니다. 신뢰하는 CA와 peer certificate 및 hostname
+label을 붙입니다. Cleanup 전용 coordination error code는 의도적으로 제공하지
+않으며 cleanup은 원래 exception이나 cancellation을 대체하지 않습니다. Namespace나
+key에 민감한 식별자를 넣지 않습니다. 운영 Redis는 unauthenticated 상태로 두지
+않습니다. 신뢰하는 CA와 peer certificate 및 hostname
 검증을 강제한 `rediss://` 연결을 사용합니다(예:
 `ssl_ca_certs=...`, `ssl_cert_reqs="required"`,
 `ssl_check_hostname=True`). TLS를 plaintext로 downgrade하거나 fallback하지
