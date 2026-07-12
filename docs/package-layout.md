@@ -38,6 +38,24 @@ document cooperative ownership, cancellation, timeout, and cleanup behavior.
 Compression packages must document wire formats, output bounds,
 malformed-input errors, and optional-backend availability.
 
+`bluetape-compression` keeps gzip, zlib-wrapped, and raw-DEFLATE support in the
+provider-free base distribution. Its structural `Compressor` Protocol allows
+application-owned implementations without inheritance. LZ4 frame, raw Snappy,
+and Zstandard frame implementations live under `bluetape.compression.native`
+and require the focused `lz4`, `snappy`, or `zstd` extra, or the aggregate
+`native` extra. The meta distribution forwards those choices as
+`compression-lz4`, `compression-snappy`, `compression-zstd`, and
+`compression-native`; none may enter the default, `dev`, or `all` dependency
+sets. Missing providers fail when the matching compressor is constructed, not
+when the package or native namespace is imported.
+
+All bundled decompressors enforce a non-negative logical output bound, reject
+invalid or incomplete payloads, and avoid payload-bearing error messages or
+logs. Application composition is explicit: serialize, then compress, then
+store; read by decompressing before deserialization. Sibling language
+implementations are semantic references for features and failure rules, not a
+cross-language wire-compatibility promise.
+
 `bluetape-cache` owns `bluetape.cache` and is available from the focused
 distribution or the explicit future `bluetape[cache]` meta extra. It is
 stdlib-only and provides bounded sync and async local TTL loading caches. It is

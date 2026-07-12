@@ -21,6 +21,12 @@ and this project uses semantic versioning once the first tag is published.
   Base64 and hexadecimal helpers under `bluetape.codec`.
 - `bluetape-compression` source workspace package with bounded gzip,
   zlib-wrapped, and raw-DEFLATE helpers under `bluetape.compression`.
+- Structural `Compressor` Protocol and immutable gzip, zlib, raw-DEFLATE, LZ4
+  frame, raw Snappy, and Zstandard frame implementations with stable algorithm
+  IDs, bounded decompression, strict malformed/trailing-data failures, and
+  provider-isolated `lz4`, `snappy`, `zstd`, and `native` extras. The meta
+  distribution forwards the native choices without adding them to its default,
+  `dev`, or `all` dependency sets.
 - `bluetape-cache` source workspace package with stdlib-only bounded
   synchronous and async local TTL loading caches under `bluetape.cache`,
   including LRU capacity, same-key load coalescing, mutation supersession,

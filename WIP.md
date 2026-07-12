@@ -24,8 +24,9 @@ focused distribution model:
   publication remains on HOLD. Redis coordination is tracked separately in #51.
 - `bluetape-codec`: strict URL-safe Base64 and hexadecimal helpers, added for
   issue #9 in the source workspace while PyPI publication remains on HOLD.
-- `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers, added
-  for issue #9 in the source workspace while PyPI publication remains on HOLD.
+- `bluetape-compression`: bounded gzip, zlib, and raw-DEFLATE helpers from #9,
+  plus structural compressor contracts and opt-in LZ4, Snappy, and Zstandard
+  providers from #59. PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-serde`: stdlib-only immutable payload contracts and strict,
   bounded JSON v1 serialization, implemented for issue #45 in the source
@@ -58,8 +59,9 @@ focused distribution model:
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
   on HOLD.
 - Issue #11 remains the cache/Redis umbrella. Issue #50 local caches are
-  complete. Issue #57 is the implemented Testcontainers prerequisite; #54
-  Redis provider integration and #55 Redis load coordination remain pending.
+  complete. Issue #57 is the implemented Testcontainers prerequisite, and #59
+  provides the compressor contracts needed to reduce Redis payloads. #54 Redis
+  provider integration and #55 Redis load coordination remain pending.
 
 ## `0.1.0` Scope
 
@@ -129,6 +131,11 @@ Historical release scope; all items are closed.
 - #9 - Codec and compression packages. Implemented by `bluetape-codec` and
   `bluetape-compression` in the source workspace; PyPI publication remains on
   HOLD.
+- #59 - Composable compressor contracts and optional native providers.
+  Implemented with a structural Python Protocol, immutable gzip/zlib/DEFLATE/
+  LZ4/Snappy/Zstandard implementations, bounded decompression, and isolated
+  extras. This is the compression prerequisite for #54; merge and rebase are
+  still required before Redis provider work resumes.
 - #10 - Serialization strategy research. Decision recorded in
   `docs/research/2026-07-10-issue-10-serialization-strategy.md`; follow-ups
   are #45 (contracts/strict JSON) and #46 (Apache Fory adapter).
