@@ -1,5 +1,6 @@
 """Bounded result envelopes and Redis byte providers."""
 
+from ._async_coordination import AsyncRedisLoadCoordinator
 from ._async_provider import AsyncRedisProvider
 from ._contracts import (
     DEFAULT_MAX_ENCODED_SIZE,
@@ -73,4 +74,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "RedisCoordinationTimeoutError",
     "RedisLoadOptions",
     "SyncRedisLoadCoordinator",
+    "AsyncRedisLoadCoordinator",
 ]
