@@ -2,9 +2,9 @@
 
 [English](README.md) | 한국어
 
-bluetape-py용 Python 3.13+ 선택형 Redis 바이트 provider와 크기 제한 result
-envelope를 제공합니다. 직렬화, 압축, key 이름, rollout 정책은 애플리케이션이
-소유합니다.
+bluetape-py용 Python 3.13+ 선택형 Redis 바이트 provider, 크기 제한 result
+envelope, sync/async load coordinator를 제공합니다. 직렬화, 압축, key 이름,
+rollout 정책은 애플리케이션이 소유합니다.
 
 ## 설치
 
@@ -16,9 +16,9 @@ pip install bluetape-cache-redis
 
 현재 PyPI 배포는 보류 중입니다. 이 저장소에서는
 `uv sync --all-packages --locked`를 사용하거나 로컬에서 빌드한 focused wheel을
-설치합니다. 이 패키지는 `redis==8.0.1`, `bluetape-serde`,
-`bluetape-compression`에 의존하며 meta 패키지의 기본, `dev`, `all` 의존성에는
-포함되지 않습니다.
+설치합니다. 이 패키지는 `bluetape-cache==0.1.0`, `redis==8.0.1`,
+`bluetape-serde`, `bluetape-compression`에 의존하며 meta 패키지의 기본,
+`dev`, `all` 의존성에는 포함되지 않습니다.
 
 ## Result Envelope
 
@@ -81,7 +81,11 @@ json_zstd_codec = ResultEnvelopeCodec(
 )
 ```
 
-owner token이 다르면 다른 decoder를 시도하지 않고 `None`을 반환합니다. 설정한
+`decode_matching()`은 owner가 일치하면 `ResultEnvelopeMatch(value=...)`를
+반환합니다. 정상적으로 decode한 값이 `None`이면
+`ResultEnvelopeMatch(value=None)`이므로 owner 불일치의 `None`과 구분할 수
+있습니다. 호환용 `decode()`은 owner가 다르면 다른 decoder를 시도하지 않고
+`None`을 반환합니다. 설정한
 compressor는 write에 항상 사용합니다. Read는 envelope에 기록된 algorithm과
 일치하는 writer/reader만 선택하므로 content sniffing 없이 reader-first 압축
 migration을 수행할 수 있습니다. Native LZ4, Snappy, Zstandard compressor는 계속
@@ -106,28 +110,96 @@ result와 lease TTL은 `RedisLoadOptions`에서 설정합니다.
 <!-- sync-coordination-example -->
 ```python
 from bluetape.cache import TTLCache
-from bluetape.cache.redis import RedisLoadOptions, ResultEnvelopeCodec, SyncRedisLoadCoordinator, SyncRedisProvider
+from bluetape.cache.redis import (
+    RedisLoadOptions,
+    ResultEnvelopeCodec,
+    SyncRedisLoadCoordinator,
+    SyncRedisProvider,
+)
+from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+
+
+class Utf8Codec:
+    def encode(self, value: str) -> SerializedPayload:
+        return SerializedPayload(
+            metadata=PayloadMetadata(
+                format="text",
+                version=1,
+                content_type="text/plain",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+            data=value.encode(),
+        )
+
+    def decode(self, payload: SerializedPayload) -> str:
+        return payload.data.decode()
+
+
+def load_order(key: str) -> str:
+    return f"loaded:{key}"
 
 cache = TTLCache[str, str](default_ttl=60.0, max_size=1_000)
-provider = SyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
-coordinator = SyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
-value = coordinator.get_or_load("order-42", load_order, ttl=30.0)
-provider.close()
+with SyncRedisProvider.from_url(
+    "redis://localhost:6379/0",
+    socket_connect_timeout=0.2,
+    socket_timeout=0.3,
+    retry_on_timeout=False,
+) as provider:
+    coordinator = SyncRedisLoadCoordinator(
+        cache,
+        provider,
+        ResultEnvelopeCodec(payload_codec=Utf8Codec()),
+        options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"),
+    )
+    value = coordinator.get_or_load("order-42", load_order, ttl=30.0)
 ```
 
 <!-- async-coordination-example -->
 ```python
 from bluetape.cache import AsyncTTLCache
-from bluetape.cache.redis import AsyncRedisLoadCoordinator, AsyncRedisProvider, RedisLoadOptions, ResultEnvelopeCodec
+from bluetape.cache.redis import (
+    AsyncRedisLoadCoordinator,
+    AsyncRedisProvider,
+    RedisLoadOptions,
+    ResultEnvelopeCodec,
+)
+from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+
+
+class Utf8Codec:
+    def encode(self, value: str) -> SerializedPayload:
+        return SerializedPayload(
+            metadata=PayloadMetadata(
+                format="text",
+                version=1,
+                content_type="text/plain",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+            data=value.encode(),
+        )
+
+    def decode(self, payload: SerializedPayload) -> str:
+        return payload.data.decode()
+
+
+async def load_order(key: str) -> str:
+    return f"loaded:{key}"
 
 async def coordinated_load() -> str:
     cache = AsyncTTLCache[str, str](default_ttl=60.0, max_size=1_000)
-    provider = AsyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
-    coordinator = AsyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
-    try:
+    async with AsyncRedisProvider.from_url(
+        "redis://localhost:6379/0",
+        socket_connect_timeout=0.2,
+        socket_timeout=0.3,
+        retry_on_timeout=False,
+    ) as provider:
+        coordinator = AsyncRedisLoadCoordinator(
+            cache,
+            provider,
+            ResultEnvelopeCodec(payload_codec=Utf8Codec()),
+            options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"),
+        )
         return await coordinator.get_or_load("order-42", load_order, ttl=30.0)
-    finally:
-        await provider.aclose()
 ```
 
 시도, polling, command 시간, encoded artifact 크기는 제한됩니다. Redis 실패를
@@ -137,10 +209,25 @@ cancellation은 cache-owned flight와 shielded cleanup 계약을 따릅니다. L
 잃으면 publish하지 않습니다. 이 기능은 no L2 cache, no fencing mechanism,
 distributed invalidation이나 loader side effect transaction이 아닙니다.
 
-Event에는 제한된 field와 redacted key digest만 포함합니다. `cleanup_failed`는 raw
-key나 value 없이 best-effort cleanup 실패를 알립니다. Namespace나 key에 민감한
-식별자를 넣지 않습니다. Production Redis는 unauthenticated 상태로 운영하지 않고,
-TLS와 고정 script의 `EVAL` 및 필수 key command를 허용한 ACL principal을 사용합니다.
+| 결과 | 호출자에게 보이는 동작 |
+|---|---|
+| Local hit | Redis command나 coordination event 없이 local value를 반환합니다. |
+| Loaded | 결과를 atomic publish하고 반환하며, outer cache가 caller의 local `ttl`로 저장합니다. |
+| Result reused | Loader를 호출하지 않고 matching completed result를 반환해 local cache에 저장합니다. |
+| Lease lost | Publish하지 않지만 caller가 load한 값을 반환해 해당 local cache에만 저장합니다. |
+| Timeout/Redis/envelope failure | Stable timeout, provider, envelope exception을 그대로 발생시키며 cold-load fallback은 없습니다. |
+| Loader failure | 원래 loader exception을 보존하고 cleanup 실패는 static note와 event의 `cleanup_failed`로만 알립니다. |
+| Async cancellation | `CancelledError`를 보존하며 cache-owned flight가 owner cleanup을 최대 한 번 shield 처리합니다. |
+
+Event에는 제한된 low-cardinality field만 포함합니다. `cleanup_failed`는 raw key나
+value 없이 best-effort cleanup 실패를 알리고, caller가 static external route
+label을 붙입니다. Namespace나 key에 민감한 식별자를 넣지 않습니다. 운영 Redis는
+unauthenticated 상태로 두지 않습니다. 신뢰하는 CA와 peer certificate 및 hostname
+검증을 강제한 `rediss://` 연결을 사용합니다(예:
+`ssl_ca_certs=...`, `ssl_cert_reqs="required"`,
+`ssl_check_hostname=True`). TLS를 plaintext로 downgrade하거나 fallback하지
+않습니다. 고정 script의 `EVAL`과 필수 key command만 허용한 ACL principal을
+사용합니다.
 
 Rollback할 때는 coordinated writer를 중단하고 이전 버전을 복구하며 호환 reader를
 유지한 채 `max(lease_ttl, result_ttl) + redis_io_timeout` 이상 기다립니다. 이후
@@ -167,7 +254,8 @@ Rollback할 때는 coordinated writer를 중단하고 이전 버전을 복구하
   route label을 붙입니다. 진단에는 raw namespace, key, token, endpoint, exception,
   artifact metadata를 포함하지 않습니다.
 - Redis command policy는 finite connect/socket timeout과 zero retry를 사용합니다.
-  TLS는 downgrade하지 않습니다. Runtime ACL은 `GET`, `SET`, `DEL`, `EXISTS`,
+  Pool acquisition이 command bound 밖에 있는 `BlockingConnectionPool`은 지원하지
+  않습니다. TLS는 downgrade하지 않습니다. Runtime ACL은 `GET`, `SET`, `DEL`, `EXISTS`,
   `STRLEN`, `GETRANGE`, `EVAL`을
   `bluetape:cache:coord:<sha256(namespace)>:*`에만 허용합니다. `SCAN`과 `UNLINK`는
   bounded rollback operator에만 부여합니다.
@@ -183,6 +271,36 @@ remaining count를 기록하고 quiescence를 다시 확인합니다. (7) cleanu
 실패하면 stable code로 alert하고 readiness 및 remaining-count 검사가 통과할 때까지
 traffic을 비활성 상태로 유지합니다.
 
+폐기할 namespace와 quiescence를 확인한 뒤 먼저 prefix를 계산해 출력합니다. 각
+bounded batch와 count를 검토한 다음에만 `UNLINK` command의 주석을 제거합니다.
+
+```bash
+: "${REDISCLI_AUTH:?set the operator ACL password in REDISCLI_AUTH}"
+: "${REDIS_CA_CERT:?set the trusted CA certificate path}"
+: "${REDIS_HOST:?set the Redis hostname}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_USER="${REDIS_USER:-coordination-operator}"
+redis_args=(--tls --cacert "$REDIS_CA_CERT" --user "$REDIS_USER" -h "$REDIS_HOST" -p "$REDIS_PORT")
+namespace='orders:prod:tenant-a:order-v2'
+namespace_id="$(printf '%s' "$namespace" | shasum -a 256 | awk '{print $1}')"
+pattern="bluetape:cache:coord:${namespace_id}:*"
+printf 'retired pattern: %s\n' "$pattern"
+keys_file="$(mktemp)"
+trap 'rm -f "$keys_file"' EXIT
+redis-cli "${redis_args[@]}" --scan --pattern "$pattern" --count 100 > "$keys_file"
+scanned="$(wc -l < "$keys_file" | tr -d ' ')"
+printf 'scanned: %s\n' "$scanned"
+# if [ -s "$keys_file" ]; then
+#   deleted="$(xargs -n 100 redis-cli "${redis_args[@]}" UNLINK < "$keys_file" | awk '{sum += $1} END {print sum + 0}')"
+#   printf 'deleted: %s\n' "$deleted"
+# fi
+remaining="$(redis-cli "${redis_args[@]}" --scan --pattern "$pattern" --count 100 | wc -l | tr -d ' ')"
+printf 'remaining: %s\n' "$remaining"
+```
+
+Active namespace digest에는 이 명령을 실행하지 않습니다. Scanned, deleted,
+remaining count를 기록하고 quiescence와 readiness를 다시 확인합니다.
+
 ## Redis Provider
 
 `SyncRedisProvider`와 `AsyncRedisProvider`는 같은 byte-only operation을
@@ -193,6 +311,8 @@ traffic을 비활성 상태로 유지합니다.
 - `set_if_absent(key, value, ttl=...)`
 - `delete(key)`
 - `delete_if_value(key, expected_value)`
+- `coordination_snapshot(marker_key, result_key, ..., max_result_size=...)`
+- `publish_if_value(condition_key, expected_value, ..., ttl=...)`
 
 모든 write에는 양의 TTL이 필요합니다. `set_if_absent`는 Redis `SET NX PX`를
 사용합니다. `delete_if_value`는 고정된 Lua compare-and-delete script 하나를

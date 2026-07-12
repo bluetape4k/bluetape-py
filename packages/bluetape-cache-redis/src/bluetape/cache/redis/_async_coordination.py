@@ -28,6 +28,7 @@ from ._coordination import (
     _FlightState,
     _new_token,
     _parse_marker,
+    _poll_delay,
     _validate_logical_key,
 )
 from ._envelope import ResultEnvelopeCodec
@@ -213,6 +214,8 @@ class AsyncRedisLoadCoordinator[V]:
             _validate_owner_token(token)
             active_marker = f"active:{token}".encode("ascii")
             completion_marker = f"completed:{token}".encode("ascii")
+            if _clock() >= deadline:
+                raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
             state.attempts += 1
             acquired = await self._provider.set_if_absent(
                 lease_key, active_marker, ttl=self._options.lease_ttl
@@ -235,6 +238,8 @@ class AsyncRedisLoadCoordinator[V]:
             if _clock() >= deadline:
                 raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
             while True:
+                if _clock() >= deadline:
+                    raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
                 snapshot = await self._provider.coordination_snapshot(
                     lease_key,
                     result_key,
@@ -264,11 +269,7 @@ class AsyncRedisLoadCoordinator[V]:
                 remaining = deadline - _clock()
                 if remaining <= 0:
                     raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
-                cap = min(
-                    self._options.poll_interval * (2 ** (state.polls - 1)),
-                    self._options.max_poll_interval,
-                    remaining,
-                )
+                cap = _poll_delay(self._options, state.polls, remaining)
                 await _sleep(cap * _jitter())
 
     async def _run_owner(

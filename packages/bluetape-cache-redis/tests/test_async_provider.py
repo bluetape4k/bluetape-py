@@ -127,6 +127,21 @@ def test_async_command_policy_matches_sync_discovery() -> None:
     )
 
 
+@pytest.mark.asyncio
+async def test_async_command_policy_rejects_blocking_connection_pool() -> None:
+    client = redis_async.Redis(
+        connection_pool=redis_async.BlockingConnectionPool(
+            max_connections=1,
+            timeout=0.1,
+            **bounded_command_options(),
+        )
+    )
+    try:
+        assert AsyncRedisProvider(client).command_policy is None
+    finally:
+        await client.aclose()
+
+
 @pytest.mark.parametrize(
     "change",
     [

@@ -106,6 +106,8 @@ def _validate_binary_client(client: object) -> None:
 
 def _discover_command_policy(client: object) -> RedisCommandPolicy | None:
     pool = getattr(client, "connection_pool", None)
+    if hasattr(pool, "timeout"):
+        return None
     options = getattr(pool, "connection_kwargs", None)
     if not isinstance(options, Mapping):
         return None

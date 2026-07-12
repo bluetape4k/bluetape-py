@@ -14,6 +14,9 @@ def test_focused_distribution_has_exact_runtime_dependencies() -> None:
     metadata = load_pyproject(ROOT / "packages/bluetape-cache-redis/pyproject.toml")
     project = metadata["project"]
     assert project["requires-python"] == ">=3.13"
+    assert project["description"] == (
+        "Bounded Redis byte providers, result envelopes, and load coordination."
+    )
     assert project["dependencies"] == [
         "bluetape-cache==0.1.0",
         "bluetape-compression==0.1.0",

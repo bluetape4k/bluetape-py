@@ -18,7 +18,9 @@ and this project uses semantic versioning once the first tag is published.
 - Add bounded sync and async Redis load coordinators with local same-key
   coalescing, expiring leases, atomic token-checked result publication, bounded
   polling, redacted observations, cancellation-safe cleanup, and real Redis
-  contention verification.
+  contention verification. `ResultEnvelopeCodec.decode_matching()` returns a
+  tagged `ResultEnvelopeMatch` so a decoded `None` remains distinct from an
+  owner-token mismatch.
 - Add the opt-in `bluetape-testcontainers` Redis 8 wrapper with explicit
   lifecycle, bounded readiness, dynamic connection details, and serial Docker
   CI coverage.

@@ -7,10 +7,17 @@ from bluetape.cache import AsyncTTLCache
 from bluetape.cache.redis import (
     AsyncRedisLoadCoordinator,
     AsyncRedisProvider,
+    EnvelopeSizeError,
     RedisCommandPolicy,
+    RedisCoordinationError,
+    RedisCoordinationErrorCode,
     RedisCoordinationOutcome,
     RedisCoordinationSnapshot,
+    RedisCoordinationTimeoutError,
+    RedisErrorCode,
     RedisLoadOptions,
+    RedisOperation,
+    RedisProviderError,
     ResultEnvelopeCodec,
 )
 from bluetape.serde import SerializedPayload
@@ -32,6 +39,7 @@ class FakeAsyncProvider(AsyncRedisProvider):
         self.acquire_results = [True]
         self.acquires = []
         self.snapshots: list[RedisCoordinationSnapshot] = []
+        self.snapshot_calls = 0
         self.publishes = []
         self.publish_result = True
         self.cleanups = []
@@ -54,6 +62,7 @@ class FakeAsyncProvider(AsyncRedisProvider):
     async def coordination_snapshot(
         self, marker_key, result_key, *, max_marker_size=138, max_result_size
     ):
+        self.snapshot_calls += 1
         return self.snapshots.pop(0)
 
     async def publish_if_value(
@@ -89,7 +98,7 @@ class Observer:
         self.events.append(event)
 
 
-def make_coordinator(*, provider=None, observer=None):
+def make_coordinator(*, provider=None, observer=None, options=None):
     cache = AsyncTTLCache[str, bytes | None](default_ttl=60, max_size=100)
     actual = provider or FakeAsyncProvider()
     codec = ResultEnvelopeCodec(payload_codec=BytesCodec())
@@ -97,7 +106,7 @@ def make_coordinator(*, provider=None, observer=None):
         cache,
         actual,
         codec,
-        options=RedisLoadOptions(namespace="orders:test:v1"),
+        options=options or RedisLoadOptions(namespace="orders:test:v1"),
         observer=observer,
     )
     return coordinator, cache, actual, codec
@@ -153,6 +162,139 @@ async def test_async_completed_none_is_reused() -> None:
 
     assert await coordinator.get_or_load("key", lambda _: pytest.fail("loader called")) is None
     assert await cache.get("key") is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        RedisCoordinationSnapshot(
+            marker=b"active:oversized",
+            result=None,
+            marker_oversized=True,
+            result_oversized=False,
+        ),
+        RedisCoordinationSnapshot(
+            marker=b"secret-invalid-marker",
+            result=None,
+            marker_oversized=False,
+            result_oversized=False,
+        ),
+    ],
+)
+async def test_async_oversized_or_malformed_artifact_fails_without_cleanup(
+    snapshot: RedisCoordinationSnapshot,
+) -> None:
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [snapshot]
+    coordinator, _, _, _ = make_coordinator(provider=provider)
+
+    with pytest.raises(RedisCoordinationError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"unused"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.INVALID_ARTIFACT
+    assert "secret" not in str(captured.value)
+    assert provider.cleanups == []
+
+
+@pytest.mark.asyncio
+async def test_async_mismatched_completed_result_is_ignored_until_matching_result(
+    monkeypatch,
+) -> None:
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._sleep", no_sleep)
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    codec = ResultEnvelopeCodec(payload_codec=BytesCodec())
+    provider.snapshots = [
+        RedisCoordinationSnapshot(
+            marker=b"completed:new-owner",
+            result=codec.encode("old-owner", b"stale"),
+            marker_oversized=False,
+            result_oversized=False,
+        ),
+        RedisCoordinationSnapshot(
+            marker=b"completed:new-owner",
+            result=codec.encode("new-owner", b"fresh"),
+            marker_oversized=False,
+            result_oversized=False,
+        ),
+    ]
+    coordinator, cache, _, _ = make_coordinator(provider=provider)
+
+    assert await coordinator.get_or_load("key", lambda _: pytest.fail("loader called")) == b"fresh"
+    assert await cache.get("key") == b"fresh"
+
+
+@pytest.mark.asyncio
+async def test_async_loader_failure_is_preserved_and_owner_marker_is_cleaned_once() -> None:
+    coordinator, _, provider, _ = make_coordinator()
+    cause = LookupError("caller-owned")
+
+    async def fail(_: str) -> bytes:
+        raise cause
+
+    with pytest.raises(LookupError) as captured:
+        await coordinator.get_or_load("key", fail)
+
+    assert captured.value is cause
+    assert len(provider.cleanups) == 1
+    assert provider.publishes == []
+
+
+@pytest.mark.asyncio
+async def test_async_cleanup_failure_preserves_primary_and_adds_static_note() -> None:
+    provider = FakeAsyncProvider()
+    provider.cleanup_error = RuntimeError("provider-secret")
+    coordinator, _, _, _ = make_coordinator(provider=provider)
+    cause = LookupError("caller-owned")
+
+    async def fail(_: str) -> bytes:
+        raise cause
+
+    with pytest.raises(LookupError) as captured:
+        await coordinator.get_or_load("key", fail)
+
+    assert captured.value is cause
+    assert captured.value.__notes__ == ["Redis owner cleanup also failed (cleanup-failure)"]
+
+
+@pytest.mark.asyncio
+async def test_async_encode_overflow_cleans_owner_and_does_not_fill_cache() -> None:
+    coordinator, cache, provider, _ = make_coordinator()
+    coordinator._codec = ResultEnvelopeCodec(payload_codec=BytesCodec(), max_encoded_size=1)
+
+    with pytest.raises(EnvelopeSizeError):
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"too-large"))
+
+    assert len(provider.cleanups) == 1
+    assert provider.publishes == []
+    with pytest.raises(KeyError):
+        await cache.get("key")
+
+
+@pytest.mark.asyncio
+async def test_async_publish_provider_failure_cleans_owner_and_is_preserved(monkeypatch) -> None:
+    provider = FakeAsyncProvider()
+    error = RedisProviderError(
+        operation=RedisOperation.PUBLISH_IF_VALUE,
+        code=RedisErrorCode.PROVIDER_FAILURE,
+    )
+
+    async def fail_publish(*args, **kwargs) -> bool:
+        raise error
+
+    monkeypatch.setattr(provider, "publish_if_value", fail_publish)
+    coordinator, _, _, _ = make_coordinator(provider=provider)
+
+    with pytest.raises(RedisProviderError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"loaded"))
+
+    assert captured.value is error
+    assert len(provider.cleanups) == 1
 
 
 @pytest.mark.asyncio
@@ -274,6 +416,144 @@ async def test_async_stale_owner_returns_local() -> None:
     )
     assert observer.events[-1].outcome is RedisCoordinationOutcome.LEASE_LOST
     assert provider.cleanups == []
+
+
+@pytest.mark.asyncio
+async def test_async_token_work_cannot_start_acquire_after_deadline(monkeypatch) -> None:
+    now = 0.0
+
+    def delayed_token() -> str:
+        nonlocal now
+        now = 11.0
+        return "owner"
+
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._clock", lambda: now)
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._new_token", delayed_token)
+    coordinator, _, provider, _ = make_coordinator()
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"unused"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.DEADLINE_EXCEEDED
+    assert provider.acquires == []
+
+
+@pytest.mark.asyncio
+async def test_async_poll_sleep_cannot_start_snapshot_after_deadline(monkeypatch) -> None:
+    now = 0.0
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [
+        RedisCoordinationSnapshot(
+            marker=b"active:remote",
+            result=None,
+            marker_oversized=False,
+            result_oversized=False,
+        )
+    ]
+
+    async def expire_deadline(_: float) -> None:
+        nonlocal now
+        now = 11.0
+
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._clock", lambda: now)
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._sleep", expire_deadline)
+    coordinator, _, _, _ = make_coordinator(provider=provider)
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"unused"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.DEADLINE_EXCEEDED
+    assert provider.snapshot_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_async_large_poll_budget_ends_with_stable_timeout(monkeypatch) -> None:
+    snapshot = RedisCoordinationSnapshot(
+        marker=b"active:remote",
+        result=None,
+        marker_oversized=False,
+        result_oversized=False,
+    )
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [snapshot] * 1_100
+    coordinator, _, _, _ = make_coordinator(
+        provider=provider,
+        options=RedisLoadOptions(
+            namespace="orders:test:v1",
+            max_polls=1_100,
+            wait_timeout=3_600,
+        ),
+    )
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._sleep", no_sleep)
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._jitter", lambda: 1.0)
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"unused"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.POLLS_EXHAUSTED
+    assert provider.snapshot_calls == 1_100
+
+
+@pytest.mark.asyncio
+async def test_async_attempt_budget_exhaustion_is_explicit() -> None:
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [
+        RedisCoordinationSnapshot(
+            marker=None,
+            result=None,
+            marker_oversized=False,
+            result_oversized=False,
+        )
+    ]
+    coordinator, _, _, _ = make_coordinator(
+        provider=provider,
+        options=RedisLoadOptions(namespace="orders:test:v1", max_attempts=1),
+    )
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        await coordinator.get_or_load("key", lambda _: asyncio.sleep(0, result=b"unused"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.ATTEMPTS_EXHAUSTED
+
+
+def test_async_unbounded_provider_policy_is_rejected_at_construction() -> None:
+    provider = FakeAsyncProvider()
+    provider.policy = None
+
+    with pytest.raises(ValueError, match="bounded no-retry policy"):
+        make_coordinator(provider=provider)
+
+
+@pytest.mark.asyncio
+async def test_async_invalid_key_fails_before_cache_or_redis_access() -> None:
+    coordinator, _, provider, _ = make_coordinator()
+
+    with pytest.raises((TypeError, ValueError)):
+        await coordinator.get_or_load(  # type: ignore[arg-type]
+            b"key", lambda _: asyncio.sleep(0, result=b"unused")
+        )
+
+    assert provider.acquires == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ttl", [True, 0, -1, float("inf"), "1"])
+async def test_async_invalid_local_ttl_fails_before_redis_access(ttl: object) -> None:
+    coordinator, _, provider, _ = make_coordinator()
+
+    with pytest.raises((TypeError, ValueError)):
+        await coordinator.get_or_load(  # type: ignore[arg-type]
+            "key", lambda _: asyncio.sleep(0, result=b"unused"), ttl=ttl
+        )
+
+    assert provider.acquires == []
 
 
 @pytest.mark.asyncio
