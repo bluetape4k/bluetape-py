@@ -75,7 +75,7 @@ assert compressor.decompress(encoded) == b"redis-value"
 
 Provider를 설치하지 않아도 native namespace 자체는 import할 수 있습니다. 다만
 해당 extra 없이 native compressor를 생성하면 정확한 설치 방법을 담은
-`CompressionError`가 발생합니다.
+`ModuleNotFoundError`가 발생합니다.
 
 ## 함수와 실패 규칙
 
