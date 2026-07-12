@@ -96,7 +96,7 @@ jobs:
       - name: Sync native compression providers
         run: >-
           uv sync --package bluetape-compression --extra native
-          --python 3.13.14 --locked
+          --group test --python 3.13.14 --locked
 
       - name: Test native compression providers
         run: >-

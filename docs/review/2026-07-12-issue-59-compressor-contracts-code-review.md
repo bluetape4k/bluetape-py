@@ -15,6 +15,12 @@
 | P1 | `packages/bluetape-compression/README.md:77` and `README.ko.md:78` | User/Caller | Docs claimed a missing native provider raises `CompressionError`, while source and approved spec require `ModuleNotFoundError`. | Fixed both locales; focused provider-loader tests `2 passed`; caller lens rerun clean. |
 | P2 | `packages/bluetape-compression/pyproject.toml:4` | Integration/User | Distribution description still characterized the whole package as stdlib helpers after opt-in native contracts were added. | Changed to `Bounded byte compression contracts for bluetape-py.`; packaging build rerun in the final verification. |
 
+## Post-PR CI finding
+
+| Priority | File:Line | Lens | Finding | Disposition |
+|---|---|---|---|---|
+| P1 | `.github/workflows/ci.yml:96` | Stability/Ops/Integration | The focused package sync installed runtime and native dependencies but not `pytest`; a previously populated local workspace environment masked the clean-runner failure. | Added a non-published package-local `test` dependency group, synced it explicitly, added a regression assertion, and reproduced the exact native job in a temporary clean environment with `98 passed` and strict config. |
+
 ## Final perspective results
 
 | Tier | Scope and evidence | P0 | P1 | P2 | P3 | Verdict |
@@ -77,10 +83,12 @@ merge and rebase.
 
 ## Convergence
 
-- Baseline: `P0=0`, `P1=1`, `P2=1`, `P3=0`.
-- Repairs: fixed the missing-provider exception docs and package metadata description.
+- Baseline pre-PR: `P0=0`, `P1=1`, `P2=1`, `P3=0`.
+- Post-PR CI: one additional P1 exposed a missing package-local test-tool declaration.
+- Repairs: fixed the missing-provider exception docs, package metadata description, and clean CI
+  test dependency boundary.
 - Affected reruns: provider-loader tests, caller claim scan, locale parity, package build, full
   compressor/full non-Docker suites, Ruff, actionlint, lock check, and diff check.
-- Final: `P0=0`, `P1=0`, `P2=0`, `P3=0`.
+- Final local rerun: `P0=0`, `P1=0`, `P2=0`, `P3=0`; live CI rerun is tracked by PR #60.
 
 Step 6-R verdict: `PASS`.
