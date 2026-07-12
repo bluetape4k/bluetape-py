@@ -1,9 +1,13 @@
 import importlib
 import subprocess
 import sys
+import tomllib
+from pathlib import Path
 
 import pytest
 from bluetape.compression import CompressionError
+
+_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_root_compression_import_does_not_load_the_native_namespace() -> None:
@@ -124,3 +128,42 @@ def test_provider_call_preserves_fatal_failures(failure) -> None:
         support.provider_call(fail, message="provider failed")
 
     assert raised.value is failure
+
+
+def test_native_provider_extras_are_exact_and_base_metadata_stays_empty() -> None:
+    compression = tomllib.loads(
+        (_ROOT / "packages/bluetape-compression/pyproject.toml").read_text()
+    )["project"]
+
+    assert compression["dependencies"] == []
+    assert compression["optional-dependencies"] == {
+        "lz4": ["lz4==4.4.5"],
+        "snappy": ["cramjam==2.11.0"],
+        "zstd": ["zstandard==0.25.0"],
+        "native": ["lz4==4.4.5", "cramjam==2.11.0", "zstandard==0.25.0"],
+    }
+
+
+def test_meta_forwarding_extras_do_not_change_default_dev_or_all_dependencies() -> None:
+    meta = tomllib.loads((_ROOT / "packages/bluetape/pyproject.toml").read_text())["project"]
+    extras = meta["optional-dependencies"]
+
+    assert meta["dependencies"] == ["bluetape-core==0.1.0"]
+    assert extras["compression-lz4"] == ["bluetape-compression[lz4]==0.1.0"]
+    assert extras["compression-snappy"] == ["bluetape-compression[snappy]==0.1.0"]
+    assert extras["compression-zstd"] == ["bluetape-compression[zstd]==0.1.0"]
+    assert extras["compression-native"] == ["bluetape-compression[native]==0.1.0"]
+    for extra in ("dev", "all"):
+        assert not any("[lz4]" in value for value in extras[extra])
+        assert not any("[snappy]" in value for value in extras[extra])
+        assert not any("[zstd]" in value for value in extras[extra])
+        assert not any("[native]" in value for value in extras[extra])
+
+
+def test_native_compression_marker_is_registered() -> None:
+    root = tomllib.loads((_ROOT / "pyproject.toml").read_text())
+
+    assert any(
+        marker.startswith("native_compression:")
+        for marker in root["tool"]["pytest"]["ini_options"]["markers"]
+    )

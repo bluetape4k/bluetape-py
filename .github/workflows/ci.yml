@@ -29,7 +29,14 @@ jobs:
         run: uv sync --all-packages
 
       - name: Assert base workspace is provider-free
-        run: uv run python -c 'import importlib.util; assert importlib.util.find_spec("pyfory") is None'
+        run: |
+          uv run python -c '
+          import importlib.util
+          assert importlib.util.find_spec("pyfory") is None
+          assert importlib.util.find_spec("lz4") is None
+          assert importlib.util.find_spec("cramjam") is None
+          assert importlib.util.find_spec("zstandard") is None
+          '
 
       - name: Enable explicit Fory fixture checks
         run: uv sync --all-packages --extra fory --python 3.13.14 --locked
@@ -54,7 +61,9 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Test
-        run: uv run --package bluetape-serde --extra fory --python 3.13.14 pytest -m "not testcontainers"
+        run: >-
+          uv run --package bluetape-serde --extra fory --python 3.13.14 pytest
+          -m "not testcontainers and not native_compression"
 
       - name: Build distributions
         run: uv build --all-packages
@@ -69,6 +78,33 @@ jobs:
             --find-links "$tmp_dir/dist" bluetape==0.1.0
           "$tmp_dir/venv/bin/python" -c \
             'import importlib.util; assert importlib.util.find_spec("testcontainers") is None; assert importlib.util.find_spec("docker") is None; assert importlib.util.find_spec("redis") is None'
+
+  compression-native:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13.14"
+
+      - name: Sync native compression providers
+        run: >-
+          uv sync --package bluetape-compression --extra native
+          --python 3.13.14 --locked
+
+      - name: Test native compression providers
+        run: >-
+          uv run --package bluetape-compression --extra native --python 3.13.14 pytest
+          -m native_compression packages/bluetape-compression -q
+
+      - name: Build distributions
+        run: uv build --all-packages
 
   testcontainers-redis:
     runs-on: ubuntu-latest
