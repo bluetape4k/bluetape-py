@@ -1,3 +1,5 @@
 """Optional native compression providers."""
 
-__all__: list[str] = []
+from ._lz4 import Lz4Compressor
+
+__all__ = ["Lz4Compressor"]

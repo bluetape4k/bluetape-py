@@ -59,6 +59,7 @@ testpaths = ["packages"]
 addopts = "-ra"
 asyncio_mode = "auto"
 markers = [
+    "native_compression: requires explicit native compression providers and runs separately",
     "testcontainers: requires a Docker-compatible Testcontainers runtime and runs serially",
 ]
 
