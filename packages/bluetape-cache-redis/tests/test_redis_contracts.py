@@ -1,3 +1,5 @@
+"""Redis provider public contract tests."""
+
 from dataclasses import FrozenInstanceError, replace
 from typing import get_type_hints
 
