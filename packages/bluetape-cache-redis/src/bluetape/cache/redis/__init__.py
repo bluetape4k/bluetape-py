@@ -19,6 +19,7 @@ from ._contracts import (
     RedisProviderError,
     ResultEnvelope,
 )
+from ._envelope import ResultEnvelopeCodec
 from ._formats import BinaryEnvelopeFormat, JsonEnvelopeFormat
 
 __all__ = [  # noqa: RUF022 - public order is part of the contract
@@ -41,4 +42,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "EnvelopeDecodeError",
     "BinaryEnvelopeFormat",
     "JsonEnvelopeFormat",
+    "ResultEnvelopeCodec",
 ]
