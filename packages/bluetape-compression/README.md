@@ -74,8 +74,8 @@ assert compressor.decompress(encoded) == b"redis-value"
 ```
 
 The native namespace itself is importable without the providers. Constructing
-a native compressor without its matching extra raises `CompressionError` with
-the exact install guidance.
+a native compressor without its matching extra raises `ModuleNotFoundError`
+with the exact install guidance.
 
 ## Functions and Failure Rules
 

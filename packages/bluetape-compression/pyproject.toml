@@ -1,7 +1,7 @@
 [project]
 name = "bluetape-compression"
 version = "0.1.0"
-description = "Bounded stdlib compression helpers for bluetape-py."
+description = "Bounded byte compression contracts for bluetape-py."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
