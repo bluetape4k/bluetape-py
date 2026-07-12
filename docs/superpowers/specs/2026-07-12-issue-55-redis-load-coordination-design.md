@@ -282,7 +282,6 @@ class RedisCoordinationErrorCode(StrEnum):
     PROVIDER_FAILURE = "provider-failure"
     ENVELOPE_FAILURE = "envelope-failure"
     LOADER_FAILURE = "loader-failure"
-    CLEANUP_FAILURE = "cleanup-failure"
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RedisCoordinationEvent:
@@ -316,6 +315,10 @@ first terminal bound. `INVALID_ARTIFACT` reports malformed/oversized snapshot
 state. Constructor/options/key/loader validation remains `TypeError` or
 `ValueError`; provider, envelope, and loader failures retain their existing
 public types and trusted cause chains.
+
+Cleanup has no standalone error code. A cleanup failure preserves the original
+exception or cancellation and is reported only through its static note and the
+low-cardinality `cleanup_failed` observation.
 
 Observer failures are swallowed after the terminal event, matching the existing
 provider observer boundary. Events never contain namespace, key, token, payload,
@@ -622,9 +625,10 @@ cache operations and `asyncio.sleep` for bounded polling.
   cleanup also fails, the original loader exception or `CancelledError` remains
   the raised primary type and its caller-owned cause chain and notes are not
   replaced. The coordinator adds one static redacted PEP 678 note containing
-  only the cleanup stable code and emits `cleanup_failed=True`; it never inserts
-  the cleanup error into or overwrites the caller's chain. With no primary
-  failure, cleanup failure is raised directly.
+  only the static cleanup marker and emits `cleanup_failed=True`; it never
+  inserts the cleanup error into or overwrites the caller's chain. Cleanup is
+  attempted only after an acquired-owner primary failure or cancellation; there
+  is no cleanup-only failure path.
 - Redis artifacts are untrusted and unauthenticated. Token matching prevents
   attempt mixing, not malicious modification. Payload codecs must independently
   validate expected metadata/trust policy and bounded input and must not elevate

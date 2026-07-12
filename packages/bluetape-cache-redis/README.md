@@ -222,8 +222,10 @@ loader side effects.
 
 Events contain only bounded, low-cardinality fields. `cleanup_failed` reports
 best-effort cleanup failure without exposing raw keys or values; callers attach
-static external route labels. Do not put sensitive identifiers in namespaces or
-keys. Production Redis must not be unauthenticated. Use `rediss://` with a
+static external route labels. There is intentionally no cleanup-only coordination
+error code: cleanup never replaces the original exception or cancellation. Do
+not put sensitive identifiers in namespaces or keys. Production Redis must not
+be unauthenticated. Use `rediss://` with a
 trusted CA, required peer-certificate and hostname verification (for example,
 `ssl_ca_certs=...`, `ssl_cert_reqs="required"`, and
 `ssl_check_hostname=True`). Never downgrade or fall back to plaintext. Use an

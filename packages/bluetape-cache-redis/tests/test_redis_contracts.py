@@ -281,7 +281,6 @@ def test_coordination_enums_are_stable_and_ordered() -> None:
         "provider-failure",
         "envelope-failure",
         "loader-failure",
-        "cleanup-failure",
     ]
 
 
