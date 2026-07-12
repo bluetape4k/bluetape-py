@@ -92,3 +92,27 @@ redaction, and rollout ownership.
 - Open decisions: none remain in the approved design scope.
 
 Final integrated gate: `P0=0 P1=0 P2=0 P3=0`.
+
+## Post-plan dependency-boundary amendment
+
+Step 3-R found that the public coordinators borrow `TTLCache` and
+`AsyncTTLCache`, but a direct `bluetape-cache-redis` or
+`bluetape[cache-redis]` install did not install `bluetape-cache`. The spec was
+reopened before metadata changes and amended to add exact
+`bluetape-cache==0.1.0` as a focused runtime dependency. The meta extra remains
+a single `bluetape-cache-redis==0.1.0` entry and default `bluetape` remains
+core-only.
+
+Affected spec lanes were rerun after adding exact lock/Requires-Dist checks,
+direct and meta-extra clean-wheel installs, default isolation, bilingual install
+commands, package-layout ownership, and milestone release ordering:
+
+| Lens | Final amendment result |
+|---|---:|
+| Developer/API | `P0=0 P1=0 P2=0 P3=0` |
+| Operator/Ops | `P0=0 P1=0 P2=0 P3=0` |
+| User/caller | `P0=0 P1=0 P2=0 P3=0` |
+| Main-session integration | `P0=0 P1=0 P2=0 P3=0` |
+
+The amendment is review-ready but remains subject to explicit user reapproval
+before implementation begins.
