@@ -5,6 +5,7 @@ description = "Bounded Redis byte providers and result envelopes for bluetape-py
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "bluetape-cache==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-serde==0.1.0",
     "redis==8.0.1",
@@ -23,4 +24,3 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "bluetape.cache.redis"
-

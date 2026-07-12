@@ -15,6 +15,7 @@ def test_focused_distribution_has_exact_runtime_dependencies() -> None:
     project = metadata["project"]
     assert project["requires-python"] == ">=3.13"
     assert project["dependencies"] == [
+        "bluetape-cache==0.1.0",
         "bluetape-compression==0.1.0",
         "bluetape-serde==0.1.0",
         "redis==8.0.1",
@@ -57,6 +58,7 @@ def test_lock_resolves_exact_focused_runtime_dependencies() -> None:
     packages = {package["name"]: package for package in lock["package"]}
     focused = packages["bluetape-cache-redis"]
     assert [dependency["name"] for dependency in focused["dependencies"]] == [
+        "bluetape-cache",
         "bluetape-compression",
         "bluetape-serde",
         "redis",
