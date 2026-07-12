@@ -93,6 +93,11 @@ turning transient result envelopes into durable cache entries.
 - `RedisServer` is the repository's only permitted Docker-backed Redis boundary.
 - `bluetape-cache-redis` is focused and opt-in; the default `bluetape` install
   remains Redis-free.
+- Because the public coordinators require `TTLCache` and `AsyncTTLCache`, the
+  focused `bluetape-cache-redis` distribution will directly depend on exact
+  `bluetape-cache==0.1.0`. The `bluetape[cache-redis]` extra remains a single
+  focused-package entry and receives the cache transitively; default
+  `bluetape` remains core-only.
 
 ### Ecosystem anchors
 
@@ -740,6 +745,7 @@ Run targeted tests first, then:
 
 ```bash
 uv sync --all-packages
+uv lock --check
 uv run ruff format --check .
 uv run ruff check .
 uv run pytest
@@ -749,22 +755,42 @@ git diff --check
 ```
 
 Packaging-isolation smoke checks must prove the default `bluetape` wheel remains
-Redis-free and the focused cache/Redis wheels import together.
+Redis-free; an isolated `bluetape[cache-redis]` install must retain the single
+`bluetape-cache-redis==0.1.0` extra entry while transitively installing and
+importing `bluetape-cache` plus both coordinators from the focused Redis wheel.
+The same clean-wheel proof applies to a direct `bluetape-cache-redis` install.
+Metadata tests assert the focused runtime edge and `Requires-Dist`, the
+corresponding `uv.lock` edge, exact core-only default dependencies, the exact
+single-entry `cache-redis` extra, and no new default/dev/all membership.
 
 ## Documentation and Rollout
 
 - Update `packages/bluetape-cache-redis/README.md` and `README.ko.md` together
   with install, sync/async examples, consistency, security, limits, cleanup,
-  rollout, rollback, and lease-expiry behavior.
+  rollout, rollback, and lease-expiry behavior. Both locales show shell-safe
+  `pip install bluetape-cache-redis` and
+  `pip install "bluetape[cache-redis]"`, explain that both install
+  `bluetape-cache` transitively, and state that plain `pip install bluetape`
+  remains core-only and Redis-free.
 - Update root `README.md`/`README.ko.md`, focused package README locale parity,
-  `WIP.md`, and `CHANGELOG.md` as required deliverables. Remove the old wording
-  that coordination remains future issue #55 work and record the new public API.
-- No dependency, package registration, workflow topology, or default-extra
-  change is planned. If implementation proves one necessary, reopen this spec
-  and its hazard review before editing metadata or CI.
+  `docs/package-layout.md`, `WIP.md`, and `CHANGELOG.md` as required
+  deliverables. The root README pair documents the meta-extra install and
+  default isolation. Update the durable package boundary to include the focused
+  cache dependency, remove the old wording that coordination remains future
+  issue #55 work, and record the new public API.
+- Add exact `bluetape-cache==0.1.0` to the focused
+  `bluetape-cache-redis` runtime dependencies and refresh `uv.lock`. This is the
+  minimum package-boundary change required for direct focused installs and
+  `bluetape[cache-redis]` to compose the public coordinators. No package
+  registration, workflow topology, default dependency, or extra membership
+  change is planned. Any further metadata or CI change reopens this spec and its
+  hazard review.
 - Package version changes are deferred to the milestone release PR; this feature
   PR changes unreleased source contracts and validates focused/default wheel
-  imports without publishing artifacts.
+  imports without publishing artifacts. The release PR reconciles the exact
+  cache pin with the cache version actually being published, refreshes lock and
+  distribution metadata, and publishes/verifies that cache artifact before the
+  dependent cache-redis artifact.
 
 ### Least-privilege Redis deployment
 
@@ -872,6 +898,9 @@ the cache's first local flight may apply the wrong namespace/options.
 - RedisServer tests and the complete repository validation ladder pass.
 - Documentation covers consistency, security, operations, rollout, rollback,
   cleanup, and limits.
+- Clean direct `bluetape-cache-redis` and `bluetape[cache-redis]` installs expose
+  `TTLCache`, `AsyncTTLCache`, and both coordinators, while a default
+  `bluetape` install contains neither Redis nor `bluetape.cache.redis`.
 - Independent spec, plan, pre-PR, and PR reviews converge at P0=0 and P1=0.
 
 ## Definition of Done
