@@ -56,6 +56,7 @@ def test_public_exports_are_ordered_and_exact() -> None:
         "BinaryEnvelopeFormat",
         "JsonEnvelopeFormat",
         "ResultEnvelopeCodec",
+        "SyncRedisProvider",
     ]
 
 
