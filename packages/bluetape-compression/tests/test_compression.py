@@ -1,12 +1,17 @@
 import gzip
 import sys
+from dataclasses import FrozenInstanceError
 
 import bluetape.compression as compression
 import pytest
 from bluetape.compression import (
     DEFAULT_MAX_OUTPUT_SIZE,
     CompressionError,
+    Compressor,
     DecompressionLimitError,
+    DeflateCompressor,
+    GzipCompressor,
+    ZlibCompressor,
     __all__,
     deflate_compress,
     deflate_decompress,
@@ -16,6 +21,12 @@ from bluetape.compression import (
     zlib_decompress,
 )
 
+STDLIB_COMPRESSORS = [
+    (GzipCompressor, "gzip", 9),
+    (ZlibCompressor, "zlib", -1),
+    (DeflateCompressor, "deflate", -1),
+]
+
 
 def test_gzip_compress_exports_the_bounded_public_surface() -> None:
     assert gzip_compress(b"bluetape")
@@ -23,7 +34,11 @@ def test_gzip_compress_exports_the_bounded_public_surface() -> None:
     assert set(__all__) == {
         "DEFAULT_MAX_OUTPUT_SIZE",
         "CompressionError",
+        "Compressor",
+        "DeflateCompressor",
         "DecompressionLimitError",
+        "GzipCompressor",
+        "ZlibCompressor",
         "gzip_compress",
         "gzip_decompress",
         "zlib_compress",
@@ -31,6 +46,69 @@ def test_gzip_compress_exports_the_bounded_public_surface() -> None:
         "deflate_compress",
         "deflate_decompress",
     }
+
+
+@pytest.mark.parametrize(("factory", "algorithm", "default_level"), STDLIB_COMPRESSORS)
+def test_stdlib_compressors_are_frozen_structural_implementations(
+    factory, algorithm: str, default_level: int
+) -> None:
+    compressor: Compressor = factory(max_output_size=8)
+
+    assert compressor.algorithm == algorithm
+    assert compressor.level == default_level
+    assert compressor.max_output_size == 8
+    assert compressor.decompress(compressor.compress(memoryview(b"bluetape"))) == b"bluetape"
+    assert not hasattr(compressor, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        compressor.max_output_size = 9  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(("factory", "_", "__"), STDLIB_COMPRESSORS)
+@pytest.mark.parametrize("data_type", [bytes, bytearray, memoryview])
+@pytest.mark.parametrize("data", [b"", b"bluetape", bytes(range(256))])
+def test_stdlib_compressors_round_trip_bytes_like_values(factory, _, __, data_type, data) -> None:
+    compressor = factory()
+
+    encoded = compressor.compress(data_type(data))
+
+    assert type(encoded) is bytes
+    assert compressor.decompress(data_type(encoded)) == data
+
+
+@pytest.mark.parametrize(("factory", "_", "__"), STDLIB_COMPRESSORS)
+@pytest.mark.parametrize("method_name", ["compress", "decompress"])
+def test_stdlib_compressors_reject_non_bytes_like_input_before_backend_resolution(
+    monkeypatch, factory, _, __, method_name: str
+) -> None:
+    compressor = factory()
+    monkeypatch.setattr(compression, "_zlib", lambda: pytest.fail("zlib must not be resolved"))
+
+    with pytest.raises(TypeError, match="data must be bytes-like"):
+        getattr(compressor, method_name)("bluetape")
+
+
+@pytest.mark.parametrize(("factory", "_", "__"), STDLIB_COMPRESSORS)
+@pytest.mark.parametrize("level", [True, False, -2, 10, 1.5, "9"])
+def test_stdlib_compressors_reject_invalid_levels(factory, _, __, level: object) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        factory(level=level)
+
+
+@pytest.mark.parametrize(("factory", "_", "__"), STDLIB_COMPRESSORS)
+@pytest.mark.parametrize("limit", [True, False, -1, sys.maxsize, 1.5])
+def test_stdlib_compressors_reject_invalid_output_limits(factory, _, __, limit: object) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        factory(max_output_size=limit)
+
+
+@pytest.mark.parametrize(("factory", "_", "__"), STDLIB_COMPRESSORS)
+def test_stdlib_compressors_enforce_exact_output_limits(factory, _, __) -> None:
+    payload = b"bluetape"
+    encoded = factory().compress(payload)
+
+    assert factory(max_output_size=len(payload)).decompress(encoded) == payload
+    with pytest.raises(DecompressionLimitError):
+        factory(max_output_size=len(payload) - 1).decompress(encoded)
 
 
 @pytest.mark.parametrize(
