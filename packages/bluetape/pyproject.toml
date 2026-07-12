@@ -9,6 +9,7 @@ dependencies = ["bluetape-core==0.1.0"]
 [project.optional-dependencies]
 asyncio = ["bluetape-async==0.1.0"]
 cache = ["bluetape-cache==0.1.0"]
+cache-redis = ["bluetape-cache-redis==0.1.0"]
 codec = ["bluetape-codec==0.1.0"]
 collections = ["bluetape-collections==0.1.0"]
 compression = ["bluetape-compression==0.1.0"]
@@ -47,6 +48,7 @@ all = [
 [tool.uv.sources]
 bluetape-async = { workspace = true }
 bluetape-cache = { workspace = true }
+bluetape-cache-redis = { workspace = true }
 bluetape-codec = { workspace = true }
 bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }

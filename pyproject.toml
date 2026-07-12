@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "bluetape-async==0.1.0",
     "bluetape-cache==0.1.0",
+    "bluetape-cache-redis==0.1.0",
     "bluetape-codec==0.1.0",
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
@@ -30,6 +31,7 @@ package = false
 [tool.uv.sources]
 bluetape-async = { workspace = true }
 bluetape-cache = { workspace = true }
+bluetape-cache-redis = { workspace = true }
 bluetape-codec = { workspace = true }
 bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
@@ -44,6 +46,7 @@ members = [
     "packages/bluetape",
     "packages/bluetape-async",
     "packages/bluetape-cache",
+    "packages/bluetape-cache-redis",
     "packages/bluetape-codec",
     "packages/bluetape-collections",
     "packages/bluetape-compression",
