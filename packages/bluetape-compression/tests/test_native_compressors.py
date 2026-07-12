@@ -1,11 +1,101 @@
+import gc
 import sys
+import traceback
+import weakref
 from dataclasses import FrozenInstanceError
+from random import Random
 
 import pytest
-from bluetape.compression import CompressionError, DecompressionLimitError
-from bluetape.compression.native import Lz4Compressor, SnappyCompressor, ZstdCompressor
+from bluetape.compression import (
+    CompressionError,
+    Compressor,
+    DecompressionLimitError,
+    DeflateCompressor,
+    GzipCompressor,
+    ZlibCompressor,
+)
+from bluetape.compression import (
+    __all__ as compression_exports,
+)
+from bluetape.compression.native import (
+    Lz4Compressor,
+    SnappyCompressor,
+    ZstdCompressor,
+)
+from bluetape.compression.native import (
+    __all__ as native_exports,
+)
 
 pytestmark = pytest.mark.native_compression
+
+ALL_COMPRESSORS = [
+    (GzipCompressor, "gzip"),
+    (ZlibCompressor, "zlib"),
+    (DeflateCompressor, "deflate"),
+    (Lz4Compressor, "lz4-frame"),
+    (SnappyCompressor, "snappy-raw"),
+    (ZstdCompressor, "zstd-frame"),
+]
+
+
+def test_compressor_namespaces_have_exact_ordered_exports() -> None:
+    assert compression_exports == [
+        "DEFAULT_MAX_OUTPUT_SIZE",
+        "CompressionError",
+        "Compressor",
+        "DecompressionLimitError",
+        "DeflateCompressor",
+        "GzipCompressor",
+        "ZlibCompressor",
+        "deflate_compress",
+        "deflate_decompress",
+        "gzip_compress",
+        "gzip_decompress",
+        "zlib_compress",
+        "zlib_decompress",
+    ]
+    assert native_exports == ["Lz4Compressor", "SnappyCompressor", "ZstdCompressor"]
+
+
+def test_compressor_protocol_accepts_a_structural_implementation_without_inheritance() -> None:
+    class CustomCompressor:
+        algorithm = "custom"
+        max_output_size = 1
+
+        def compress(self, data: bytes | bytearray | memoryview) -> bytes:
+            return bytes(data)
+
+        def decompress(self, data: bytes | bytearray | memoryview) -> bytes:
+            return bytes(data)
+
+    compressor: Compressor = CustomCompressor()
+
+    assert compressor.decompress(compressor.compress(b"x")) == b"x"
+
+
+@pytest.mark.parametrize(("factory", "algorithm"), ALL_COMPRESSORS)
+def test_all_compressors_share_empty_boundary_and_repeatability_contracts(
+    factory, algorithm
+) -> None:
+    compressor = factory()
+
+    first = compressor.compress(b"")
+    second = compressor.compress(b"")
+
+    assert compressor.algorithm == algorithm
+    assert type(first) is bytes
+    assert first == second
+    assert compressor.decompress(first) == b""
+    with pytest.raises(CompressionError):
+        compressor.decompress(b"")
+
+
+@pytest.mark.parametrize(("factory", "_"), ALL_COMPRESSORS)
+def test_all_compressors_do_not_log_decode_failures(caplog, factory, _) -> None:
+    with pytest.raises(CompressionError):
+        factory().decompress(b"not compressed")
+
+    assert caplog.records == []
 
 
 def test_lz4_compressor_is_frozen_and_writes_a_complete_checked_frame() -> None:
@@ -81,6 +171,42 @@ def test_lz4_compressor_rejects_checksum_corruption() -> None:
 
     with pytest.raises(CompressionError):
         Lz4Compressor().decompress(encoded)
+
+
+def test_lz4_compressor_bounds_input_windows_and_provider_output_budget(monkeypatch) -> None:
+    import bluetape.compression.native._lz4 as lz4_module
+
+    payload = Random(0).randbytes(200_000)
+    encoded = Lz4Compressor().compress(payload)
+    actual_provider = lz4_module._provider()
+    input_lengths: list[int] = []
+    output_budgets: list[int] = []
+
+    class DecoderProxy:
+        def __init__(self) -> None:
+            self._delegate = actual_provider.LZ4FrameDecompressor()
+
+        def decompress(self, data, *, max_length: int) -> bytes:
+            input_lengths.append(len(data))
+            output_budgets.append(max_length)
+            return self._delegate.decompress(data, max_length=max_length)
+
+        def __getattr__(self, name: str):
+            return getattr(self._delegate, name)
+
+    class ProviderProxy:
+        def __getattr__(self, name: str):
+            if name == "LZ4FrameDecompressor":
+                return DecoderProxy
+            return getattr(actual_provider, name)
+
+    monkeypatch.setattr(lz4_module, "_provider", ProviderProxy)
+
+    assert Lz4Compressor(max_output_size=len(payload)).decompress(encoded) == payload
+    assert input_lengths
+    assert max(input_lengths) <= 64 * 1024
+    assert output_budgets[0] == len(payload) + 1
+    assert all(1 <= budget <= len(payload) + 1 for budget in output_budgets)
 
 
 def test_snappy_compressor_is_frozen_and_uses_raw_blocks() -> None:
@@ -161,6 +287,27 @@ def test_snappy_compressor_rejects_declared_oversize_before_decode(monkeypatch) 
 
     with pytest.raises(DecompressionLimitError):
         SnappyCompressor(max_output_size=8).decompress(b"declared")
+
+
+def test_snappy_compressor_rejects_declared_and_actual_size_mismatch(monkeypatch) -> None:
+    import bluetape.compression.native._snappy as snappy_module
+
+    class SnappyMismatch:
+        @staticmethod
+        def decompress_raw_len(data) -> int:
+            return 3
+
+        @staticmethod
+        def decompress_raw(data) -> bytes:
+            return b"xx"
+
+    class ProviderMismatch:
+        snappy = SnappyMismatch()
+
+    monkeypatch.setattr(snappy_module, "_provider", ProviderMismatch)
+
+    with pytest.raises(CompressionError):
+        SnappyCompressor().decompress(b"declared")
 
 
 def test_zstd_compressor_is_frozen_and_writes_a_complete_checked_frame() -> None:
@@ -262,9 +409,66 @@ def test_zstd_compressor_rejects_declared_oversize_before_decoder_creation(monke
         ZstdCompressor(max_output_size=8).decompress(b"declared")
 
 
+def test_zstd_compressor_rejects_declared_and_actual_size_mismatch(monkeypatch) -> None:
+    import bluetape.compression.native._zstd as zstd_module
+
+    class DecoderMismatch:
+        @staticmethod
+        def decompress(data, *, max_output_size: int, allow_extra_data: bool) -> bytes:
+            return b"xx"
+
+    class ProviderMismatch:
+        CONTENTSIZE_ERROR = 2**64 - 2
+        CONTENTSIZE_UNKNOWN = 2**64 - 1
+
+        @staticmethod
+        def frame_content_size(data) -> int:
+            return 3
+
+        def __getattr__(self, name: str):
+            if name == "ZstdDecompressor":
+                return DecoderMismatch
+            raise AttributeError(name)
+
+    monkeypatch.setattr(zstd_module, "_provider", ProviderMismatch)
+
+    with pytest.raises(CompressionError):
+        ZstdCompressor().decompress(b"declared")
+
+
 def test_zstd_compressor_rejects_checksum_corruption() -> None:
     encoded = bytearray(ZstdCompressor().compress(b"bluetape"))
     encoded[-1] ^= 0x01
 
     with pytest.raises(CompressionError):
         ZstdCompressor().decompress(encoded)
+
+
+@pytest.mark.parametrize("factory", [Lz4Compressor, SnappyCompressor, ZstdCompressor])
+def test_native_compressors_round_trip_a_large_highly_compressible_payload(factory) -> None:
+    payload = b"bluetape" * (1024 * 1024)
+    compressor = factory(max_output_size=len(payload))
+
+    assert compressor.decompress(compressor.compress(payload)) == payload
+
+
+@pytest.mark.parametrize("factory", [Lz4Compressor, SnappyCompressor, ZstdCompressor])
+def test_native_decode_failures_do_not_retain_input_after_traceback_cleanup(factory) -> None:
+    source = memoryview(b"invalid compressed data")
+    source_ref = weakref.ref(source)
+
+    with pytest.raises(CompressionError) as raised:
+        factory().decompress(source)
+
+    failure = raised.value
+    assert failure.__cause__ is None
+    assert failure.__context__ is None
+    if failure.__traceback__ is not None:
+        traceback.clear_frames(failure.__traceback__)
+    failure.__traceback__ = None
+    del failure
+    del raised
+    del source
+    gc.collect()
+
+    assert source_ref() is None

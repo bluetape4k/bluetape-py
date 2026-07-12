@@ -1,4 +1,5 @@
 import importlib
+import subprocess
 import sys
 
 import pytest
@@ -6,14 +7,37 @@ from bluetape.compression import CompressionError
 
 
 def test_root_compression_import_does_not_load_the_native_namespace() -> None:
-    assert "bluetape.compression.native" not in sys.modules
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import bluetape.compression; "
+            "assert 'bluetape.compression.native' not in sys.modules",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_native_namespace_does_not_eagerly_load_providers() -> None:
-    module = importlib.import_module("bluetape.compression.native")
+    code = """
+import sys
+import bluetape.compression.native as native
 
-    assert module.__all__ == []
-    assert not {"lz4", "cramjam", "zstandard"} & sys.modules.keys()
+assert native.__all__ == ["Lz4Compressor", "SnappyCompressor", "ZstdCompressor"]
+assert not {"lz4", "cramjam", "zstandard"} & sys.modules.keys()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_provider_loader_translates_only_a_direct_missing_provider(monkeypatch) -> None:
