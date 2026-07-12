@@ -1,5 +1,6 @@
 """Synchronous cache-first Redis load coordination."""
 
+import math
 import random
 import secrets
 import time
@@ -67,6 +68,16 @@ def _parse_marker(marker: bytes) -> tuple[str, str]:
     except (UnicodeDecodeError, TypeError, ValueError):
         raise RedisCoordinationError(code=RedisCoordinationErrorCode.INVALID_ARTIFACT) from None
     return state, token
+
+
+def _poll_delay(options: RedisLoadOptions, polls: int, remaining: float) -> float:
+    max_exponent = math.ceil(math.log2(options.max_poll_interval / options.poll_interval))
+    exponent = min(polls - 1, max_exponent)
+    return min(
+        options.poll_interval * (2**exponent),
+        options.max_poll_interval,
+        remaining,
+    )
 
 
 class SyncRedisLoadCoordinator[V]:
@@ -218,6 +229,8 @@ class SyncRedisLoadCoordinator[V]:
             _validate_owner_token(token)
             active_marker = f"active:{token}".encode("ascii")
             completion_marker = f"completed:{token}".encode("ascii")
+            if _clock() >= deadline:
+                raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
             state.attempts += 1
             acquired = self._provider.set_if_absent(
                 lease_key, active_marker, ttl=self._options.lease_ttl
@@ -243,6 +256,8 @@ class SyncRedisLoadCoordinator[V]:
             if _clock() >= deadline:
                 raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
             while True:
+                if _clock() >= deadline:
+                    raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
                 snapshot = self._provider.coordination_snapshot(
                     lease_key,
                     result_key,
@@ -272,11 +287,7 @@ class SyncRedisLoadCoordinator[V]:
                 remaining = deadline - _clock()
                 if remaining <= 0:
                     raise self._timeout(RedisCoordinationErrorCode.DEADLINE_EXCEEDED)
-                cap = min(
-                    self._options.poll_interval * (2 ** (state.polls - 1)),
-                    self._options.max_poll_interval,
-                    remaining,
-                )
+                cap = _poll_delay(self._options, state.polls, remaining)
                 _sleep(cap * _jitter())
 
     def _run_owner(

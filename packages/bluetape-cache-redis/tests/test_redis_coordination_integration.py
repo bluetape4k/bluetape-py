@@ -15,6 +15,10 @@ from bluetape.cache import AsyncTTLCache, TTLCache
 from bluetape.cache.redis import (
     AsyncRedisLoadCoordinator,
     AsyncRedisProvider,
+    EnvelopeError,
+    RedisCoordinationError,
+    RedisCoordinationErrorCode,
+    RedisCoordinationTimeoutError,
     RedisErrorCode,
     RedisLoadOptions,
     RedisProviderError,
@@ -34,6 +38,11 @@ class BytesCodec:
 
     def decode(self, payload: SerializedPayload) -> bytes:
         return payload.data
+
+
+class FailingDecodeCodec(BytesCodec):
+    def decode(self, payload: SerializedPayload) -> bytes:
+        raise ValueError("caller codec rejected metadata")
 
 
 def options(namespace: str = "orders:test:v1") -> RedisLoadOptions:
@@ -115,7 +124,7 @@ def acl_provider(
 ) -> Iterator[tuple[redis.Redis, SyncRedisProvider, str]]:
     lease_key, _ = coordination_keys(namespace, logical_key)
     prefix = lease_key.rsplit(":", 1)[0] + ":*"
-    commands = ["ping", "client", "get", "set", "del", "exists", "strlen", "getrange"]
+    commands = ["get", "set", "del", "exists", "strlen", "getrange"]
     if allow_eval:
         commands.append("eval")
     admin = sync_client(redis_server.url)
@@ -136,10 +145,14 @@ def acl_provider(
         )
         yield admin, provider, lease_key
     finally:
-        if provider is not None:
-            provider.close()
-        admin.execute_command("ACL", "DELUSER", username)
-        admin.close()
+        try:
+            if provider is not None:
+                provider.close()
+        finally:
+            try:
+                admin.execute_command("ACL", "DELUSER", username)
+            finally:
+                admin.close()
 
 
 @pytest.fixture(scope="module")
@@ -184,9 +197,9 @@ def blackhole_redis_url() -> Iterator[str]:
     finally:
         stopped.set()
         listener.close()
+        thread.join(timeout=1)
         for connection in accepted:
             connection.close()
-        thread.join(timeout=1)
         assert not thread.is_alive()
 
 
@@ -403,6 +416,124 @@ def test_stale_completed_envelope_reaches_later_matching_result_without_loader(
         assert coordinator.get_or_load("shared", loader) == b"fresh"
         assert not loader_called
         assert provider.replaced
+    finally:
+        provider.close()
+        client.close()
+
+
+@pytest.mark.parametrize("result", [b"malformed", b"x" * 65])
+def test_real_completed_invalid_result_fails_without_loader(
+    redis_server: RedisServer,
+    result: bytes,
+) -> None:
+    namespace = "orders:invalid-result:v1"
+    lease_key, result_key = coordination_keys(namespace, "shared")
+    client = sync_client(redis_server.url)
+    provider = SyncRedisProvider(client)
+    client.set(lease_key, b"completed:owner", px=1000)
+    client.set(result_key, result, px=1000)
+    coordinator = SyncRedisLoadCoordinator(
+        TTLCache(default_ttl=60, max_size=10),
+        provider,
+        ResultEnvelopeCodec(payload_codec=BytesCodec(), max_encoded_size=64),
+        options=options(namespace),
+    )
+    loader_called = False
+
+    def loader(_: str) -> bytes:
+        nonlocal loader_called
+        loader_called = True
+        return b"unexpected"
+
+    try:
+        expected_error = RedisCoordinationError if len(result) > 64 else EnvelopeError
+        with pytest.raises(expected_error) as captured:
+            coordinator.get_or_load("shared", loader)
+        if isinstance(captured.value, RedisCoordinationError):
+            assert captured.value.code is RedisCoordinationErrorCode.INVALID_ARTIFACT
+        assert not loader_called
+    finally:
+        provider.close()
+        client.close()
+
+
+def test_real_matching_result_codec_failure_is_explicit_without_loader(
+    redis_server: RedisServer,
+) -> None:
+    namespace = "orders:decode-failure:v1"
+    lease_key, result_key = coordination_keys(namespace, "shared")
+    client = sync_client(redis_server.url)
+    provider = SyncRedisProvider(client)
+    encoded = ResultEnvelopeCodec(payload_codec=BytesCodec()).encode("owner", b"value")
+    client.set(lease_key, b"completed:owner", px=1000)
+    client.set(result_key, encoded, px=1000)
+    coordinator = SyncRedisLoadCoordinator(
+        TTLCache(default_ttl=60, max_size=10),
+        provider,
+        ResultEnvelopeCodec(payload_codec=FailingDecodeCodec()),
+        options=options(namespace),
+    )
+    try:
+        with pytest.raises(EnvelopeError):
+            coordinator.get_or_load("shared", lambda _: pytest.fail("loader called"))
+    finally:
+        provider.close()
+        client.close()
+
+
+def test_real_stale_result_reaches_bounded_terminal_without_loader(
+    redis_server: RedisServer,
+) -> None:
+    namespace = "orders:stale-terminal:v1"
+    lease_key, result_key = coordination_keys(namespace, "shared")
+    client = sync_client(redis_server.url)
+    provider = SyncRedisProvider(client)
+    codec = ResultEnvelopeCodec(payload_codec=BytesCodec())
+    client.set(lease_key, b"completed:new-owner", px=1000)
+    client.set(result_key, codec.encode("old-owner", b"stale"), px=1000)
+    coordinator = SyncRedisLoadCoordinator(
+        TTLCache(default_ttl=60, max_size=10),
+        provider,
+        codec,
+        options=RedisLoadOptions(
+            namespace=namespace,
+            lease_ttl=1.0,
+            result_ttl=1.0,
+            poll_interval=0.001,
+            max_poll_interval=0.001,
+            wait_timeout=1.0,
+            max_polls=3,
+            redis_io_timeout=0.4,
+        ),
+    )
+    try:
+        with pytest.raises(RedisCoordinationTimeoutError) as captured:
+            coordinator.get_or_load("shared", lambda _: pytest.fail("loader called"))
+        assert captured.value.code is RedisCoordinationErrorCode.POLLS_EXHAUSTED
+    finally:
+        provider.close()
+        client.close()
+
+
+def test_real_loader_failure_removes_owned_lease(redis_server: RedisServer) -> None:
+    namespace = "orders:loader-failure:v1"
+    lease_key, _ = coordination_keys(namespace, "shared")
+    client = sync_client(redis_server.url)
+    provider = SyncRedisProvider(client)
+    coordinator = SyncRedisLoadCoordinator(
+        TTLCache(default_ttl=60, max_size=10),
+        provider,
+        ResultEnvelopeCodec(payload_codec=BytesCodec()),
+        options=options(namespace),
+    )
+
+    def loader(_: str) -> bytes:
+        raise ValueError("loader failed")
+
+    try:
+        with pytest.raises(ValueError, match="loader failed"):
+            coordinator.get_or_load("shared", loader)
+        assert client.get(lease_key) is None
     finally:
         provider.close()
         client.close()

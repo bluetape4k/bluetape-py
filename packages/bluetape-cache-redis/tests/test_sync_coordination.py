@@ -374,6 +374,34 @@ def test_poll_budget_exhaustion_is_explicit(monkeypatch) -> None:
     assert captured.value.code is RedisCoordinationErrorCode.POLLS_EXHAUSTED
 
 
+def test_large_poll_budget_stays_bounded_and_ends_with_stable_timeout(monkeypatch) -> None:
+    snapshot = RedisCoordinationSnapshot(
+        marker=b"active:remote",
+        result=None,
+        marker_oversized=False,
+        result_oversized=False,
+    )
+    provider = FakeProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [snapshot] * 1_100
+    coordinator, _, _, _ = make_coordinator(
+        provider=provider,
+        options=RedisLoadOptions(
+            namespace="orders:test:v1",
+            max_polls=1_100,
+            wait_timeout=3_600,
+        ),
+    )
+    monkeypatch.setattr("bluetape.cache.redis._coordination._sleep", lambda _: None)
+    monkeypatch.setattr("bluetape.cache.redis._coordination._jitter", lambda: 1.0)
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        coordinator.get_or_load("key", lambda _: b"never")
+
+    assert captured.value.code is RedisCoordinationErrorCode.POLLS_EXHAUSTED
+    assert provider.snapshot_calls == 1_100
+
+
 def test_attempt_budget_exhaustion_is_explicit() -> None:
     provider = FakeProvider()
     provider.acquire_results = [False]
@@ -420,7 +448,7 @@ def test_mismatched_completed_result_is_ignored_until_matching_result(monkeypatc
 
 
 def test_loader_finishing_after_lease_returns_local_without_encode_or_publish(monkeypatch) -> None:
-    ticks = iter([0.0, 0.0, 0.0, 0.0, 6.0])
+    ticks = iter([0.0, 0.0, 0.0, 0.0, 0.0, 6.0])
     monkeypatch.setattr("bluetape.cache.redis._coordination._clock", lambda: next(ticks))
     observer = Observer()
     coordinator, _, provider, _ = make_coordinator(observer=observer)
@@ -432,7 +460,7 @@ def test_loader_finishing_after_lease_returns_local_without_encode_or_publish(mo
 
 
 def test_late_acquire_deadline_cleans_marker_without_calling_loader(monkeypatch) -> None:
-    ticks = iter([0.0, 0.0, 11.0])
+    ticks = iter([0.0, 0.0, 0.0, 11.0])
     monkeypatch.setattr("bluetape.cache.redis._coordination._clock", lambda: next(ticks))
     coordinator, _, provider, _ = make_coordinator()
 
@@ -442,6 +470,55 @@ def test_late_acquire_deadline_cleans_marker_without_calling_loader(monkeypatch)
     assert captured.value.code is RedisCoordinationErrorCode.DEADLINE_EXCEEDED
     assert len(provider.cleanups) == 1
     assert provider.publishes == []
+
+
+def test_token_work_cannot_start_acquire_after_deadline(monkeypatch) -> None:
+    now = 0.0
+
+    def delayed_token() -> str:
+        nonlocal now
+        now = 11.0
+        return "owner"
+
+    monkeypatch.setattr("bluetape.cache.redis._coordination._clock", lambda: now)
+    monkeypatch.setattr("bluetape.cache.redis._coordination._new_token", delayed_token)
+    observer = Observer()
+    coordinator, _, provider, _ = make_coordinator(observer=observer)
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        coordinator.get_or_load("key", lambda _: pytest.fail("loader called"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.DEADLINE_EXCEEDED
+    assert provider.acquires == []
+    assert observer.events[-1].attempts == 0
+
+
+def test_poll_sleep_cannot_start_snapshot_after_deadline(monkeypatch) -> None:
+    now = 0.0
+    provider = FakeProvider()
+    provider.acquire_results = [False]
+    provider.snapshots = [
+        RedisCoordinationSnapshot(
+            marker=b"active:remote",
+            result=None,
+            marker_oversized=False,
+            result_oversized=False,
+        )
+    ]
+
+    def expire_deadline(_: float) -> None:
+        nonlocal now
+        now = 11.0
+
+    monkeypatch.setattr("bluetape.cache.redis._coordination._clock", lambda: now)
+    monkeypatch.setattr("bluetape.cache.redis._coordination._sleep", expire_deadline)
+    coordinator, _, _, _ = make_coordinator(provider=provider)
+
+    with pytest.raises(RedisCoordinationTimeoutError) as captured:
+        coordinator.get_or_load("key", lambda _: pytest.fail("loader called"))
+
+    assert captured.value.code is RedisCoordinationErrorCode.DEADLINE_EXCEEDED
+    assert provider.snapshot_calls == 1
 
 
 def test_encode_overflow_cleans_owner_and_does_not_fill_cache() -> None:

@@ -155,8 +155,7 @@ Historical release scope; all items are closed.
 - #51 - Redis cache coordination and provider boundary. Pending after the
   local cache contract; split into #54, #55, #56, and prerequisite #57.
 - #54 - Redis byte provider and bounded result-envelope substrate. Implemented
-  and locally verified on `feat/issue-54-redis-provider`; PR review and merge
-  remain pending.
+  and merged into `develop`; it is the provider substrate used by #55.
 - #55 - Bounded sync/async Redis load coordination. Implemented on the #54
   provider substrate with expiring leases and atomic token-checked publish.
 - #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented and

@@ -170,6 +170,20 @@ def test_sync_command_policy_is_none_for_opaque_connection_pool() -> None:
     assert SyncRedisProvider(client).command_policy is None
 
 
+def test_sync_command_policy_rejects_blocking_connection_pool() -> None:
+    client = redis.Redis(
+        connection_pool=redis.BlockingConnectionPool(
+            max_connections=1,
+            timeout=0.1,
+            **bounded_command_options(),
+        )
+    )
+    try:
+        assert SyncRedisProvider(client).command_policy is None
+    finally:
+        client.close()
+
+
 def test_sync_coordination_snapshot_uses_one_bounded_eval() -> None:
     client = SyncFakeRedis()
     client.responses["eval"] = [1, 6, b"active", 0, 0, b""]

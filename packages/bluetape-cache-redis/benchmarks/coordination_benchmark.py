@@ -5,6 +5,7 @@ import platform
 import statistics
 import sys
 import threading
+from dataclasses import asdict
 from time import perf_counter_ns
 
 import redis
@@ -45,15 +46,22 @@ class Recorder:
     def __init__(self) -> None:
         self.condition = threading.Condition()
         self.total = 0
+        self.acquisitions = 0
 
     def record(self) -> None:
         with self.condition:
             self.total += 1
             self.condition.notify_all()
 
-    def wait_for(self, target: int) -> None:
+    def record_acquisition(self) -> None:
         with self.condition:
-            assert self.condition.wait_for(lambda: self.total >= target, timeout=5)
+            self.total += 1
+            self.acquisitions += 1
+            self.condition.notify_all()
+
+    def wait_for_acquisitions(self, target: int) -> None:
+        with self.condition:
+            assert self.condition.wait_for(lambda: self.acquisitions >= target, timeout=5)
 
 
 class RecordingProvider(SyncRedisProvider):
@@ -62,7 +70,7 @@ class RecordingProvider(SyncRedisProvider):
         self.recorder = recorder
 
     def set_if_absent(self, key: str, value: bytes, *, ttl: float) -> bool:
-        self.recorder.record()
+        self.recorder.record_acquisition()
         return super().set_if_absent(key, value, ttl=ttl)
 
     def coordination_snapshot(
@@ -149,11 +157,11 @@ def main() -> None:
                     values.append(coordinators[index % COORDINATORS].get_or_load(logical_key, load))
 
                 threads = [threading.Thread(target=call, args=(index,)) for index in range(CALLERS)]
-                command_target = recorder.total + COORDINATORS
+                acquisition_target = recorder.acquisitions + COORDINATORS
                 started = perf_counter_ns()
                 for thread in threads:
                     thread.start()
-                recorder.wait_for(command_target)
+                recorder.wait_for_acquisitions(acquisition_target)
                 owner_release.set()
                 for thread in threads:
                     thread.join(10)
@@ -172,6 +180,8 @@ def main() -> None:
                             "cold_repetitions": COLD_REPETITIONS,
                             "coordinators": COORDINATORS,
                             "local_repetitions": LOCAL_REPETITIONS,
+                            "options": asdict(coordination_options),
+                            "payload_bytes": len(b"value"),
                             "platform": platform.platform(),
                             "python": sys.version.split()[0],
                             "production_capacity_claim": False,

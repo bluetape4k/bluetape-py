@@ -1,7 +1,7 @@
 [project]
 name = "bluetape-cache-redis"
 version = "0.1.0"
-description = "Bounded Redis byte providers and result envelopes for bluetape-py."
+description = "Bounded Redis byte providers, result envelopes, and load coordination."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -2,9 +2,9 @@
 
 English | [한국어](README.ko.md)
 
-Opt-in Python 3.13+ Redis byte providers and bounded result envelopes for
-bluetape-py. The package keeps serialization, compression, key naming, and
-rollout policy under application control.
+Opt-in Python 3.13+ Redis byte providers, bounded result envelopes, and sync/
+async load coordinators for bluetape-py. The package keeps serialization,
+compression, key naming, and rollout policy under application control.
 
 ## Install
 
@@ -16,9 +16,9 @@ pip install bluetape-cache-redis
 
 PyPI publication is currently on hold. In this repository, use
 `uv sync --all-packages --locked` or install a locally built focused wheel.
-The package depends on `redis==8.0.1`, `bluetape-serde`, and
-`bluetape-compression`; it is excluded from the default, `dev`, and `all` meta
-dependency sets.
+The package depends on `bluetape-cache==0.1.0`, `redis==8.0.1`,
+`bluetape-serde`, and `bluetape-compression`; it is excluded from the default,
+`dev`, and `all` meta dependency sets.
 
 ## Result Envelopes
 
@@ -80,7 +80,11 @@ json_zstd_codec = ResultEnvelopeCodec(
 )
 ```
 
-An owner-token mismatch returns `None`; it never tries another decoder. A
+`decode_matching()` returns `ResultEnvelopeMatch(value=...)` for a matching
+owner, including `ResultEnvelopeMatch(value=None)` for a legitimate decoded
+`None`, while an owner-token mismatch returns `None`. The compatibility
+`decode()` method also returns `None` for a mismatch and never tries another
+decoder. A
 configured compressor is always used for writes. Reads select only the exact
 algorithm named in the envelope from the configured writer/readers, which
 supports reader-first compression migrations without content sniffing. Native
@@ -106,28 +110,96 @@ cache entry; Redis result and lease TTLs come from `RedisLoadOptions`.
 <!-- sync-coordination-example -->
 ```python
 from bluetape.cache import TTLCache
-from bluetape.cache.redis import RedisLoadOptions, ResultEnvelopeCodec, SyncRedisLoadCoordinator, SyncRedisProvider
+from bluetape.cache.redis import (
+    RedisLoadOptions,
+    ResultEnvelopeCodec,
+    SyncRedisLoadCoordinator,
+    SyncRedisProvider,
+)
+from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+
+
+class Utf8Codec:
+    def encode(self, value: str) -> SerializedPayload:
+        return SerializedPayload(
+            metadata=PayloadMetadata(
+                format="text",
+                version=1,
+                content_type="text/plain",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+            data=value.encode(),
+        )
+
+    def decode(self, payload: SerializedPayload) -> str:
+        return payload.data.decode()
+
+
+def load_order(key: str) -> str:
+    return f"loaded:{key}"
 
 cache = TTLCache[str, str](default_ttl=60.0, max_size=1_000)
-provider = SyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
-coordinator = SyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
-value = coordinator.get_or_load("order-42", load_order, ttl=30.0)
-provider.close()
+with SyncRedisProvider.from_url(
+    "redis://localhost:6379/0",
+    socket_connect_timeout=0.2,
+    socket_timeout=0.3,
+    retry_on_timeout=False,
+) as provider:
+    coordinator = SyncRedisLoadCoordinator(
+        cache,
+        provider,
+        ResultEnvelopeCodec(payload_codec=Utf8Codec()),
+        options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"),
+    )
+    value = coordinator.get_or_load("order-42", load_order, ttl=30.0)
 ```
 
 <!-- async-coordination-example -->
 ```python
 from bluetape.cache import AsyncTTLCache
-from bluetape.cache.redis import AsyncRedisLoadCoordinator, AsyncRedisProvider, RedisLoadOptions, ResultEnvelopeCodec
+from bluetape.cache.redis import (
+    AsyncRedisLoadCoordinator,
+    AsyncRedisProvider,
+    RedisLoadOptions,
+    ResultEnvelopeCodec,
+)
+from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+
+
+class Utf8Codec:
+    def encode(self, value: str) -> SerializedPayload:
+        return SerializedPayload(
+            metadata=PayloadMetadata(
+                format="text",
+                version=1,
+                content_type="text/plain",
+                trust_profile=TrustProfile.UNTRUSTED,
+            ),
+            data=value.encode(),
+        )
+
+    def decode(self, payload: SerializedPayload) -> str:
+        return payload.data.decode()
+
+
+async def load_order(key: str) -> str:
+    return f"loaded:{key}"
 
 async def coordinated_load() -> str:
     cache = AsyncTTLCache[str, str](default_ttl=60.0, max_size=1_000)
-    provider = AsyncRedisProvider.from_url("redis://localhost:6379/0", socket_connect_timeout=0.2, socket_timeout=0.3, retry_on_timeout=False)
-    coordinator = AsyncRedisLoadCoordinator(cache, provider, ResultEnvelopeCodec(payload_codec=Utf8Codec()), options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"))
-    try:
+    async with AsyncRedisProvider.from_url(
+        "redis://localhost:6379/0",
+        socket_connect_timeout=0.2,
+        socket_timeout=0.3,
+        retry_on_timeout=False,
+    ) as provider:
+        coordinator = AsyncRedisLoadCoordinator(
+            cache,
+            provider,
+            ResultEnvelopeCodec(payload_codec=Utf8Codec()),
+            options=RedisLoadOptions(namespace="orders:prod:tenant-a:order-v3"),
+        )
         return await coordinator.get_or_load("order-42", load_order, ttl=30.0)
-    finally:
-        await provider.aclose()
 ```
 
 Attempts, polls, command time, and encoded artifacts are bounded. Redis failures
@@ -138,11 +210,24 @@ shielded-cleanup contract. Lease loss prevents publish. This is no L2 cache and
 no fencing mechanism; it is no distributed invalidation or transaction around
 loader side effects.
 
-Events contain bounded fields and redacted key digests. `cleanup_failed` reports
-best-effort cleanup failure without exposing raw keys or values. Do not put
-sensitive identifiers in namespaces or keys. Production Redis must not be
-unauthenticated: use TLS and an ACL principal that allows required key commands
-and `EVAL` for the fixed scripts.
+| Outcome | Caller-visible behavior |
+|---|---|
+| Local hit | Returns the local value with no Redis command or coordination event. |
+| Loaded | Publishes atomically, returns the value, and lets the outer cache store it with the caller's local `ttl`. |
+| Result reused | Returns a matching completed result without calling the loader and stores it locally. |
+| Lease lost | Does not publish, but returns the caller's loaded value and stores it only in that local cache. |
+| Timeout/Redis/envelope failure | Raises the stable timeout, provider, or envelope exception; there is no cold-load fallback. |
+| Loader failure | Preserves the original loader exception; cleanup failure adds only a static note and `cleanup_failed` event flag. |
+| Async cancellation | Preserves `CancelledError`; the cache-owned flight performs at most one shielded owner cleanup. |
+
+Events contain only bounded, low-cardinality fields. `cleanup_failed` reports
+best-effort cleanup failure without exposing raw keys or values; callers attach
+static external route labels. Do not put sensitive identifiers in namespaces or
+keys. Production Redis must not be unauthenticated. Use `rediss://` with a
+trusted CA, required peer-certificate and hostname verification (for example,
+`ssl_ca_certs=...`, `ssl_cert_reqs="required"`, and
+`ssl_check_hostname=True`). Never downgrade or fall back to plaintext. Use an
+ACL principal that allows required key commands and `EVAL` for the fixed scripts.
 
 To roll back, stop coordinated writers, restore the previous version, retain
 compatible readers, wait at least
@@ -170,7 +255,8 @@ readers only after expiry and telemetry evidence.
   static external route labels; diagnostics must exclude raw namespaces, keys,
   tokens, endpoints, exceptions, and artifact metadata.
 - Redis command policy must use finite connect/socket timeouts with zero retry.
-  TLS must not downgrade. The runtime ACL should restrict `GET`, `SET`, `DEL`,
+  `BlockingConnectionPool` is unsupported because pool acquisition is outside
+  those command bounds. TLS must not downgrade. The runtime ACL should restrict `GET`, `SET`, `DEL`,
   `EXISTS`, `STRLEN`, `GETRANGE`, and `EVAL` to
   `bluetape:cache:coord:<sha256(namespace)>:*`. Grant `SCAN` and `UNLINK` only
   to the bounded rollback operator.
@@ -186,6 +272,37 @@ and remaining counts, then recheck quiescence; (7) on cleanup/recovery failure,
 alert on stable codes and keep traffic disabled until readiness and
 remaining-count checks pass.
 
+After confirming the retired namespace and quiescence, derive and print the
+prefix before scanning. Review each bounded batch and its counts before
+uncommenting the `UNLINK` command:
+
+```bash
+: "${REDISCLI_AUTH:?set the operator ACL password in REDISCLI_AUTH}"
+: "${REDIS_CA_CERT:?set the trusted CA certificate path}"
+: "${REDIS_HOST:?set the Redis hostname}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_USER="${REDIS_USER:-coordination-operator}"
+redis_args=(--tls --cacert "$REDIS_CA_CERT" --user "$REDIS_USER" -h "$REDIS_HOST" -p "$REDIS_PORT")
+namespace='orders:prod:tenant-a:order-v2'
+namespace_id="$(printf '%s' "$namespace" | shasum -a 256 | awk '{print $1}')"
+pattern="bluetape:cache:coord:${namespace_id}:*"
+printf 'retired pattern: %s\n' "$pattern"
+keys_file="$(mktemp)"
+trap 'rm -f "$keys_file"' EXIT
+redis-cli "${redis_args[@]}" --scan --pattern "$pattern" --count 100 > "$keys_file"
+scanned="$(wc -l < "$keys_file" | tr -d ' ')"
+printf 'scanned: %s\n' "$scanned"
+# if [ -s "$keys_file" ]; then
+#   deleted="$(xargs -n 100 redis-cli "${redis_args[@]}" UNLINK < "$keys_file" | awk '{sum += $1} END {print sum + 0}')"
+#   printf 'deleted: %s\n' "$deleted"
+# fi
+remaining="$(redis-cli "${redis_args[@]}" --scan --pattern "$pattern" --count 100 | wc -l | tr -d ' ')"
+printf 'remaining: %s\n' "$remaining"
+```
+
+Never run this with the active namespace digest. Record scanned, deleted, and
+remaining counts, then repeat the quiescence/readiness check.
+
 ## Redis Providers
 
 `SyncRedisProvider` and `AsyncRedisProvider` expose the same byte-only
@@ -196,6 +313,8 @@ operations:
 - `set_if_absent(key, value, ttl=...)`
 - `delete(key)`
 - `delete_if_value(key, expected_value)`
+- `coordination_snapshot(marker_key, result_key, ..., max_result_size=...)`
+- `publish_if_value(condition_key, expected_value, ..., ttl=...)`
 
 All writes require a positive TTL. `set_if_absent` uses Redis `SET NX PX`.
 `delete_if_value` uses one fixed Lua compare-and-delete script and deliberately
