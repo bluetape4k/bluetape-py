@@ -276,6 +276,11 @@ class ResultEnvelopeCodec[T]:
 scale. Configuration is copied and validated during construction so later
 caller mutation cannot alter behavior.
 
+Built-in formats expose their own direct-use encoded bound. When one is used
+inside `ResultEnvelopeCodec`, its bound must be at least the codec bound or
+construction fails; the codec's smaller bound remains authoritative. Custom
+formats remain guarded by the outer codec before decode and after encode.
+
 The writer compressor is automatically present in the read registry.
 `decompressors` permits explicit readers for short migrations. Algorithm names
 must be unique, `identity` is forbidden, and each envelope selects exactly one
@@ -465,7 +470,8 @@ The JSON format uses compact UTF-8 JSON with these exact keys:
 
 Actual output uses compact separators and deterministic key order. The decoder
 rejects duplicate keys, unknown keys, missing keys, invalid UTF-8, invalid or
-non-canonical base64, non-exact JSON scalar types, and trailing JSON input. It
+non-canonical base64, non-exact JSON scalar types, and trailing JSON input,
+including trailing whitespace. It
 checks the encoded-size bound before JSON parsing. JSON payload expansion is a
 documented caller tradeoff.
 
@@ -529,7 +535,9 @@ double-close the client.
   then closes an owned client and enters `closed`. No lifecycle lock is held
   across Redis I/O.
 - Concurrent close callers share the same close completion and never invoke the
-  owned client close method more than once.
+  owned client close method more than once. Callers that observed `closing`
+  receive the shared close success or failure; a later call that first observes
+  terminal `closed` is an idempotent no-op and does not replay the failure.
 - Context-manager exit closes the provider according to its ownership mode.
 - The async provider never swallows or wraps `asyncio.CancelledError`.
 - If cancellation interrupts an in-flight Redis call, provider state remains
@@ -623,6 +631,10 @@ outcome; the provider does not log them or install global observer state. Fatal
 `BaseException` subclasses, including a deliberately raised `CancelledError`,
 propagate unchanged. The active-operation slot is released before invoking the
 terminal observer so an observer cannot deadlock by closing the provider.
+Each public close caller emits at most one terminal event. A cancelled async
+close caller emits `cancelled` only after shared cleanup completes; if cleanup
+also failed, the event carries the stable cleanup error code without provider
+text. Non-cancelled concurrent callers observe the shared close outcome.
 
 ## Concurrency and Async Rules
 
