@@ -19,6 +19,7 @@ from ._contracts import (
     RedisProviderError,
     ResultEnvelope,
 )
+from ._formats import BinaryEnvelopeFormat
 
 __all__ = [  # noqa: RUF022 - public order is part of the contract
     "DEFAULT_MAX_ENCODED_SIZE",
@@ -38,4 +39,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "EnvelopeSizeError",
     "EnvelopeEncodeError",
     "EnvelopeDecodeError",
+    "BinaryEnvelopeFormat",
 ]
