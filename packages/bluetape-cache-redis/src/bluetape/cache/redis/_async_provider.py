@@ -9,7 +9,11 @@ from typing import Self
 import redis.asyncio as redis_async
 
 from ._contracts import (
+    DEFAULT_MAX_ENCODED_SIZE,
+    MAX_COORDINATION_MARKER_SIZE,
     ProviderClosedError,
+    RedisCommandPolicy,
+    RedisCoordinationSnapshot,
     RedisErrorCode,
     RedisEvent,
     RedisMode,
@@ -20,11 +24,16 @@ from ._contracts import (
 )
 from ._provider import (
     COMPARE_AND_DELETE_SCRIPT,
+    COORDINATION_SNAPSHOT_SCRIPT,
+    PUBLISH_IF_VALUE_SCRIPT,
+    _coordination_snapshot,
     _deleted,
+    _discover_command_policy,
     _error_code,
     _ttl_milliseconds,
     _validate_binary_client,
     _validate_key,
+    _validate_size_limit,
     _validate_value,
     _wrapped_error,
 )
@@ -42,6 +51,7 @@ class AsyncRedisProvider:
         _validate_binary_client(client)
         self._client = client
         self._observer = observer
+        self._command_policy = _discover_command_policy(client)
         self._owned = False
         self._loop: asyncio.AbstractEventLoop | None = None
         self._condition: asyncio.Condition | None = None
@@ -49,6 +59,11 @@ class AsyncRedisProvider:
         self._active = 0
         self._close_task: asyncio.Task[None] | None = None
         self._terminal_close_error: RedisProviderError | None = None
+
+    @property
+    def command_policy(self) -> RedisCommandPolicy | None:
+        """Return finite no-retry command bounds when the pool proves them."""
+        return self._command_policy
 
     @classmethod
     def from_url(
@@ -300,6 +315,82 @@ class AsyncRedisProvider:
             return _deleted(response, operation=RedisOperation.DELETE_IF_VALUE)
 
         return await self._execute(RedisOperation.DELETE_IF_VALUE, action)
+
+    async def coordination_snapshot(
+        self,
+        marker_key: str,
+        result_key: str,
+        *,
+        max_marker_size: int = MAX_COORDINATION_MARKER_SIZE,
+        max_result_size: int,
+    ) -> RedisCoordinationSnapshot:
+        """Atomically read bounded marker and result prefixes with exact lengths."""
+
+        async def action() -> RedisCoordinationSnapshot:
+            _validate_key(marker_key)
+            _validate_key(result_key)
+            if marker_key == result_key:
+                raise ValueError("marker_key and result_key must be distinct")
+            _validate_size_limit(
+                max_marker_size,
+                field="max_marker_size",
+                maximum=MAX_COORDINATION_MARKER_SIZE,
+            )
+            _validate_size_limit(
+                max_result_size,
+                field="max_result_size",
+                maximum=DEFAULT_MAX_ENCODED_SIZE,
+            )
+            response = await self._client.eval(
+                COORDINATION_SNAPSHOT_SCRIPT,
+                2,
+                marker_key,
+                result_key,
+                max_marker_size,
+                max_result_size,
+            )
+            return _coordination_snapshot(
+                response,
+                max_marker_size=max_marker_size,
+                max_result_size=max_result_size,
+            )
+
+        return await self._execute(RedisOperation.COORDINATION_SNAPSHOT, action)
+
+    async def publish_if_value(
+        self,
+        condition_key: str,
+        expected_value: bytes,
+        *,
+        result_key: str,
+        result_value: bytes,
+        completion_value: bytes,
+        ttl: float,
+    ) -> bool:
+        """Publish a result and completion marker only while ownership matches."""
+
+        async def action() -> bool:
+            _validate_key(condition_key)
+            _validate_key(result_key)
+            if condition_key == result_key:
+                raise ValueError("condition_key and result_key must be distinct")
+            _validate_value(expected_value, field="expected_value")
+            _validate_value(result_value, field="result_value")
+            _validate_value(completion_value, field="completion_value")
+            milliseconds = _ttl_milliseconds(ttl)
+            response = await self._client.eval(
+                PUBLISH_IF_VALUE_SCRIPT,
+                2,
+                condition_key,
+                result_key,
+                expected_value,
+                result_value,
+                milliseconds,
+                completion_value,
+            )
+            return _deleted(response, operation=RedisOperation.PUBLISH_IF_VALUE)
+
+        return await self._execute(RedisOperation.PUBLISH_IF_VALUE, action)
 
     async def _cleanup(self) -> None:
         condition = self._bind_loop()

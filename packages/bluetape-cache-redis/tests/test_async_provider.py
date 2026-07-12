@@ -4,9 +4,18 @@ from types import SimpleNamespace
 
 import pytest
 import redis.asyncio as redis_async
+from _support import (
+    COORDINATION_SNAPSHOT_SCRIPT,
+    PUBLISH_IF_VALUE_SCRIPT,
+    bounded_command_options,
+)
 from bluetape.cache.redis import (
+    DEFAULT_MAX_ENCODED_SIZE,
+    MAX_COORDINATION_MARKER_SIZE,
     AsyncRedisProvider,
     ProviderClosedError,
+    RedisCommandPolicy,
+    RedisCoordinationSnapshot,
     RedisErrorCode,
     RedisMode,
     RedisOperation,
@@ -18,7 +27,7 @@ from bluetape.cache.redis._provider import COMPARE_AND_DELETE_SCRIPT
 
 class AsyncFakeRedis:
     def __init__(self) -> None:
-        self.connection_pool = SimpleNamespace(connection_kwargs={"decode_responses": False})
+        self.connection_pool = SimpleNamespace(connection_kwargs=bounded_command_options())
         self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
         self.responses: dict[str, object] = {
             "get": b"value",
@@ -96,7 +105,209 @@ def test_async_provider_public_signatures_are_exact() -> None:
         str(inspect.signature(AsyncRedisProvider.set_if_absent))
         == "(self, key: str, value: bytes, *, ttl: float) -> bool"
     )
+    assert (
+        str(inspect.signature(AsyncRedisProvider.coordination_snapshot))
+        == "(self, marker_key: str, result_key: str, *, max_marker_size: int = 138, "
+        "max_result_size: int) -> bluetape.cache.redis._contracts.RedisCoordinationSnapshot"
+    )
+    assert (
+        str(inspect.signature(AsyncRedisProvider.publish_if_value))
+        == "(self, condition_key: str, expected_value: bytes, *, result_key: str, "
+        "result_value: bytes, completion_value: bytes, ttl: float) -> bool"
+    )
     assert str(inspect.signature(AsyncRedisProvider.aclose)) == "(self) -> None"
+
+
+def test_async_command_policy_matches_sync_discovery() -> None:
+    client = AsyncFakeRedis()
+
+    assert AsyncRedisProvider(client).command_policy == RedisCommandPolicy(
+        connect_timeout=0.1,
+        socket_timeout=0.2,
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"socket_connect_timeout": None},
+        {"socket_timeout": float("inf")},
+        {"retry_on_timeout": True},
+        {"retry_on_error": [TimeoutError]},
+        {"retry": object()},
+    ],
+)
+def test_async_command_policy_rejects_unbounded_or_retrying_options(change) -> None:
+    client = AsyncFakeRedis()
+    client.connection_pool.connection_kwargs.update(change)
+
+    assert AsyncRedisProvider(client).command_policy is None
+
+
+@pytest.mark.asyncio
+async def test_async_coordination_snapshot_uses_one_bounded_eval() -> None:
+    client = AsyncFakeRedis()
+    client.responses["eval"] = [1, 7, b"active", 1, 4, b"res"]
+
+    snapshot = await AsyncRedisProvider(client).coordination_snapshot(
+        "marker",
+        "result",
+        max_marker_size=6,
+        max_result_size=3,
+    )
+
+    assert snapshot == RedisCoordinationSnapshot(
+        marker=b"active",
+        result=b"res",
+        marker_oversized=True,
+        result_oversized=True,
+    )
+    assert client.calls == [
+        ("eval", (COORDINATION_SNAPSHOT_SCRIPT, 2, "marker", "result", 6, 3), {})
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        [1, 1, b"a"],
+        [1, 1, b"a", False, 0, b""],
+        [1, 2, b"a", 0, 0, b""],
+        [1, 8, b"too-long", 0, 0, b""],
+    ],
+)
+async def test_async_coordination_snapshot_rejects_malformed_response(response) -> None:
+    client = AsyncFakeRedis()
+    client.responses["eval"] = response
+
+    with pytest.raises(RedisProviderError) as captured:
+        await AsyncRedisProvider(client).coordination_snapshot(
+            "marker", "result", max_marker_size=7, max_result_size=8
+        )
+
+    assert captured.value.operation is RedisOperation.COORDINATION_SNAPSHOT
+    assert captured.value.code is RedisErrorCode.INVALID_RESPONSE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("marker_key", "result_key", "max_marker_size", "max_result_size"),
+    [
+        ("same", "same", 1, 1),
+        ("marker", "result", True, 1),
+        ("marker", "result", MAX_COORDINATION_MARKER_SIZE + 1, 1),
+        ("marker", "result", 1, True),
+        ("marker", "result", 1, DEFAULT_MAX_ENCODED_SIZE + 1),
+    ],
+)
+async def test_async_coordination_snapshot_rejects_invalid_limits_before_eval(
+    marker_key,
+    result_key,
+    max_marker_size,
+    max_result_size,
+) -> None:
+    client = AsyncFakeRedis()
+
+    with pytest.raises((TypeError, ValueError)):
+        await AsyncRedisProvider(client).coordination_snapshot(
+            marker_key,
+            result_key,
+            max_marker_size=max_marker_size,
+            max_result_size=max_result_size,
+        )
+
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_async_publish_if_value_uses_one_atomic_eval() -> None:
+    client = AsyncFakeRedis()
+
+    assert (
+        await AsyncRedisProvider(client).publish_if_value(
+            "lease",
+            b"active:owner",
+            result_key="result",
+            result_value=b"encoded",
+            completion_value=b"completed:owner",
+            ttl=1.25,
+        )
+        is True
+    )
+    assert client.calls == [
+        (
+            "eval",
+            (
+                PUBLISH_IF_VALUE_SCRIPT,
+                2,
+                "lease",
+                "result",
+                b"active:owner",
+                b"encoded",
+                1250,
+                b"completed:owner",
+            ),
+            {},
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_stale_owner_cannot_publish() -> None:
+    client = AsyncFakeRedis()
+    client.responses["eval"] = 0
+
+    assert (
+        await AsyncRedisProvider(client).publish_if_value(
+            "lease",
+            b"active:old",
+            result_key="result",
+            result_value=b"old",
+            completion_value=b"completed:old",
+            ttl=1.0,
+        )
+        is False
+    )
+    assert [call[0] for call in client.calls] == ["eval"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response", [None, True, b"1", 2])
+async def test_async_publish_if_value_rejects_invalid_script_response(response) -> None:
+    client = AsyncFakeRedis()
+    client.responses["eval"] = response
+
+    with pytest.raises(RedisProviderError) as captured:
+        await AsyncRedisProvider(client).publish_if_value(
+            "lease",
+            b"active:owner",
+            result_key="result",
+            result_value=b"encoded",
+            completion_value=b"completed:owner",
+            ttl=1.0,
+        )
+
+    assert captured.value.operation is RedisOperation.PUBLISH_IF_VALUE
+    assert captured.value.code is RedisErrorCode.INVALID_RESPONSE
+
+
+@pytest.mark.asyncio
+async def test_async_publish_if_value_rejects_identical_keys_before_eval() -> None:
+    client = AsyncFakeRedis()
+
+    with pytest.raises(ValueError, match="distinct"):
+        await AsyncRedisProvider(client).publish_if_value(
+            "same",
+            b"active:owner",
+            result_key="same",
+            result_value=b"encoded",
+            completion_value=b"completed:owner",
+            ttl=1.0,
+        )
+
+    assert client.calls == []
 
 
 @pytest.mark.asyncio

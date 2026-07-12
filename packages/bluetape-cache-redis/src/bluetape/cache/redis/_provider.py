@@ -10,7 +10,11 @@ from typing import Self
 import redis
 
 from ._contracts import (
+    DEFAULT_MAX_ENCODED_SIZE,
+    MAX_COORDINATION_MARKER_SIZE,
     ProviderClosedError,
+    RedisCommandPolicy,
+    RedisCoordinationSnapshot,
     RedisErrorCode,
     RedisEvent,
     RedisMode,
@@ -23,6 +27,25 @@ from ._contracts import (
 COMPARE_AND_DELETE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
   return redis.call('del', KEYS[1])
+end
+return 0
+""".strip()
+
+COORDINATION_SNAPSHOT_SCRIPT = """
+local marker_exists = redis.call('exists', KEYS[1])
+local marker_length = redis.call('strlen', KEYS[1])
+local marker_value = redis.call('getrange', KEYS[1], 0, ARGV[1] - 1)
+local result_exists = redis.call('exists', KEYS[2])
+local result_length = redis.call('strlen', KEYS[2])
+local result_value = redis.call('getrange', KEYS[2], 0, ARGV[2] - 1)
+return {marker_exists, marker_length, marker_value, result_exists, result_length, result_value}
+""".strip()
+
+PUBLISH_IF_VALUE_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  redis.call('set', KEYS[2], ARGV[2], 'PX', ARGV[3])
+  redis.call('set', KEYS[1], ARGV[4], 'PX', ARGV[3])
+  return 1
 end
 return 0
 """.strip()
@@ -81,6 +104,82 @@ def _validate_binary_client(client: object) -> None:
         raise ValueError("decode_responses=True is incompatible with the binary provider")
 
 
+def _discover_command_policy(client: object) -> RedisCommandPolicy | None:
+    pool = getattr(client, "connection_pool", None)
+    options = getattr(pool, "connection_kwargs", None)
+    if not isinstance(options, Mapping):
+        return None
+    if "retry_on_timeout" in options and options["retry_on_timeout"] is not False:
+        return None
+    retry_on_error = options.get("retry_on_error")
+    if retry_on_error is not None and not (
+        type(retry_on_error) in (list, tuple, set, frozenset) and len(retry_on_error) == 0
+    ):
+        return None
+    if options.get("retry") is not None:
+        return None
+    try:
+        return RedisCommandPolicy(
+            connect_timeout=options.get("socket_connect_timeout"),  # type: ignore[arg-type]
+            socket_timeout=options.get("socket_timeout"),  # type: ignore[arg-type]
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _validate_size_limit(value: object, *, field: str, maximum: int) -> None:
+    if type(value) is not int:
+        raise TypeError(f"{field} must be an exact int")
+    if not 1 <= value <= maximum:
+        raise ValueError(f"{field} is outside its supported range")
+
+
+def _snapshot_part(
+    exists: object,
+    length: object,
+    value: object,
+    *,
+    maximum: int,
+    operation: RedisOperation,
+) -> tuple[bytes | None, bool]:
+    if type(exists) is not int or exists not in (0, 1):
+        raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
+    if type(length) is not int or length < 0 or type(value) is not bytes:
+        raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
+    if exists == 0:
+        if length != 0 or value != b"":
+            raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
+        return None, False
+    oversized = length > maximum
+    expected_size = maximum if oversized else length
+    if len(value) != expected_size:
+        raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
+    return value, oversized
+
+
+def _coordination_snapshot(
+    response: object,
+    *,
+    max_marker_size: int,
+    max_result_size: int,
+) -> RedisCoordinationSnapshot:
+    operation = RedisOperation.COORDINATION_SNAPSHOT
+    if type(response) is not list or len(response) != 6:
+        raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
+    marker, marker_oversized = _snapshot_part(
+        response[0], response[1], response[2], maximum=max_marker_size, operation=operation
+    )
+    result, result_oversized = _snapshot_part(
+        response[3], response[4], response[5], maximum=max_result_size, operation=operation
+    )
+    return RedisCoordinationSnapshot(
+        marker=marker,
+        result=result,
+        marker_oversized=marker_oversized,
+        result_oversized=result_oversized,
+    )
+
+
 def _deleted(response: object, *, operation: RedisOperation) -> bool:
     if type(response) is not int or response not in (0, 1):
         raise RedisProviderError(operation=operation, code=RedisErrorCode.INVALID_RESPONSE)
@@ -99,11 +198,17 @@ class SyncRedisProvider:
         _validate_binary_client(client)
         self._client = client
         self._observer = observer
+        self._command_policy = _discover_command_policy(client)
         self._owned = False
         self._condition = threading.Condition()
         self._state = "open"
         self._active = 0
         self._terminal_close_error: RedisProviderError | None = None
+
+    @property
+    def command_policy(self) -> RedisCommandPolicy | None:
+        """Return finite no-retry command bounds when the pool proves them."""
+        return self._command_policy
 
     @classmethod
     def from_url(
@@ -322,6 +427,82 @@ class SyncRedisProvider:
             return _deleted(response, operation=RedisOperation.DELETE_IF_VALUE)
 
         return self._execute(RedisOperation.DELETE_IF_VALUE, action)
+
+    def coordination_snapshot(
+        self,
+        marker_key: str,
+        result_key: str,
+        *,
+        max_marker_size: int = MAX_COORDINATION_MARKER_SIZE,
+        max_result_size: int,
+    ) -> RedisCoordinationSnapshot:
+        """Atomically read bounded marker and result prefixes with exact lengths."""
+
+        def action() -> RedisCoordinationSnapshot:
+            _validate_key(marker_key)
+            _validate_key(result_key)
+            if marker_key == result_key:
+                raise ValueError("marker_key and result_key must be distinct")
+            _validate_size_limit(
+                max_marker_size,
+                field="max_marker_size",
+                maximum=MAX_COORDINATION_MARKER_SIZE,
+            )
+            _validate_size_limit(
+                max_result_size,
+                field="max_result_size",
+                maximum=DEFAULT_MAX_ENCODED_SIZE,
+            )
+            response = self._client.eval(
+                COORDINATION_SNAPSHOT_SCRIPT,
+                2,
+                marker_key,
+                result_key,
+                max_marker_size,
+                max_result_size,
+            )
+            return _coordination_snapshot(
+                response,
+                max_marker_size=max_marker_size,
+                max_result_size=max_result_size,
+            )
+
+        return self._execute(RedisOperation.COORDINATION_SNAPSHOT, action)
+
+    def publish_if_value(
+        self,
+        condition_key: str,
+        expected_value: bytes,
+        *,
+        result_key: str,
+        result_value: bytes,
+        completion_value: bytes,
+        ttl: float,
+    ) -> bool:
+        """Publish a result and completion marker only while ownership matches."""
+
+        def action() -> bool:
+            _validate_key(condition_key)
+            _validate_key(result_key)
+            if condition_key == result_key:
+                raise ValueError("condition_key and result_key must be distinct")
+            _validate_value(expected_value, field="expected_value")
+            _validate_value(result_value, field="result_value")
+            _validate_value(completion_value, field="completion_value")
+            milliseconds = _ttl_milliseconds(ttl)
+            response = self._client.eval(
+                PUBLISH_IF_VALUE_SCRIPT,
+                2,
+                condition_key,
+                result_key,
+                expected_value,
+                result_value,
+                milliseconds,
+                completion_value,
+            )
+            return _deleted(response, operation=RedisOperation.PUBLISH_IF_VALUE)
+
+        return self._execute(RedisOperation.PUBLISH_IF_VALUE, action)
 
     def close(self) -> None:
         """Drain admitted operations and close a factory-owned client exactly once."""
