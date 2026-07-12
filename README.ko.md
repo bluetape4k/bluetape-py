@@ -17,21 +17,21 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, cache, serde, testcontainers 패키지는 source
+collections, codec, compression, cache, Redis provider, serde, testcontainers 패키지는 source
 workspace에서 사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의
 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
 Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compressor
-계약 #59, Redis 후속 #51을 추적합니다. 자세한 계획은
+계약 #59, Redis provider #54, coordination 후속 #55를 추적합니다. 자세한 계획은
 [`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
 
 | 트랙 | 범위 |
 |---|---|
 | `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
-| `0.2.0` | Serde #45/#46, local cache #50, compressor 계약 #59, Redis 후속 #51을 포함한 생태계 작업. |
+| `0.2.0` | Serde #45/#46, local cache #50, compressor 계약 #59, Redis provider #54, coordination #55를 포함한 생태계 작업. |
 | PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
@@ -54,7 +54,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
-| `bluetape-redis` | `bluetape.redis` | no | planned | cache 계약을 검증한 뒤 추가할 Redis 어댑터. |
+| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only sync/async Redis provider와 크기 제한 result envelope. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8 테스트 서버 수명주기와 연결 정보. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
 
@@ -69,7 +69,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
-- 기본 meta 설치는 계속 core-only입니다. Cache, compression provider, serde,
+- 기본 meta 설치는 계속 core-only입니다. Cache, Redis, compression provider, serde,
   Testcontainers는 opt-in이며 Apache Fory는 trusted-internal 전용 `fory` extra로만
   제공합니다.
 
@@ -84,6 +84,7 @@ PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 r
 pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
+pip install "bluetape[cache-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -106,6 +107,7 @@ pip install "bluetape[all]"
 pip install bluetape-core
 pip install bluetape-async
 pip install bluetape-cache
+pip install bluetape-cache-redis
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -126,16 +128,17 @@ pip install bluetape-testcontainers
 uv sync --all-packages --locked
 uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
+uv run --package bluetape-cache-redis python -c "from bluetape.cache.redis import BinaryEnvelopeFormat, SyncRedisProvider; assert BinaryEnvelopeFormat().format_id == 'binary-v1' and SyncRedisProvider"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
 uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 ```
 
-#54 Redis provider 테스트와 #55 load coordination 테스트는 이 생태계 래퍼의
-`RedisServer`를 사용합니다. Redis value에는 #59에서 정한 명시적인
-`serialize -> compress -> store` 조합을 적용할 수 있으며, 두 production 기능은
-별도 후속 작업으로 남아 있습니다.
+#54 Redis provider 테스트는 생태계 래퍼의 `RedisServer`를 사용해 Redis 8 command,
+TTL, NX, Lua compare-and-delete, lifecycle, ACL, redaction 동작을 검증합니다. Value는
+명시적인 `serialize -> compress -> store` 조합을 사용합니다. Load coordination은
+issue #55 범위입니다.
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
 실행할 수 있습니다.
@@ -313,9 +316,32 @@ Sync/async cache는 bounded LRU/TTL, cached `None`, same-key loader coalescing,
 mutation supersession, immutable statistics 의미를 공유합니다. Key에는 tenant와
 authorization context를 포함하고, `KeyError(key)`와 loader exception은 logging 전에
 redact해야 합니다. Cancellation-resistant loader는 terminal 상태가 될 때까지
-`max_inflight` slot을 유지하므로 async caller가 deadline을 소유해야 합니다. Redis
-integration은 이슈 #51로 분리되어 있습니다. 전체 ownership과 monitoring 계약은
-package README를 참고하십시오.
+`max_inflight` slot을 유지하므로 async caller가 deadline을 소유해야 합니다.
+Redis-backed storage는 아래 opt-in provider로 제공하며 load coordination은 issue
+#55 범위입니다.
+
+### Redis byte provider
+
+```python
+from bluetape.cache.redis import BinaryEnvelopeFormat, ResultEnvelopeCodec, SyncRedisProvider
+
+# 애플리케이션이 PayloadCodec을 제공합니다.
+codec = ResultEnvelopeCodec(
+    payload_codec=payload_codec,
+    envelope_format=BinaryEnvelopeFormat(),
+)
+
+with SyncRedisProvider.from_url("redis://localhost:6379/0") as provider:
+    provider.set("orders:result:42", codec.encode("owner-42", result), ttl=30.0)
+    stored = provider.get("orders:result:42")
+    decoded = None if stored is None else codec.decode(
+        stored, expected_owner_token="owner-42"
+    )
+```
+
+Focused package는 `AsyncRedisProvider`, `JsonEnvelopeFormat`, 명시적인 선택형
+`ZstdCompressor`, 안정적인 redacted error, borrowed/factory-owned client
+lifecycle도 제공합니다. 전체 계약과 rollout 규칙은 package README를 참고하십시오.
 
 ### Strict JSON serde
 
@@ -382,6 +408,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | `bluetape` | [한국어](packages/bluetape/README.ko.md) / [English](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
+| `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.ko.md](packages/bluetape-cache-redis/README.ko.md) / [English](packages/bluetape-cache-redis/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [한국어](packages/bluetape-compression/README.ko.md) / [English](packages/bluetape-compression/README.md) |
@@ -396,7 +423,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | 트랙 | 계획 |
 |---|---|
 | `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
-| `0.2.0` | Ecosystem 이슈 #7-#34, local cache #50, compressor 계약 #59, Redis 후속 #51, serialization #45/#46을 추적합니다. |
+| `0.2.0` | Ecosystem 이슈 #7-#34, local cache #50, compressor 계약 #59, Redis provider #54, coordination #55, serialization #45/#46을 추적합니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.

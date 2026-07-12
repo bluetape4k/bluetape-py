@@ -17,14 +17,14 @@ heavier capabilities into explicit PyPI distributions and extras.
 `v0.1.0` has been released as the first Python-native foundation:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
-are confirmed. The collections, codec, compression, cache, serde, and
-testcontainers packages are available from the source workspace; registry
+are confirmed. The collections, codec, compression, cache, Redis provider,
+serde, and testcontainers packages are available from the source workspace; registry
 install commands describe the intended post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
 ecosystem issues #7 through #34, serialization follow-ups #45/#46, local cache
-#50, compressor contracts #59, and Redis follow-up #51.
+#50, compressor contracts #59, Redis provider #54, and coordination follow-up #55.
 Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
@@ -32,7 +32,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, compressor contracts #59, and Redis follow-up #51. |
+| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, compressor contracts #59, Redis provider #54, and coordination #55. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -55,7 +55,7 @@ only `bluetape-core` by default.
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
-| `bluetape-redis` | `bluetape.redis` | no | planned | Redis-backed adapters once cache contracts are proven. |
+| `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only sync/async Redis providers and bounded result envelopes. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8 test server lifecycle and connection details. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
 
@@ -70,7 +70,7 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Cache, compression providers,
+- The default meta install remains core-only. Cache, Redis, compression providers,
   serde, and Testcontainers are opt-in; Apache Fory is trusted-internal only
   and available solely through the explicit `fory` extra.
 
@@ -85,6 +85,7 @@ The public install shape after the first PyPI release is:
 pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
+pip install "bluetape[cache-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -107,6 +108,7 @@ Focused distributions can also be installed directly:
 pip install bluetape-core
 pip install bluetape-async
 pip install bluetape-cache
+pip install bluetape-cache-redis
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -127,16 +129,17 @@ For local development from this repository:
 uv sync --all-packages --locked
 uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
+uv run --package bluetape-cache-redis python -c "from bluetape.cache.redis import BinaryEnvelopeFormat, SyncRedisProvider; assert BinaryEnvelopeFormat().format_id == 'binary-v1' and SyncRedisProvider"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
 uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 ```
 
-Redis provider and load-coordination tests planned in #54 and #55 consume
-`RedisServer` from this ecosystem wrapper. Redis values can use the explicit
-`serialize -> compress -> store` composition established by #59; the production
-Redis features remain separate follow-up work.
+The #54 Redis provider tests consume `RedisServer` from the ecosystem wrapper
+and verify Redis 8 commands, TTL, NX, Lua compare-and-delete, lifecycle, ACL,
+and redaction behavior. Values use explicit `serialize -> compress -> store`
+composition. Load coordination remains separate issue #55 work.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:
@@ -316,8 +319,32 @@ coalescing, mutation supersession, and immutable statistics semantics. Include
 tenant and authorization context in keys, redact `KeyError(key)` and loader
 exceptions before logging, and give async callers deadlines because a
 cancellation-resistant loader keeps its `max_inflight` slot until terminal.
-Redis integration remains separate in issue #51. See the package README for
-the complete ownership and monitoring contract.
+Redis-backed storage is available through the opt-in provider below; load
+coordination remains issue #55 work.
+
+### Redis byte provider
+
+```python
+from bluetape.cache.redis import BinaryEnvelopeFormat, ResultEnvelopeCodec, SyncRedisProvider
+
+# Supply an application-owned PayloadCodec.
+codec = ResultEnvelopeCodec(
+    payload_codec=payload_codec,
+    envelope_format=BinaryEnvelopeFormat(),
+)
+
+with SyncRedisProvider.from_url("redis://localhost:6379/0") as provider:
+    provider.set("orders:result:42", codec.encode("owner-42", result), ttl=30.0)
+    stored = provider.get("orders:result:42")
+    decoded = None if stored is None else codec.decode(
+        stored, expected_owner_token="owner-42"
+    )
+```
+
+The focused package also provides `AsyncRedisProvider`, `JsonEnvelopeFormat`,
+optional explicit `ZstdCompressor`, stable redacted errors, and borrowed
+or factory-owned client lifecycles. See its package README for the complete
+contract and rollout rules.
 
 ### Strict JSON serde
 
@@ -385,6 +412,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) / [한국어](packages/bluetape/README.ko.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
+| `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.md](packages/bluetape-cache-redis/README.md) / [한국어](packages/bluetape-cache-redis/README.ko.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
@@ -399,7 +427,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, compressor contracts #59, Redis follow-up #51, and serialization #45/#46. |
+| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, compressor contracts #59, Redis provider #54, coordination #55, and serialization #45/#46. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

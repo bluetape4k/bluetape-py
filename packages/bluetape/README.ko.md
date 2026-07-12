@@ -14,6 +14,7 @@ import 경로를 소유합니다.
 pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
+pip install "bluetape[cache-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -32,6 +33,7 @@ pip install "bluetape[all]"
 |---|---|---|---:|
 | `asyncio` | `bluetape-async` | `bluetape.asyncio` | no |
 | `cache` | `bluetape-cache` | `bluetape.cache` | no |
+| `cache-redis` | `bluetape-cache-redis` | `bluetape.cache.redis` | no |
 | `codec` | `bluetape-codec` | `bluetape.codec` | no |
 | `collections` | `bluetape-collections` | `bluetape.collections` | no |
 | `compression` | `bluetape-compression` | `bluetape.compression` | no |
@@ -45,7 +47,9 @@ pip install "bluetape[all]"
 | `testing` | `bluetape-testing` | `bluetape.testing` | no |
 
 `cache` extra는 표준 라이브러리만 사용하는 bounded sync/async local TTL loading
-cache를 설치합니다. Redis는 #51에서 별도 배포 패키지로 다룹니다.
+cache를 설치합니다. 별도 `cache-redis` extra는 byte-only sync/async Redis
+provider와 크기 제한 result envelope를 설치합니다. Redis coordination은 #55
+범위입니다.
 
 `asyncio` extra는 호출 범위가 정해진 bounded structured-concurrency 헬퍼를
 설치합니다. 기본 설치는 계속 `bluetape-core`로 제한합니다.
