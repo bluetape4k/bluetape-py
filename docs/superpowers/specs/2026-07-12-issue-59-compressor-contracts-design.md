@@ -175,6 +175,7 @@ bluetape/compression/
 ├── __init__.py              # Protocol, stdlib implementations, functions
 └── native/
     ├── __init__.py          # public native classes; no eager provider imports
+    ├── _support.py          # provider loading/error translation; no provider imports
     ├── _lz4.py
     ├── _snappy.py
     └── _zstd.py
@@ -240,10 +241,15 @@ raw decoder가 trailing bytes를 corruption으로 거절한다는 contract test�
 
 ### Zstd
 
-단일 frame decoder/stream reader에서 `max_output_size + 1`까지만 읽는다. Frame
-terminal과 trailing input을 확인하고 output이 limit을 넘으면
-`DecompressionLimitError`다. One-shot API가 content size를 신뢰해 큰 allocation을
-수행하도록 두지 않는다.
+`frame_content_size()`로 declared size를 provider decode 전에 읽는다. Compressor가
+항상 content size를 기록하므로 unknown/error size frame은 이 contract의 payload가
+아니며 `CompressionError`로 거절한다. Declared size가 limit을 넘으면 decode 전에
+`DecompressionLimitError`다. 허용된 frame만 `allow_extra_data=False`로 decode하여
+trailing/concatenated data를 거절하고 actual size가 declaration과 같은지 확인한다.
+Pinned provider의 `max_output_size` argument는 content size가 기록된 frame에서 hard
+cap으로 동작하지 않으므로 그것만 안전 경계로 신뢰하지 않는다. Decode 전에 검증된
+declared size가 allocation 상한이 되며, full output을 그보다 먼저 materialize하지
+않는다.
 
 `max_output_size == sys.maxsize - 1`일 때 `+1` arithmetic이 overflow하지 않도록
 budget 계산과 chunk iteration을 별도로 검증한다. 이 limit은 returned logical bytes
@@ -338,7 +344,7 @@ rollout/rollback은 #54 spec에서 확정한다.
 
 - LZ4 content-size/checksum frame and incremental limit path
 - Snappy declared-size rejection before provider decode
-- Zstd checksum/content-size frame and bounded reader path
+- Zstd checksum/content-size frame, declared-size preflight, and strict trailing-data path
 - missing-extra errors occur at native class construction and contain only install guidance
 - provider `Exception` redaction and fatal failure propagation
 - provider source/signature anchors that fail loudly on incompatible upgrades

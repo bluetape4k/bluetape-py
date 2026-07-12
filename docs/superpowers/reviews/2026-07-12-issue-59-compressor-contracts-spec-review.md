@@ -91,4 +91,22 @@ Korean documentation parity is part of acceptance.
   review evidence, and PR DoD are included.
 - Open decisions: none remain for the approved #59 scope.
 
+## Post-approval provider-evidence refinement
+
+Step 3 API probing showed that `zstandard==0.25.0` does not treat
+`max_output_size` as a hard cap when a frame already declares content size. The spec now requires
+declared-size preflight, rejects unknown/error content size, uses `allow_extra_data=False`, and
+checks actual size equality. It also records the provider-free `_support.py` implementation file.
+
+Affected-lens rerun:
+
+- Performance: P0=0 P1=0; the validated declaration bounds the only output materialization.
+- Stability: P0=0 P1=0; unknown size, truncation, trailing bytes, and concatenated frames have
+  deterministic outcomes.
+- Security: P0=0 P1=0; oversized declarations fail before decoder creation, and provider
+  `max_output_size` is no longer treated as a security boundary it does not provide.
+- Main integration: no public signature, algorithm identifier, error category, install boundary,
+  or #54 ownership changed. This is a non-material internal safety clarification and is mapped to
+  explicit implementation-plan tests.
+
 Final integrated result: `P0=0 P1=0`.
