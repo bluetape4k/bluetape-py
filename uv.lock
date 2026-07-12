@@ -171,6 +171,12 @@ zstd = [
     { name = "zstandard" },
 ]
 
+[package.dev-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cramjam", marker = "extra == 'native'", specifier = "==2.11.0" },
@@ -181,6 +187,12 @@ requires-dist = [
     { name = "zstandard", marker = "extra == 'zstd'", specifier = "==0.25.0" },
 ]
 provides-extras = ["lz4", "snappy", "zstd", "native"]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "pytest", specifier = ">=8.4.0" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0" },
+]
 
 [[package]]
 name = "bluetape-core"

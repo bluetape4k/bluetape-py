@@ -131,11 +131,14 @@ def test_provider_call_preserves_fatal_failures(failure) -> None:
 
 
 def test_native_provider_extras_are_exact_and_base_metadata_stays_empty() -> None:
-    compression = tomllib.loads(
-        (_ROOT / "packages/bluetape-compression/pyproject.toml").read_text()
-    )["project"]
+    document = tomllib.loads((_ROOT / "packages/bluetape-compression/pyproject.toml").read_text())
+    compression = document["project"]
 
     assert compression["dependencies"] == []
+    assert document["dependency-groups"]["test"] == [
+        "pytest>=8.4.0",
+        "pytest-asyncio>=1.1.0",
+    ]
     assert compression["optional-dependencies"] == {
         "lz4": ["lz4==4.4.5"],
         "snappy": ["cramjam==2.11.0"],
@@ -167,3 +170,15 @@ def test_native_compression_marker_is_registered() -> None:
         marker.startswith("native_compression:")
         for marker in root["tool"]["pytest"]["ini_options"]["markers"]
     )
+
+
+def test_native_ci_sync_installs_the_package_test_tools() -> None:
+    workflow = (_ROOT / ".github/workflows/ci.yml").read_text()
+    native_job = workflow.split("  compression-native:\n", 1)[1].split(
+        "  testcontainers-redis:\n", 1
+    )[0]
+    sync_step = native_job.split("      - name: Sync native compression providers\n", 1)[1].split(
+        "      - name: Test native compression providers\n", 1
+    )[0]
+
+    assert "--group test" in sync_step

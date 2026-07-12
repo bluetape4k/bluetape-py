@@ -42,8 +42,8 @@
 | `uv run ruff format --check .` | PASS, 52 files already formatted |
 | `uv run ruff check .` | PASS |
 | `uv lock --check` | PASS |
-| `uv run --package bluetape-compression --extra native pytest packages/bluetape-compression -q` | PASS, 221 tests |
-| `uv run --package bluetape-serde --extra fory --python 3.13.14 pytest -m "not testcontainers"` | PASS, 1097 passed and one Docker test deselected |
+| `uv run --package bluetape-compression --extra native pytest packages/bluetape-compression -q` | PASS, 222 tests after the CI dependency regression test |
+| `uv run --package bluetape-serde --extra fory --python 3.13.14 pytest -m "not testcontainers"` | PASS, 1098 passed and one Docker test deselected after the CI dependency regression test |
 | `uv build --all-packages` | PASS, 11 source distributions and 11 wheels |
 | `actionlint` | PASS |
 | `git diff --check` | PASS |
@@ -55,8 +55,9 @@
 - Optional dependencies: base/default/dev/all remain provider-free; exact metadata tests and base
   CI `find_spec()` assertions cover all three providers.
 - Workflow: the dedicated native job is separate from Docker/Testcontainers, uses pinned Python,
-  locked sync, marker-only tests, and package builds. `actionlint` passed. No module was added or
-  renamed, so module registration, coverage artifact, and BOM/catalog changes are N/A.
+  locked sync, an explicit non-published package `test` group, marker-only tests, and package
+  builds. `actionlint` passed. No module was added or renamed, so module registration, coverage
+  artifact, and BOM/catalog changes are N/A.
 - Nightly: this repository has no native-compression Nightly workflow and no new module or external
   service lifecycle was introduced; the dedicated normal CI job owns this provider matrix.
 - Known gaps: PyPI publishing and Redis integration remain out of scope. #54 must wait for #59 to

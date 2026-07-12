@@ -32,10 +32,15 @@ Redis payload를 줄이기 전에 serializer와 독립적으로 조합할 수 �
 - 7-Tier user/caller review에서 README가 missing provider 오류를
   `CompressionError`라고 잘못 설명한 P1을 발견했다. Source, spec, test가 맞아도 문서의
   exact exception type은 별도 claim-to-source 검사가 필요하다.
+- `uv sync --package ...`는 선택한 package의 runtime dependency만 설치하며 workspace
+  root의 dev group을 가져오지 않는다. 이미 채워진 로컬 `.venv`에서는 이 누락이
+  보이지 않는다. Focused CI job은 package-local non-published test group을 선언하고
+  임시 `UV_PROJECT_ENVIRONMENT`에서 exact sync/test를 재현해야 한다.
 
 ## Outcome and evidence
 
-- Six immutable implementations and the legacy function API pass 221 focused tests.
+- Six immutable implementations and the legacy function API pass 222 focused tests, including the
+  clean-CI test-tool regression guard.
 - The full non-Docker workspace run passes 1097 tests with one Testcontainers test deselected.
 - Base/focused/aggregate wheel environments prove provider isolation and namespace-package shape.
 - Ruff, lock validation, all-package sdist/wheel builds, actionlint, and diff check pass.
