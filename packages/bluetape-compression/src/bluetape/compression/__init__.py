@@ -3,6 +3,8 @@
 import importlib
 import sys
 from collections import deque
+from dataclasses import dataclass
+from typing import Protocol
 
 DEFAULT_MAX_OUTPUT_SIZE = 64 * 1024 * 1024
 _INPUT_CHUNK_SIZE = 64 * 1024
@@ -15,6 +17,114 @@ class CompressionError(ValueError):
 
 class DecompressionLimitError(CompressionError):
     """Raised when decompressed output would exceed the caller limit."""
+
+
+class Compressor(Protocol):
+    """Structural contract for immutable byte compressors."""
+
+    @property
+    def algorithm(self) -> str:
+        """Stable algorithm identifier."""
+        ...
+
+    @property
+    def max_output_size(self) -> int:
+        """Largest logical decompressed payload returned by this instance."""
+        ...
+
+    def compress(self, data: bytes | bytearray | memoryview) -> bytes:
+        """Compress bytes-like input."""
+        ...
+
+    def decompress(self, data: bytes | bytearray | memoryview) -> bytes:
+        """Decompress bytes-like input within the configured bound."""
+        ...
+
+
+def _as_bytes(data: bytes | bytearray | memoryview) -> bytes:
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise TypeError("data must be bytes-like")
+    return bytes(data)
+
+
+def _validate_level(level: int) -> None:
+    if isinstance(level, bool) or not isinstance(level, int):
+        raise TypeError("level must be an integer")
+    if not -1 <= level <= 9:
+        raise ValueError("level is outside the supported range")
+
+
+def _validate_max_output_size(max_output_size: int) -> None:
+    if isinstance(max_output_size, bool) or not isinstance(max_output_size, int):
+        raise TypeError("max_output_size must be an integer")
+    if not 0 <= max_output_size < sys.maxsize:
+        raise ValueError("max_output_size is outside the supported range")
+
+
+@dataclass(frozen=True, slots=True)
+class GzipCompressor:
+    """Immutable gzip compressor with bounded decompression."""
+
+    level: int = 9
+    max_output_size: int = DEFAULT_MAX_OUTPUT_SIZE
+
+    def __post_init__(self) -> None:
+        _validate_level(self.level)
+        _validate_max_output_size(self.max_output_size)
+
+    @property
+    def algorithm(self) -> str:
+        return "gzip"
+
+    def compress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return gzip_compress(_as_bytes(data), level=self.level)
+
+    def decompress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return gzip_decompress(_as_bytes(data), max_output_size=self.max_output_size)
+
+
+@dataclass(frozen=True, slots=True)
+class ZlibCompressor:
+    """Immutable zlib-wrapped compressor with bounded decompression."""
+
+    level: int = -1
+    max_output_size: int = DEFAULT_MAX_OUTPUT_SIZE
+
+    def __post_init__(self) -> None:
+        _validate_level(self.level)
+        _validate_max_output_size(self.max_output_size)
+
+    @property
+    def algorithm(self) -> str:
+        return "zlib"
+
+    def compress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return zlib_compress(_as_bytes(data), level=self.level)
+
+    def decompress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return zlib_decompress(_as_bytes(data), max_output_size=self.max_output_size)
+
+
+@dataclass(frozen=True, slots=True)
+class DeflateCompressor:
+    """Immutable raw DEFLATE compressor with bounded decompression."""
+
+    level: int = -1
+    max_output_size: int = DEFAULT_MAX_OUTPUT_SIZE
+
+    def __post_init__(self) -> None:
+        _validate_level(self.level)
+        _validate_max_output_size(self.max_output_size)
+
+    @property
+    def algorithm(self) -> str:
+        return "deflate"
+
+    def compress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return deflate_compress(_as_bytes(data), level=self.level)
+
+    def decompress(self, data: bytes | bytearray | memoryview) -> bytes:
+        return deflate_decompress(_as_bytes(data), max_output_size=self.max_output_size)
 
 
 def _zlib():
@@ -78,10 +188,7 @@ def _decompress(
     max_output_size: int,
     format_name: str,
 ) -> bytes:
-    if isinstance(max_output_size, bool) or not isinstance(max_output_size, int):
-        raise TypeError("max_output_size must be an integer")
-    if not 0 <= max_output_size < sys.maxsize:
-        raise ValueError("max_output_size is outside the supported range")
+    _validate_max_output_size(max_output_size)
 
     zlib = _zlib()
     wbits = {
@@ -159,7 +266,11 @@ def _decompress(
 __all__ = [
     "DEFAULT_MAX_OUTPUT_SIZE",
     "CompressionError",
+    "Compressor",
     "DecompressionLimitError",
+    "DeflateCompressor",
+    "GzipCompressor",
+    "ZlibCompressor",
     "deflate_compress",
     "deflate_decompress",
     "gzip_compress",
