@@ -1,6 +1,6 @@
 # bluetape-py
 
-[English](README.md) | [한국어](README.ko.md)
+English | [한국어](README.ko.md)
 
 ![bluetape-py hero](docs/assets/bluetape-py-hero.png)
 
@@ -24,7 +24,7 @@ install commands describe the intended post-publication shape only.
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
 ecosystem issues #7 through #34, serialization follow-ups #45/#46, local cache
-#50, and Redis follow-up #51.
+#50, compressor contracts #59, and Redis follow-up #51.
 Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
@@ -32,7 +32,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, and Redis follow-up #51. |
+| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, compressor contracts #59, and Redis follow-up #51. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -50,7 +50,7 @@ only `bluetape-core` by default.
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | Stdlib-only bounded structured-concurrency helpers. |
 | `bluetape-codec` | `bluetape.codec` | no | active, source workspace | Strict URL-safe Base64 and hexadecimal helpers. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
-| `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Bounded gzip, zlib, and raw-DEFLATE byte helpers. |
+| `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Structural compressor contracts for bounded gzip, zlib, raw-DEFLATE, LZ4, Snappy, and Zstandard payloads. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
@@ -70,9 +70,9 @@ only `bluetape-core` by default.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Cache, serde, and Testcontainers are opt-in;
-  Apache Fory is trusted-internal only and available solely through the
-  explicit `fory` extra.
+- The default meta install remains core-only. Cache, compression providers,
+  serde, and Testcontainers are opt-in; Apache Fory is trusted-internal only
+  and available solely through the explicit `fory` extra.
 
 ## Install
 
@@ -88,6 +88,10 @@ pip install "bluetape[cache]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
+pip install "bluetape[compression-lz4]"
+pip install "bluetape[compression-snappy]"
+pip install "bluetape[compression-zstd]"
+pip install "bluetape[compression-native]"
 pip install "bluetape[logging]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 only
@@ -106,6 +110,10 @@ pip install bluetape-cache
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
+pip install "bluetape-compression[lz4]"
+pip install "bluetape-compression[snappy]"
+pip install "bluetape-compression[zstd]"
+pip install "bluetape-compression[native]"
 pip install bluetape-logging
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 only
@@ -117,6 +125,7 @@ For local development from this repository:
 
 ```bash
 uv sync --all-packages --locked
+uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
@@ -125,8 +134,9 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 ```
 
 Redis provider and load-coordination tests planned in #54 and #55 consume
-`RedisServer` from this ecosystem wrapper. Those production features remain
-separate follow-up work.
+`RedisServer` from this ecosystem wrapper. Redis values can use the explicit
+`serialize -> compress -> store` composition established by #59; the production
+Redis features remain separate follow-up work.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:
@@ -189,16 +199,23 @@ by_initial = group_by(["ant", "ape", "bee"], lambda value: value[0])
 
 ```python
 from bluetape.codec import base64url_encode
-from bluetape.compression import gzip_compress, gzip_decompress
+from bluetape.compression import Compressor, GzipCompressor
+from bluetape.compression.native import ZstdCompressor
 
 token = base64url_encode(b"order:42")
-assert gzip_decompress(gzip_compress(token.encode("ascii"))) == token.encode("ascii")
+compressor: Compressor = GzipCompressor()
+assert compressor.decompress(compressor.compress(token.encode("ascii"))) == token.encode("ascii")
+assert ZstdCompressor().algorithm == "zstd-frame"
 ```
 
 `bluetape.codec` decodes only canonical URL-safe Base64 and strict hex text.
-`bluetape.compression` defaults to a 64 MiB logical returned-payload limit;
-gzip accepts complete concatenated members, while zlib/raw-DEFLATE reject
-trailing bytes. Neither package is part of the default `bluetape` install.
+`bluetape.compression` provides a structural `Compressor` Protocol and frozen
+implementations for gzip, zlib, raw DEFLATE, LZ4 frame, raw Snappy, and
+Zstandard frame. Decompression defaults to a 64 MiB logical returned-payload
+limit and rejects invalid, truncated, or trailing data. Native providers are
+available only through explicit extras. The feature and failure rules align
+with sibling bluetape libraries, but cross-language wire compatibility is not
+promised. Neither codec nor compression is part of the default install.
 
 ### Bounded asyncio work
 
@@ -365,12 +382,12 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 
 | Package | Documentation |
 |---|---|
-| `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) |
+| `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) / [한국어](packages/bluetape/README.ko.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
-| `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) |
+| `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
@@ -382,7 +399,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, Redis follow-up #51, and serialization #45/#46. |
+| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, compressor contracts #59, Redis follow-up #51, and serialization #45/#46. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

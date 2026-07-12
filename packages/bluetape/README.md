@@ -1,5 +1,7 @@
 # bluetape
 
+English | [한국어](README.ko.md)
+
 Thin meta distribution for Python-native bluetape packages.
 
 The default install depends only on `bluetape-core`.
@@ -13,6 +15,10 @@ pip install "bluetape[cache]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
+pip install "bluetape[compression-lz4]"
+pip install "bluetape[compression-snappy]"
+pip install "bluetape[compression-zstd]"
+pip install "bluetape[compression-native]"
 pip install "bluetape[logging]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"
@@ -33,6 +39,10 @@ and `bluetape.testing`.
 | `codec` | `bluetape-codec` | `bluetape.codec` | no |
 | `collections` | `bluetape-collections` | `bluetape.collections` | no |
 | `compression` | `bluetape-compression` | `bluetape.compression` | no |
+| `compression-lz4` | `bluetape-compression[lz4]` | `bluetape.compression.native` | no |
+| `compression-snappy` | `bluetape-compression[snappy]` | `bluetape.compression.native` | no |
+| `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
+| `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
 | `serde` | `bluetape-serde` | `bluetape.serde` | no |
 | `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
@@ -46,15 +56,18 @@ call-scoped structured-concurrency helpers. The default install remains limited
 to `bluetape-core`.
 
 The `codec` and `compression` extras install strict encoded-text helpers and
-bounded gzip/zlib/raw-DEFLATE helpers respectively. They remain optional and
-never change the default dependency set.
+bounded gzip/zlib/raw-DEFLATE compressors respectively. The focused native
+compression extras add LZ4 frame, raw Snappy, or Zstandard frame support; the
+`compression-native` extra installs all three. They remain opt-in and never
+change the default, `dev`, or `all` dependency sets.
 
 The `serde` extra installs strict payload contracts and bounded JSON v1
 serialization. The separate `fory` extra installs `bluetape-serde[fory]` and
 currently requires CPython 3.13. Fory is intentionally excluded from the base,
 `serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `cache`,
-`codec`, `collections`, `compression`, `logging`, `serde`, `fory`, `testing`,
-`dev`, and `all`.
+`codec`, `collections`, `compression`, `compression-lz4`,
+`compression-snappy`, `compression-zstd`, `compression-native`, `logging`,
+`serde`, `fory`, `testing`, `dev`, and `all`.
 
 PyPI publication is currently on hold for this repository. The commands above
 describe the intended public install shape after publishing is enabled and are
