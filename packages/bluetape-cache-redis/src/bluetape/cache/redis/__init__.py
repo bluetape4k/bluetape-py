@@ -21,6 +21,7 @@ from ._contracts import (
 )
 from ._envelope import ResultEnvelopeCodec
 from ._formats import BinaryEnvelopeFormat, JsonEnvelopeFormat
+from ._provider import SyncRedisProvider
 
 __all__ = [  # noqa: RUF022 - public order is part of the contract
     "DEFAULT_MAX_ENCODED_SIZE",
@@ -43,4 +44,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "BinaryEnvelopeFormat",
     "JsonEnvelopeFormat",
     "ResultEnvelopeCodec",
+    "SyncRedisProvider",
 ]
