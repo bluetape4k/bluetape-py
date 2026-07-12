@@ -18,6 +18,7 @@ Current public distributions:
 - `bluetape`
 - `bluetape-async`
 - `bluetape-cache`
+- `bluetape-cache-redis`
 - `bluetape-codec`
 - `bluetape-collections`
 - `bluetape-compression`
@@ -57,11 +58,25 @@ implementations are semantic references for features and failure rules, not a
 cross-language wire-compatibility promise.
 
 `bluetape-cache` owns `bluetape.cache` and is available from the focused
-distribution or the explicit future `bluetape[cache]` meta extra. It is
+distribution or the explicit `bluetape[cache]` meta extra. It is
 stdlib-only and provides bounded sync and async local TTL loading caches. It is
 not part of the core-only default meta install and does not add a root
-`bluetape` import surface. Redis coordination belongs to the separate issue #51
-distribution boundary.
+`bluetape` import surface.
+
+`bluetape-cache-redis` owns `bluetape.cache.redis`. The parent
+`bluetape.cache` package extends its namespace path so the focused Redis wheel
+can add the nested import without adding Redis to `bluetape-cache`. The Redis
+package is available only through a direct focused install or
+`bluetape[cache-redis]`; it depends on redis-py, serde, and compression and is
+excluded from the default, `dev`, and `all` dependency sets.
+
+The Redis surface is byte-only and keeps application serialization,
+compression, key naming, and rollout policy explicit. Built-in binary and JSON
+v1 envelopes enforce complete parsing and encoded-size bounds. Sync and async
+providers require positive TTL writes, use atomic `SET NX PX`, and use a fixed
+Lua compare-and-delete operation without a racy fallback. Factory-created
+clients are owned; constructor-injected clients are borrowed. Redis load
+coordination, leases, and stampede control remain issue #55 work.
 
 `bluetape-serde` is stdlib-only for its strict JSON v1 contract. Its root public
 surface is imported from `bluetape.serde` and is fixed at 25 ordered exports

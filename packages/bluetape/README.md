@@ -12,6 +12,7 @@ The default install depends only on `bluetape-core`.
 pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
+pip install "bluetape[cache-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -28,7 +29,7 @@ pip install "bluetape[all]"
 
 The meta distribution intentionally publishes no root `bluetape` import module.
 Focused packages own focused import paths such as `bluetape.asyncio`,
-`bluetape.cache`, `bluetape.codec`, `bluetape.collections`,
+`bluetape.cache`, `bluetape.cache.redis`, `bluetape.codec`, `bluetape.collections`,
 `bluetape.compression`, `bluetape.core`, `bluetape.logging`, `bluetape.serde`,
 and `bluetape.testing`.
 
@@ -36,6 +37,7 @@ and `bluetape.testing`.
 |---|---|---|---:|
 | `asyncio` | `bluetape-async` | `bluetape.asyncio` | no |
 | `cache` | `bluetape-cache` | `bluetape.cache` | no |
+| `cache-redis` | `bluetape-cache-redis` | `bluetape.cache.redis` | no |
 | `codec` | `bluetape-codec` | `bluetape.codec` | no |
 | `collections` | `bluetape-collections` | `bluetape.collections` | no |
 | `compression` | `bluetape-compression` | `bluetape.compression` | no |
@@ -49,7 +51,9 @@ and `bluetape.testing`.
 | `testing` | `bluetape-testing` | `bluetape.testing` | no |
 
 The `cache` extra installs the stdlib-only bounded sync and async local TTL
-loading caches. Redis remains a separate future distribution under issue #51.
+loading caches. The separate `cache-redis` extra installs byte-only sync/async
+Redis providers and bounded result envelopes; Redis coordination remains issue
+#55 work.
 
 The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited
@@ -65,7 +69,7 @@ The `serde` extra installs strict payload contracts and bounded JSON v1
 serialization. The separate `fory` extra installs `bluetape-serde[fory]` and
 currently requires CPython 3.13. Fory is intentionally excluded from the base,
 `serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `cache`,
-`codec`, `collections`, `compression`, `compression-lz4`,
+`cache-redis`, `codec`, `collections`, `compression`, `compression-lz4`,
 `compression-snappy`, `compression-zstd`, `compression-native`, `logging`,
 `serde`, `fory`, `testing`, `dev`, and `all`.
 

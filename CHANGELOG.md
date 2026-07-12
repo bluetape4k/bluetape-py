@@ -9,6 +9,12 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in `bluetape-cache-redis` package with byte-only sync and async
+  redis-py providers, strict bounded binary/JSON v1 result envelopes, explicit
+  compression migration readers, atomic TTL/NX/compare-delete operations,
+  redacted stable failures, and owned/borrowed lifecycle contracts. The focused
+  package and `cache-redis` meta extra remain outside the default, `dev`, and
+  `all` dependency sets; load coordination remains issue #55 work.
 - Add the opt-in `bluetape-testcontainers` Redis 8 wrapper with explicit
   lifecycle, bounded readiness, dynamic connection details, and serial Docker
   CI coverage.
