@@ -3,6 +3,7 @@ import socket
 import threading
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from hashlib import sha256
 from urllib.parse import urlsplit
 
@@ -100,6 +101,45 @@ def create_acl_user(
         f"~{key_pattern}",
         *(f"+{command}" for command in commands),
     )
+
+
+@contextmanager
+def acl_provider(
+    redis_server: RedisServer,
+    *,
+    namespace: str,
+    logical_key: str,
+    username: str,
+    password: str,
+    allow_eval: bool,
+) -> Iterator[tuple[redis.Redis, SyncRedisProvider, str]]:
+    lease_key, _ = coordination_keys(namespace, logical_key)
+    prefix = lease_key.rsplit(":", 1)[0] + ":*"
+    commands = ["ping", "client", "get", "set", "del", "exists", "strlen", "getrange"]
+    if allow_eval:
+        commands.append("eval")
+    admin = sync_client(redis_server.url)
+    provider: SyncRedisProvider | None = None
+    create_acl_user(
+        admin,
+        username=username,
+        password=password,
+        key_pattern=prefix,
+        commands=tuple(commands),
+    )
+    try:
+        provider = SyncRedisProvider.from_url(
+            restricted_url(redis_server.url, username, password),
+            socket_connect_timeout=0.1,
+            socket_timeout=0.1,
+            retry_on_timeout=False,
+        )
+        yield admin, provider, lease_key
+    finally:
+        if provider is not None:
+            provider.close()
+        admin.execute_command("ACL", "DELUSER", username)
+        admin.close()
 
 
 @pytest.fixture(scope="module")
@@ -668,32 +708,8 @@ def test_acl_eval_denial_is_explicit_without_fallback(
 ) -> None:
     namespace = f"orders:acl-{phase}:v1"
     logical_key = "shared"
-    lease_key, _ = coordination_keys(namespace, logical_key)
-    prefix = lease_key.rsplit(":", 1)[0] + ":*"
     username = f"issue55-{phase}"
     password = f"issue55-{phase}-password"
-    admin = sync_client(redis_server.url)
-    create_acl_user(
-        admin,
-        username=username,
-        password=password,
-        key_pattern=prefix,
-        commands=("ping", "client", "get", "set", "del", "exists", "strlen", "getrange"),
-    )
-    if phase == "snapshot":
-        admin.set(lease_key, b"active:existing", px=5000)
-    provider = SyncRedisProvider.from_url(
-        restricted_url(redis_server.url, username, password),
-        socket_connect_timeout=0.1,
-        socket_timeout=0.1,
-        retry_on_timeout=False,
-    )
-    coordinator = SyncRedisLoadCoordinator(
-        TTLCache(default_ttl=60, max_size=10),
-        provider,
-        ResultEnvelopeCodec(payload_codec=BytesCodec()),
-        options=options(namespace),
-    )
     loader_calls = 0
 
     def loader(_: str) -> bytes:
@@ -701,7 +717,22 @@ def test_acl_eval_denial_is_explicit_without_fallback(
         loader_calls += 1
         return b"value"
 
-    try:
+    with acl_provider(
+        redis_server,
+        namespace=namespace,
+        logical_key=logical_key,
+        username=username,
+        password=password,
+        allow_eval=False,
+    ) as (admin, provider, lease_key):
+        if phase == "snapshot":
+            admin.set(lease_key, b"active:existing", px=5000)
+        coordinator = SyncRedisLoadCoordinator(
+            TTLCache(default_ttl=60, max_size=10),
+            provider,
+            ResultEnvelopeCodec(payload_codec=BytesCodec()),
+            options=options(namespace),
+        )
         with pytest.raises(RedisProviderError) as captured:
             coordinator.get_or_load(logical_key, loader)
         assert captured.value.code is RedisErrorCode.PROVIDER_FAILURE
@@ -710,10 +741,6 @@ def test_acl_eval_denial_is_explicit_without_fallback(
         assert logical_key not in str(captured.value)
         assert loader_calls == (0 if phase == "snapshot" else 1)
         assert admin.get(lease_key) is not None
-    finally:
-        provider.close()
-        admin.execute_command("ACL", "DELUSER", username)
-        admin.close()
 
 
 def test_acl_cleanup_denial_preserves_loader_failure_and_has_no_fallback(
@@ -721,43 +748,30 @@ def test_acl_cleanup_denial_preserves_loader_failure_and_has_no_fallback(
 ) -> None:
     namespace = "orders:acl-cleanup:v1"
     logical_key = "shared"
-    lease_key, _ = coordination_keys(namespace, logical_key)
-    prefix = lease_key.rsplit(":", 1)[0] + ":*"
     username = "issue55-cleanup"
     password = "issue55-cleanup-password"
-    admin = sync_client(redis_server.url)
-    create_acl_user(
-        admin,
-        username=username,
-        password=password,
-        key_pattern=prefix,
-        commands=("ping", "client", "get", "set", "del", "exists", "strlen", "getrange"),
-    )
-    provider = SyncRedisProvider.from_url(
-        restricted_url(redis_server.url, username, password),
-        socket_connect_timeout=0.1,
-        socket_timeout=0.1,
-        retry_on_timeout=False,
-    )
-    coordinator = SyncRedisLoadCoordinator(
-        TTLCache(default_ttl=60, max_size=10),
-        provider,
-        ResultEnvelopeCodec(payload_codec=BytesCodec()),
-        options=options(namespace),
-    )
 
     def loader(_: str) -> bytes:
         raise ValueError("caller loader failed")
 
-    try:
+    with acl_provider(
+        redis_server,
+        namespace=namespace,
+        logical_key=logical_key,
+        username=username,
+        password=password,
+        allow_eval=False,
+    ) as (admin, provider, lease_key):
+        coordinator = SyncRedisLoadCoordinator(
+            TTLCache(default_ttl=60, max_size=10),
+            provider,
+            ResultEnvelopeCodec(payload_codec=BytesCodec()),
+            options=options(namespace),
+        )
         with pytest.raises(ValueError, match="caller loader failed") as captured:
             coordinator.get_or_load(logical_key, loader)
         assert captured.value.__notes__ == ["Redis owner cleanup also failed (cleanup-failure)"]
         assert admin.get(lease_key) is not None
-    finally:
-        provider.close()
-        admin.execute_command("ACL", "DELUSER", username)
-        admin.close()
 
 
 def test_least_privilege_acl_can_coordinate_within_derived_prefix(
@@ -765,46 +779,23 @@ def test_least_privilege_acl_can_coordinate_within_derived_prefix(
 ) -> None:
     namespace = "orders:acl-success:v1"
     logical_key = "shared"
-    lease_key, _ = coordination_keys(namespace, logical_key)
-    prefix = lease_key.rsplit(":", 1)[0] + ":*"
     username = "issue55-success"
     password = "issue55-success-password"
-    admin = sync_client(redis_server.url)
-    create_acl_user(
-        admin,
+    with acl_provider(
+        redis_server,
+        namespace=namespace,
+        logical_key=logical_key,
         username=username,
         password=password,
-        key_pattern=prefix,
-        commands=(
-            "ping",
-            "client",
-            "get",
-            "set",
-            "del",
-            "exists",
-            "strlen",
-            "getrange",
-            "eval",
-        ),
-    )
-    provider = SyncRedisProvider.from_url(
-        restricted_url(redis_server.url, username, password),
-        socket_connect_timeout=0.1,
-        socket_timeout=0.1,
-        retry_on_timeout=False,
-    )
-    coordinator = SyncRedisLoadCoordinator(
-        TTLCache(default_ttl=60, max_size=10),
-        provider,
-        ResultEnvelopeCodec(payload_codec=BytesCodec()),
-        options=options(namespace),
-    )
-    try:
+        allow_eval=True,
+    ) as (_, provider, _):
+        coordinator = SyncRedisLoadCoordinator(
+            TTLCache(default_ttl=60, max_size=10),
+            provider,
+            ResultEnvelopeCodec(payload_codec=BytesCodec()),
+            options=options(namespace),
+        )
         assert coordinator.get_or_load(logical_key, lambda _: b"value") == b"value"
-    finally:
-        provider.close()
-        admin.execute_command("ACL", "DELUSER", username)
-        admin.close()
 
 
 def test_schema_version_namespaces_do_not_coalesce(redis_server: RedisServer) -> None:
