@@ -39,6 +39,8 @@ def test_comparison_emits_median_and_available_p95_deltas() -> None:
         ("p95_ns", 10),
     ]
     assert all(item.relative_delta_percent == 10.0 for item in result.deltas)
+    assert all(item.baseline_samples_ns == (100,) * 20 for item in result.deltas)
+    assert all(item.candidate_samples_ns == (110,) * 20 for item in result.deltas)
 
 
 @pytest.mark.parametrize(
@@ -129,6 +131,9 @@ def test_cli_writes_comparable_result_atomically(tmp_path: Path) -> None:
         == 0
     )
     assert json.loads(output.read_text())["comparable"] is True
+    payload = json.loads(output.read_text())
+    assert payload["deltas"][0]["baseline_samples_ns"] == [100] * 20
+    assert payload["deltas"][0]["candidate_samples_ns"] == [110] * 20
     assert read_report(baseline).run.role == "baseline"
 
 

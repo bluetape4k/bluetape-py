@@ -298,7 +298,9 @@ def _comparison_to_dict(value: BenchmarkComparison) -> dict[str, object]:
             {
                 "absolute_delta_ns": item.absolute_delta_ns,
                 "baseline_ns": item.baseline_ns,
+                "baseline_samples_ns": list(item.baseline_samples_ns),
                 "candidate_ns": item.candidate_ns,
+                "candidate_samples_ns": list(item.candidate_samples_ns),
                 "case_id": item.case_id,
                 "mode": item.mode,
                 "relative_delta_percent": item.relative_delta_percent,

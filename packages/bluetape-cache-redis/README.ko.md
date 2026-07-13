@@ -381,8 +381,28 @@ worktree, 같은 runner/pair/seed를 사용하고 짝수 pair index 0은
 phase에서 수집하고 measured provider는 wrapper 없이 preconnect합니다. Smoke는
 sample이 5개이므로 p95/p99는 null입니다. 결과는 capacity 또는 SLO 보장이 아닙니다.
 
-Input/source 실패는 exit 2, 실행 실패는 3, cleanup 실패는 5, artifact write 실패는
-6이며 이전 output을 보존합니다. 첫 SIGINT는 cleanup을 수렴시키고 exit 130을
+Pair 0에서는 첫 command를 clean baseline worktree에서, 두 번째 command를 clean
+candidate worktree에서 실행합니다. `/external`은 두 worktree 밖에 있어야 합니다.
+
+```bash
+artifact_dir=/external/issue-63-pair-000
+mkdir -p "$artifact_dir"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role baseline \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/baseline.json"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role candidate \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/candidate.json"
+uv run python -m bluetape.benchmark.compare \
+  --baseline "$artifact_dir/baseline.json" --candidate "$artifact_dir/candidate.json" \
+  --output "$artifact_dir/comparison.json"
+```
+
+Input/source 실패는 exit 2, 실행 및 cleanup 실패는 3, Docker/Redis environment
+실패는 5, artifact write 실패는 6이며 이전 output을 보존합니다. 첫 SIGINT는
+cleanup을 수렴시키고 exit 130을
 보고하며 두 번째 signal은 즉시 escalate합니다. 진단은 고정된 redacted JSON이며
 Redis URL을 포함하지 않습니다.
 

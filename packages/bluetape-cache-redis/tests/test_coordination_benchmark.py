@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -7,11 +8,14 @@ import pytest
 from bluetape.benchmark import BenchmarkRunIdentity, read_report
 from bluetape.cache.redis import RedisCommandPolicy, RedisLoadOptions, SyncRedisProvider
 from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
+from bluetape.testcontainers import StartFailureKind, TestcontainerStartError
 
 BENCHMARKS = Path(__file__).parents[1] / "benchmarks"
 ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(BENCHMARKS))
 
+import _coordination_scenarios as scenario_runtime  # noqa: E402
+import coordination_benchmark as benchmark_cli  # noqa: E402
 from _coordination_matrix import (  # noqa: E402
     FULL,
     SMOKE,
@@ -293,9 +297,58 @@ async def test_repeated_cancellation_reuses_one_shielded_cleanup() -> None:
     assert runtime.pending_owned_tasks == ()
 
 
+@pytest.mark.asyncio
+async def test_cleanup_failure_does_not_replace_first_cancellation() -> None:
+    started = asyncio.Event()
+
+    async def operation() -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    async def cleanup() -> None:
+        raise RuntimeError("SECRET_SENTINEL")
+
+    runtime = AsyncConvergenceRuntime(operation, cleanup=cleanup)
+    task = asyncio.create_task(runtime.run())
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert runtime.cleanup_failed is True
+
+
+@pytest.mark.asyncio
+async def test_partial_async_resource_failure_closes_every_client(monkeypatch) -> None:
+    clients = []
+
+    class Client:
+        def __init__(self, fail: bool) -> None:
+            self.fail = fail
+            self.closed = False
+
+        async def ping(self) -> None:
+            if self.fail:
+                raise RuntimeError("redis failed")
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    def client_factory(_url: str):
+        client = Client(fail=len(clients) == 1)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(scenario_runtime, "make_async_client", client_factory)
+    with pytest.raises(RuntimeError, match="redis failed"):
+        await scenario_runtime._async_resources("redis://private", 2, recorder=None)
+    assert len(clients) == 2
+    assert all(client.closed for client in clients)
+
+
 def test_cli_requires_seed_and_complete_pair_fields() -> None:
-    with pytest.raises(SystemExit):
+    with pytest.raises(BenchmarkCliError) as raised:
         parser().parse_args(["--profile", "smoke", "--output", "-"])
+    assert raised.value.category == "input-invalid"
     arguments = parser().parse_args(
         [
             "--profile",
@@ -311,6 +364,24 @@ def test_cli_requires_seed_and_complete_pair_fields() -> None:
     assert arguments.runner_id is None
 
 
+def test_main_parse_failure_emits_one_exact_redacted_record(capsys) -> None:
+    assert benchmark_cli.main(["--profile", "smoke", "--output", "-"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("\n") == 1
+    prefix = "bluetape-benchmark-error "
+    assert captured.err.startswith(prefix)
+    assert json.loads(captured.err.removeprefix(prefix)) == {
+        "case_id": None,
+        "category": "input-invalid",
+        "code": "BTBENCH_INPUT_INVALID",
+        "mode": None,
+        "phase": None,
+        "repetition": None,
+        "scenario_id": None,
+    }
+
+
 @pytest.mark.parametrize("value", ["+1", "01", "1.0", " 1", "1 "])
 def test_exact_int_rejects_noncanonical_values(value: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
@@ -320,7 +391,55 @@ def test_exact_int_rejects_noncanonical_values(value: str) -> None:
 def test_cli_diagnostic_has_only_fixed_safe_fields() -> None:
     error = BenchmarkCliError("provider-failed", mode="sync", scenario_id="local-hit")
     assert str(error) == "provider-failed"
-    assert error.code == 3
+    assert error.code == "BTBENCH_PROVIDER_FAILED"
+    assert error.exit_code == 3
+
+
+@pytest.mark.parametrize(
+    ("kind", "category"),
+    [
+        (StartFailureKind.RUNTIME_UNAVAILABLE, "docker-unavailable"),
+        (StartFailureKind.IMAGE_PULL, "redis-startup"),
+        (StartFailureKind.READINESS_TIMEOUT, "redis-startup"),
+        (StartFailureKind.WRAPPER_FAILURE, "redis-startup"),
+    ],
+)
+def test_startup_failure_kind_has_stable_category(kind, category: str) -> None:
+    class Server:
+        def start(self) -> None:
+            raise TestcontainerStartError(kind, "redis:8")
+
+    with pytest.raises(BenchmarkCliError) as raised:
+        benchmark_cli._start_server(Server())  # type: ignore[arg-type]
+    assert raised.value.category == category
+    assert raised.value.exit_code == 5
+
+
+def test_cleanup_failure_preserves_primary_error() -> None:
+    class Server:
+        def close(self) -> None:
+            raise RuntimeError("SECRET_SENTINEL")
+
+    primary = BenchmarkCliError("provider-failed")
+    benchmark_cli._close_server(Server(), primary)  # type: ignore[arg-type]
+    assert primary.__notes__ == ["benchmark cleanup also failed"]
+    with pytest.raises(BenchmarkCliError) as raised:
+        benchmark_cli._close_server(Server(), None)  # type: ignore[arg-type]
+    assert raised.value.category == "cleanup-failed"
+    assert raised.value.exit_code == 3
+
+
+def test_main_redacts_unexpected_internal_failure(monkeypatch, capsys) -> None:
+    def fail(_arguments) -> None:
+        raise RuntimeError("SECRET_SENTINEL")
+
+    monkeypatch.setattr(benchmark_cli, "preflight", fail)
+    result = benchmark_cli.main(["--profile", "smoke", "--output", "-", "--seed", "1"])
+    captured = capsys.readouterr()
+    assert result == 3
+    assert captured.out == ""
+    assert captured.err.startswith("bluetape-benchmark-error ")
+    assert "SECRET_SENTINEL" not in captured.err
 
 
 def test_checked_issue_65_artifact_is_clean_smoke_report() -> None:

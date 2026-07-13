@@ -152,6 +152,8 @@ def test_comparison_requires_empty_deltas_when_not_comparable() -> None:
         statistic="median_ns",
         baseline_ns=100,
         candidate_ns=110,
+        baseline_samples_ns=(100,),
+        candidate_samples_ns=(110,),
         absolute_delta_ns=10,
         relative_delta_percent=10.0,
     )
@@ -164,3 +166,5 @@ def test_comparison_requires_empty_deltas_when_not_comparable() -> None:
             candidate_git_sha="2" * 40,
             deltas=(delta,),
         )
+    with pytest.raises(ValueError, match="relative_delta_percent is inconsistent"):
+        replace(delta, relative_delta_percent=999.0)

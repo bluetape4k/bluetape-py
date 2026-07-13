@@ -421,14 +421,18 @@ def _sync_resources(
     redis_url: str, count: int, *, recorder: _Recorder | None
 ) -> tuple[list[object], list[SyncRedisProvider]]:
     clients = [make_sync_client(redis_url) for _ in range(count)]
-    for client in clients:
-        client.ping()
-    providers: list[SyncRedisProvider]
-    if recorder is None:
-        providers = [SyncRedisProvider(client) for client in clients]
-    else:
-        providers = [_RecordingSyncProvider(client, recorder) for client in clients]
-    return clients, providers
+    providers: list[SyncRedisProvider] = []
+    try:
+        for client in clients:
+            client.ping()
+        if recorder is None:
+            providers = [SyncRedisProvider(client) for client in clients]
+        else:
+            providers = [_RecordingSyncProvider(client, recorder) for client in clients]
+        return clients, providers
+    except BaseException:
+        _close_sync(clients, providers)
+        raise
 
 
 def _close_sync(clients: Sequence[object], providers: Sequence[SyncRedisProvider]) -> None:
@@ -586,14 +590,18 @@ async def _async_resources(
     redis_url: str, count: int, *, recorder: _Recorder | None
 ) -> tuple[list[object], list[AsyncRedisProvider]]:
     clients = [make_async_client(redis_url) for _ in range(count)]
-    for client in clients:
-        await client.ping()
-    providers: list[AsyncRedisProvider]
-    if recorder is None:
-        providers = [AsyncRedisProvider(client) for client in clients]
-    else:
-        providers = [_RecordingAsyncProvider(client, recorder) for client in clients]
-    return clients, providers
+    providers: list[AsyncRedisProvider] = []
+    try:
+        for client in clients:
+            await client.ping()
+        if recorder is None:
+            providers = [AsyncRedisProvider(client) for client in clients]
+        else:
+            providers = [_RecordingAsyncProvider(client, recorder) for client in clients]
+        return clients, providers
+    except BaseException:
+        await _close_async(clients, providers)
+        raise
 
 
 async def _close_async(clients: Sequence[object], providers: Sequence[AsyncRedisProvider]) -> None:

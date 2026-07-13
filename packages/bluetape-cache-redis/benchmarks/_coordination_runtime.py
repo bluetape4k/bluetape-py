@@ -172,6 +172,7 @@ class AsyncConvergenceRuntime[T]:
         self._owned: set[asyncio.Task[Any]] = set()
         self._cleanup_task: asyncio.Task[None] | None = None
         self.cleanup_task_creations = 0
+        self.cleanup_failed = False
 
     @property
     def pending_owned_tasks(self) -> tuple[asyncio.Task[Any], ...]:
@@ -206,7 +207,13 @@ class AsyncConvergenceRuntime[T]:
                     await asyncio.shield(cleanup)
                 except asyncio.CancelledError:
                     continue
-            await cleanup
+                except Exception:
+                    self.cleanup_failed = True
+                    break
+            if cleanup.cancelled():
+                self.cleanup_failed = True
+            elif cleanup.exception() is not None:
+                self.cleanup_failed = True
             raise first
         finally:
             self._owned.discard(operation)

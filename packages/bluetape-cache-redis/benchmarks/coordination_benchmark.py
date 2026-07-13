@@ -43,15 +43,20 @@ from bluetape.benchmark import (
     write_report,
 )
 from bluetape.benchmark._json import report_to_dict
-from bluetape.testcontainers import DEFAULT_REDIS_IMAGE, RedisServer
+from bluetape.testcontainers import (
+    DEFAULT_REDIS_IMAGE,
+    RedisServer,
+    StartFailureKind,
+    TestcontainerStartError,
+)
 
 _EXACT_INTEGER = re.compile(r"-?(0|[1-9][0-9]*)")
 _PAIR_FIELDS = ("runner_id", "pair_id", "pair_index", "candidate_order")
 _EXIT_CODES = {
     "input-invalid": 2,
     "source-dirty": 2,
-    "docker-unavailable": 3,
-    "redis-startup": 3,
+    "docker-unavailable": 5,
+    "redis-startup": 5,
     "correctness-failed": 3,
     "deadline": 3,
     "live-worker": 3,
@@ -60,7 +65,7 @@ _EXIT_CODES = {
     "codec-failed": 3,
     "cancelled": 3,
     "interrupted": 130,
-    "cleanup-failed": 5,
+    "cleanup-failed": 3,
     "artifact-write-failed": 6,
 }
 
@@ -77,7 +82,7 @@ class BenchmarkCliError(RuntimeError):
         case_id: str | None = None,
         phase: str | None = None,
         repetition: int | None = None,
-        code: int | None = None,
+        exit_code: int | None = None,
     ) -> None:
         super().__init__(category)
         self.category = category
@@ -86,7 +91,8 @@ class BenchmarkCliError(RuntimeError):
         self.case_id = case_id
         self.phase = phase
         self.repetition = repetition
-        self.code = _EXIT_CODES.get(category, 3) if code is None else code
+        self.code = "BTBENCH_" + category.upper().replace("-", "_")
+        self.exit_code = _EXIT_CODES.get(category, 3) if exit_code is None else exit_code
 
 
 class _SignalInterrupt(BaseException):
@@ -112,8 +118,14 @@ def exact_int(value: str) -> int:
     return int(value)
 
 
+class _SafeArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        del message
+        raise BenchmarkCliError("input-invalid")
+
+
 def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser()
+    result = _SafeArgumentParser()
     result.add_argument("--profile", choices=("smoke", "full"), required=True)
     result.add_argument("--mode", choices=("sync", "async", "both"), default="both")
     result.add_argument("--scenario", action="append", default=[])
@@ -236,25 +248,42 @@ def _lock_digest(repository: Path) -> str:
 
 
 def _image_digest() -> str:
-    completed = subprocess.run(
-        ("docker", "image", "inspect", "--format={{json .RepoDigests}}", DEFAULT_REDIS_IMAGE),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    values = json.loads(completed.stdout)
-    if type(values) is not list or not values or "@sha256:" not in values[0]:
+    try:
+        completed = subprocess.run(
+            (
+                "docker",
+                "image",
+                "inspect",
+                "--format={{json .RepoDigests}}",
+                DEFAULT_REDIS_IMAGE,
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        values = json.loads(completed.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+        raise BenchmarkCliError("redis-startup", phase="startup") from None
+    if (
+        type(values) is not list
+        or not values
+        or type(values[0]) is not str
+        or "@sha256:" not in values[0]
+    ):
         raise BenchmarkCliError("redis-startup")
     return values[0].split("@", 1)[1]
 
 
 def _redis_extensions(redis_url: str) -> dict[str, object]:
-    client = make_sync_client(redis_url)
     try:
-        information = client.info("server")
-        version = information.get("redis_version")
-    finally:
-        client.close()
+        client = make_sync_client(redis_url)
+        try:
+            information = client.info("server")
+            version = information.get("redis_version")
+        finally:
+            client.close()
+    except Exception:
+        raise BenchmarkCliError("redis-failed", phase="startup") from None
     if type(version) is not str:
         raise BenchmarkCliError("redis-failed")
     return {
@@ -341,13 +370,34 @@ def _write(config: RunConfig, report: BenchmarkReport) -> None:
         raise BenchmarkCliError("artifact-write-failed", phase="write") from None
 
 
+def _start_server(server: RedisServer) -> None:
+    try:
+        server.start()
+    except TestcontainerStartError as error:
+        category = (
+            "docker-unavailable"
+            if error.kind is StartFailureKind.RUNTIME_UNAVAILABLE
+            else "redis-startup"
+        )
+        raise BenchmarkCliError(category, phase="startup") from None
+    except Exception:
+        raise BenchmarkCliError("redis-startup", phase="startup") from None
+
+
+def _close_server(server: RedisServer, primary: BaseException | None) -> None:
+    try:
+        server.close()
+    except Exception:
+        if primary is None:
+            raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
+        primary.add_note("benchmark cleanup also failed")
+
+
 def execute(config: RunConfig) -> None:
     server = RedisServer()
+    primary: BaseException | None = None
     try:
-        try:
-            server.start()
-        except Exception:
-            raise BenchmarkCliError("docker-unavailable", phase="startup") from None
+        _start_server(server)
         extensions = _redis_extensions(server.url)
         results = _run_results(config, server.url)
         for result in results:
@@ -364,11 +414,11 @@ def execute(config: RunConfig) -> None:
             scenarios=results,
         )
         _write(config, report)
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        try:
-            server.close()
-        except Exception:
-            raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
+        _close_server(server, primary)
 
 
 def _diagnostic(error: BenchmarkCliError) -> str:
@@ -416,10 +466,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         except BenchmarkCliError as error:
             print(_diagnostic(error), file=sys.stderr)
-            return error.code
+            return error.exit_code
+        except Exception:
+            error = BenchmarkCliError("provider-failed", phase="execution")
+            print(_diagnostic(error), file=sys.stderr)
+            return error.exit_code
         except _SignalInterrupt as interrupted:
             code = 128 + interrupted.signum
-            error = BenchmarkCliError("interrupted", phase="cleanup", code=code)
+            error = BenchmarkCliError("interrupted", phase="cleanup", exit_code=code)
             print(_diagnostic(error), file=sys.stderr)
             return code
     finally:

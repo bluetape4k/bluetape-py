@@ -92,6 +92,8 @@ def _delta(
         statistic=statistic,
         baseline_ns=baseline_ns,
         candidate_ns=candidate_ns,
+        baseline_samples_ns=baseline.timing.raw_samples_ns,
+        candidate_samples_ns=candidate.timing.raw_samples_ns,
         absolute_delta_ns=absolute,
         relative_delta_percent=float(absolute / baseline_ns * 100),
     )

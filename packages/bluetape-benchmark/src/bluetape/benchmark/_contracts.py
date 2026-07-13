@@ -282,6 +282,8 @@ class BenchmarkDelta:
     statistic: str
     baseline_ns: int
     candidate_ns: int
+    baseline_samples_ns: tuple[int, ...]
+    candidate_samples_ns: tuple[int, ...]
     absolute_delta_ns: int
     relative_delta_percent: float
 
@@ -297,12 +299,31 @@ class BenchmarkDelta:
                 raise TypeError(f"{field} must be an exact int")
         if self.baseline_ns <= 0 or self.candidate_ns <= 0:
             raise ValueError("compared timings must be positive")
+        for field in ("baseline_samples_ns", "candidate_samples_ns"):
+            samples = tuple(getattr(self, field))
+            if not samples or any(type(value) is not int for value in samples):
+                raise TypeError(f"{field} must contain exact ints")
+            if any(value < 0 for value in samples) or sum(samples) <= 0:
+                raise ValueError(f"{field} must contain non-negative timings")
+            object.__setattr__(self, field, samples)
+        percentile = 50 if self.statistic == "median_ns" else 95
+        expected = []
+        for samples in (self.baseline_samples_ns, self.candidate_samples_ns):
+            if percentile == 95 and len(samples) < 20:
+                raise ValueError("p95 deltas require at least 20 samples")
+            ordered = sorted(samples)
+            expected.append(ordered[math.ceil(percentile / 100 * len(ordered)) - 1])
+        if (self.baseline_ns, self.candidate_ns) != tuple(expected):
+            raise ValueError("compared timings must match retained raw samples")
         if self.absolute_delta_ns != self.candidate_ns - self.baseline_ns:
             raise ValueError("absolute_delta_ns is inconsistent")
         if type(self.relative_delta_percent) is not float or not math.isfinite(
             self.relative_delta_percent
         ):
             raise ValueError("relative_delta_percent must be finite")
+        expected_relative = self.absolute_delta_ns / self.baseline_ns * 100
+        if not math.isclose(self.relative_delta_percent, expected_relative, rel_tol=1e-12):
+            raise ValueError("relative_delta_percent is inconsistent")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

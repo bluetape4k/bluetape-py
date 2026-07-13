@@ -382,8 +382,28 @@ clean worktrees, the same runner/pair/seed, even pair index 0 with
 untimed phase; measured providers are unwrapped and preconnected. Smoke has
 five samples, so p95/p99 are null. These results are not capacity or SLO claims.
 
-Input/source failures exit 2, execution failures 3, cleanup failures 5, and
-artifact-write failures 6 while preserving the previous output. The first
+For pair 0, run the first command in the clean baseline worktree and the second
+in the clean candidate worktree; `/external` must be outside both:
+
+```bash
+artifact_dir=/external/issue-63-pair-000
+mkdir -p "$artifact_dir"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role baseline \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/baseline.json"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role candidate \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/candidate.json"
+uv run python -m bluetape.benchmark.compare \
+  --baseline "$artifact_dir/baseline.json" --candidate "$artifact_dir/candidate.json" \
+  --output "$artifact_dir/comparison.json"
+```
+
+Input/source failures exit 2, execution and cleanup failures 3, Docker/Redis
+environment failures 5, and artifact-write failures 6 while preserving the
+previous output. The first
 SIGINT converges cleanup and reports exit 130; a second signal escalates
 immediately. Diagnostics are fixed, redacted JSON and never include Redis URLs.
 
