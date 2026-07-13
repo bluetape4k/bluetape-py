@@ -25,6 +25,11 @@ from bluetape.cache.redis import (
     SyncRedisLoadCoordinator,
     SyncRedisProvider,
 )
+from bluetape.cache.redis._coordination import _coordination_keys
+
+_ACTIVE_MARKER_PREFIX = b"active:"
+_COMPLETED_MARKER_PREFIX = b"completed:"
+_ACTIVE_SNAPSHOT_GATE_TIMEOUT = 5.0
 
 
 class BenchmarkScenarioError(RuntimeError):
@@ -35,6 +40,7 @@ class BenchmarkScenarioError(RuntimeError):
 class CorrectnessMetrics:
     loader_count: int
     redis_commands: int
+    active_snapshot_count: int
     active_result_bytes: int
     completed_result_bytes: int
     overlap_observed: bool
@@ -132,6 +138,7 @@ def invariants_for(
     *,
     coordinators: int,
     keys: int,
+    stale_result_bytes: int = 0,
 ) -> dict[str, bool]:
     """Return exact low-cardinality invariants for one stable scenario ID."""
     if scenario_id == "local-only":
@@ -147,7 +154,10 @@ def invariants_for(
     if scenario_id == "single-coordinator":
         return {"one_loader": metrics.loader_count == 1}
     if scenario_id == "multi-coordinator":
-        return {"one_loader": metrics.loader_count == 1}
+        result = {"one_loader": metrics.loader_count == 1}
+        if stale_result_bytes:
+            result["multiple_active_snapshots"] = metrics.active_snapshot_count >= 2
+        return result
     if scenario_id == "completed-reuse":
         return {
             "waiter_loader_zero": metrics.loader_count == 0,
@@ -173,9 +183,18 @@ def process_high_water_bytes() -> int | None:
 
 
 class _Recorder:
-    def __init__(self) -> None:
+    def __init__(self, *, active_snapshot_target: int = 0) -> None:
+        if type(active_snapshot_target) is not int:
+            raise TypeError("active_snapshot_target must be an exact int")
+        if active_snapshot_target < 0:
+            raise ValueError("active_snapshot_target must be non-negative")
         self._lock = threading.Lock()
+        self._active_snapshot_target = active_snapshot_target
+        self._sync_active_snapshots = threading.Event()
+        self._async_active_snapshots: asyncio.Event | None = None
+        self._async_loop: asyncio.AbstractEventLoop | None = None
         self.commands = 0
+        self.active_snapshot_count = 0
         self.active_result_bytes = 0
         self.completed_result_bytes = 0
 
@@ -186,8 +205,46 @@ class _Recorder:
     def snapshot(self, value: RedisCoordinationSnapshot) -> None:
         with self._lock:
             self.commands += 1
-            if value.result is not None:
+            if value.marker is not None and value.marker.startswith(_ACTIVE_MARKER_PREFIX):
+                self.active_snapshot_count += 1
+                if value.result is not None:
+                    self.active_result_bytes += len(value.result)
+                if self.active_snapshot_count >= self._active_snapshot_target:
+                    self._sync_active_snapshots.set()
+                    if self._async_active_snapshots is not None:
+                        self._async_active_snapshots.set()
+            elif (
+                value.marker is not None
+                and value.marker.startswith(_COMPLETED_MARKER_PREFIX)
+                and value.result is not None
+            ):
                 self.completed_result_bytes += len(value.result)
+
+    def wait_for_active_snapshots(self, *, timeout: float) -> None:
+        if self._active_snapshot_target == 0:
+            return
+        if not self._sync_active_snapshots.wait(timeout):
+            raise BenchmarkScenarioError("active-snapshot-gate")
+
+    async def wait_for_active_snapshots_async(self, *, timeout: float) -> None:
+        if self._active_snapshot_target == 0:
+            return
+        loop = asyncio.get_running_loop()
+        with self._lock:
+            if self._async_loop is not None and self._async_loop is not loop:
+                raise BenchmarkScenarioError("active-snapshot-gate")
+            self._async_loop = loop
+            event = self._async_active_snapshots
+            if event is None:
+                event = asyncio.Event()
+                self._async_active_snapshots = event
+            if self.active_snapshot_count >= self._active_snapshot_target:
+                event.set()
+        try:
+            async with asyncio.timeout(timeout):
+                await event.wait()
+        except TimeoutError:
+            raise BenchmarkScenarioError("active-snapshot-gate") from None
 
 
 class _RecordingSyncProvider(SyncRedisProvider):
@@ -293,9 +350,16 @@ class _RecordingAsyncProvider(AsyncRedisProvider):
 
 
 class _SyncLoader:
-    def __init__(self, payload: bytes, delay: float) -> None:
+    def __init__(
+        self,
+        payload: bytes,
+        delay: float,
+        *,
+        pre_return_gate: Callable[[], None] | None = None,
+    ) -> None:
         self.payload = payload
         self.delay = delay
+        self.pre_return_gate = pre_return_gate
         self.count = 0
         self.active = 0
         self.overlap = False
@@ -307,6 +371,8 @@ class _SyncLoader:
             self.active += 1
             self.overlap = self.overlap or self.active > 1
         try:
+            if self.pre_return_gate is not None:
+                self.pre_return_gate()
             if self.delay:
                 sleep(self.delay)
             return self.payload
@@ -316,9 +382,16 @@ class _SyncLoader:
 
 
 class _AsyncLoader:
-    def __init__(self, payload: bytes, delay: float) -> None:
+    def __init__(
+        self,
+        payload: bytes,
+        delay: float,
+        *,
+        pre_return_gate: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self.payload = payload
         self.delay = delay
+        self.pre_return_gate = pre_return_gate
         self.count = 0
         self.active = 0
         self.overlap = False
@@ -328,6 +401,8 @@ class _AsyncLoader:
         self.active += 1
         self.overlap = self.overlap or self.active > 1
         try:
+            if self.pre_return_gate is not None:
+                await self.pre_return_gate()
             if self.delay:
                 await asyncio.sleep(self.delay)
             return self.payload
@@ -355,6 +430,7 @@ def _parameters(case: ScenarioCase) -> dict[str, object]:
         "keys": case.keys,
         "loader_delay_seconds": case.loader_delay_seconds,
         "payload_bytes": case.payload_bytes,
+        "stale_result_bytes": case.stale_result_bytes,
         "repetitions": case.repetitions,
         "warmups": case.warmups,
     }
@@ -363,6 +439,41 @@ def _parameters(case: ScenarioCase) -> dict[str, object]:
 def _verify_payload(payload: bytes, values: tuple[bytes, ...]) -> None:
     if not values or any(value != payload for value in values):
         raise BenchmarkScenarioError("result-mismatch")
+
+
+def _stale_result_key(namespace: str) -> str:
+    namespace_id = sha256(namespace.encode("utf-8")).hexdigest()
+    return _coordination_keys(namespace_id, "key-0")[1]
+
+
+def _seed_sync_stale_result(
+    case: ScenarioCase,
+    providers: Sequence[SyncRedisProvider],
+    namespace: str,
+) -> None:
+    if not case.stale_result_bytes:
+        return
+    options = load_options(namespace)
+    providers[0].set(
+        _stale_result_key(namespace),
+        b"s" * case.stale_result_bytes,
+        ttl=options.result_ttl,
+    )
+
+
+async def _seed_async_stale_result(
+    case: ScenarioCase,
+    providers: Sequence[AsyncRedisProvider],
+    namespace: str,
+) -> None:
+    if not case.stale_result_bytes:
+        return
+    options = load_options(namespace)
+    await providers[0].set(
+        _stale_result_key(namespace),
+        b"s" * case.stale_result_bytes,
+        ttl=options.result_ttl,
+    )
 
 
 def _sync_repetition(
@@ -392,6 +503,7 @@ def _sync_repetition(
         SyncRedisLoadCoordinator(cache, provider, codec, options=load_options(namespace))
         for cache, provider in zip(caches, providers, strict=True)
     ]
+    _seed_sync_stale_result(case, providers, namespace)
     if case.scenario_id == "local-hit":
         caches[0].set("key-0", payload)
         started = perf_counter_ns()
@@ -488,8 +600,17 @@ def run_sync_case(
 ) -> BenchmarkScenarioResult:
     """Run correctness, warmup, and uninstrumented sync measurement phases."""
     payload = b"x" * case.payload_bytes
-    recorder = _Recorder()
-    correctness_loader = _SyncLoader(payload, case.loader_delay_seconds)
+    active_snapshot_target = 2 if case.stale_result_bytes else 0
+    recorder = _Recorder(active_snapshot_target=active_snapshot_target)
+    correctness_loader = _SyncLoader(
+        payload,
+        case.loader_delay_seconds,
+        pre_return_gate=(
+            lambda: recorder.wait_for_active_snapshots(timeout=_ACTIVE_SNAPSHOT_GATE_TIMEOUT)
+        )
+        if active_snapshot_target
+        else None,
+    )
     clients: list[object] = []
     providers: list[SyncRedisProvider] = []
     if case.scenario_id != "local-only":
@@ -512,12 +633,17 @@ def run_sync_case(
     metrics = CorrectnessMetrics(
         loader_count=correctness_loader.count,
         redis_commands=recorder.commands,
+        active_snapshot_count=recorder.active_snapshot_count,
         active_result_bytes=recorder.active_result_bytes,
         completed_result_bytes=recorder.completed_result_bytes,
         overlap_observed=correctness_loader.overlap,
     )
     invariants = invariants_for(
-        case.scenario_id, metrics, coordinators=case.coordinators, keys=case.keys
+        case.scenario_id,
+        metrics,
+        coordinators=case.coordinators,
+        keys=case.keys,
+        stale_result_bytes=case.stale_result_bytes,
     )
     if not all(invariants.values()):
         raise BenchmarkScenarioError("correctness-failed")
@@ -556,6 +682,7 @@ def run_sync_case(
         _close_sync_preserving(clients, providers, primary)
     metric_fields = {
         "correctness_active_result_bytes": metrics.active_result_bytes,
+        "correctness_active_snapshot_count": metrics.active_snapshot_count,
         "correctness_completed_result_bytes": metrics.completed_result_bytes,
         "correctness_loader_count": metrics.loader_count,
         "correctness_overlap_observed": metrics.overlap_observed,
@@ -600,6 +727,7 @@ async def _async_repetition(
         AsyncRedisLoadCoordinator(cache, provider, codec, options=load_options(namespace))
         for cache, provider in zip(caches, providers, strict=True)
     ]
+    await _seed_async_stale_result(case, providers, namespace)
     if case.scenario_id == "local-hit":
         await caches[0].set("key-0", payload)
         started = perf_counter_ns()
@@ -703,8 +831,17 @@ async def run_async_case(
 ) -> BenchmarkScenarioResult:
     """Run correctness, warmup, and uninstrumented async measurement phases."""
     payload = b"x" * case.payload_bytes
-    recorder = _Recorder()
-    correctness_loader = _AsyncLoader(payload, case.loader_delay_seconds)
+    active_snapshot_target = 2 if case.stale_result_bytes else 0
+    recorder = _Recorder(active_snapshot_target=active_snapshot_target)
+
+    async def wait_for_active_snapshots() -> None:
+        await recorder.wait_for_active_snapshots_async(timeout=_ACTIVE_SNAPSHOT_GATE_TIMEOUT)
+
+    correctness_loader = _AsyncLoader(
+        payload,
+        case.loader_delay_seconds,
+        pre_return_gate=wait_for_active_snapshots if active_snapshot_target else None,
+    )
     clients: list[object] = []
     providers: list[AsyncRedisProvider] = []
     if case.scenario_id != "local-only":
@@ -727,12 +864,17 @@ async def run_async_case(
     metrics = CorrectnessMetrics(
         loader_count=correctness_loader.count,
         redis_commands=recorder.commands,
+        active_snapshot_count=recorder.active_snapshot_count,
         active_result_bytes=recorder.active_result_bytes,
         completed_result_bytes=recorder.completed_result_bytes,
         overlap_observed=correctness_loader.overlap,
     )
     invariants = invariants_for(
-        case.scenario_id, metrics, coordinators=case.coordinators, keys=case.keys
+        case.scenario_id,
+        metrics,
+        coordinators=case.coordinators,
+        keys=case.keys,
+        stale_result_bytes=case.stale_result_bytes,
     )
     if not all(invariants.values()):
         raise BenchmarkScenarioError("correctness-failed")
@@ -776,6 +918,7 @@ async def run_async_case(
         await _close_async_preserving(clients, providers, primary)
     metric_fields = {
         "correctness_active_result_bytes": metrics.active_result_bytes,
+        "correctness_active_snapshot_count": metrics.active_snapshot_count,
         "correctness_completed_result_bytes": metrics.completed_result_bytes,
         "correctness_loader_count": metrics.loader_count,
         "correctness_overlap_observed": metrics.overlap_observed,

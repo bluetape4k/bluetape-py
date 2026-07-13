@@ -35,6 +35,7 @@ PARAMETERS = frozenset(
         "coordinators",
         "keys",
         "payload_bytes",
+        "stale_result_bytes",
         "loader_delay_seconds",
         "warmups",
         "repetitions",
@@ -44,6 +45,7 @@ METRICS = frozenset(
     {
         "correctness_loader_count",
         "correctness_redis_commands",
+        "correctness_active_snapshot_count",
         "correctness_active_result_bytes",
         "correctness_completed_result_bytes",
         "correctness_overlap_observed",
