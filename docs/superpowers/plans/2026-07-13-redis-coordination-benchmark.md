@@ -796,7 +796,12 @@ Run: `uv run pytest packages/bluetape-cache-redis/tests/test_coordination_benchm
 
 Expected: FAIL with file not found.
 
-- [ ] **Step 3: Commit implementation, require clean tree, and generate**
+- [ ] **Step 3: Commit the failing artifact contract, require clean tree, and generate**
+
+```bash
+git add packages/bluetape-cache-redis/tests/test_coordination_benchmark.py
+git commit -m "test: require checked redis benchmark evidence"
+```
 
 Run: `git status --short`
 
