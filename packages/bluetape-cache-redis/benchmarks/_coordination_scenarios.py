@@ -30,6 +30,7 @@ from bluetape.cache.redis._coordination import _coordination_keys
 _ACTIVE_MARKER_PREFIX = b"active:"
 _COMPLETED_MARKER_PREFIX = b"completed:"
 _ACTIVE_SNAPSHOT_GATE_TIMEOUT = 5.0
+_LOADER_OVERLAP_GATE_TIMEOUT = 5.0
 
 
 class BenchmarkScenarioError(RuntimeError):
@@ -356,10 +357,17 @@ class _SyncLoader:
         delay: float,
         *,
         pre_return_gate: Callable[[], None] | None = None,
+        overlap_target: int = 0,
     ) -> None:
+        if type(overlap_target) is not int:
+            raise TypeError("overlap_target must be an exact int")
+        if overlap_target < 0:
+            raise ValueError("overlap_target must be non-negative")
         self.payload = payload
         self.delay = delay
         self.pre_return_gate = pre_return_gate
+        self.overlap_target = overlap_target
+        self.overlap_ready = threading.Event()
         self.count = 0
         self.active = 0
         self.overlap = False
@@ -370,7 +378,11 @@ class _SyncLoader:
             self.count += 1
             self.active += 1
             self.overlap = self.overlap or self.active > 1
+            if self.overlap_target and self.active >= self.overlap_target:
+                self.overlap_ready.set()
         try:
+            if self.overlap_target and not self.overlap_ready.wait(_LOADER_OVERLAP_GATE_TIMEOUT):
+                raise BenchmarkScenarioError("loader-overlap-gate")
             if self.pre_return_gate is not None:
                 self.pre_return_gate()
             if self.delay:
@@ -388,10 +400,17 @@ class _AsyncLoader:
         delay: float,
         *,
         pre_return_gate: Callable[[], Awaitable[None]] | None = None,
+        overlap_target: int = 0,
     ) -> None:
+        if type(overlap_target) is not int:
+            raise TypeError("overlap_target must be an exact int")
+        if overlap_target < 0:
+            raise ValueError("overlap_target must be non-negative")
         self.payload = payload
         self.delay = delay
         self.pre_return_gate = pre_return_gate
+        self.overlap_target = overlap_target
+        self.overlap_ready = asyncio.Event()
         self.count = 0
         self.active = 0
         self.overlap = False
@@ -400,7 +419,15 @@ class _AsyncLoader:
         self.count += 1
         self.active += 1
         self.overlap = self.overlap or self.active > 1
+        if self.overlap_target and self.active >= self.overlap_target:
+            self.overlap_ready.set()
         try:
+            if self.overlap_target:
+                try:
+                    async with asyncio.timeout(_LOADER_OVERLAP_GATE_TIMEOUT):
+                        await self.overlap_ready.wait()
+                except TimeoutError:
+                    raise BenchmarkScenarioError("loader-overlap-gate") from None
             if self.pre_return_gate is not None:
                 await self.pre_return_gate()
             if self.delay:
@@ -610,6 +637,7 @@ def run_sync_case(
         )
         if active_snapshot_target
         else None,
+        overlap_target=2 if case.scenario_id == "unrelated-keys" else 0,
     )
     clients: list[object] = []
     providers: list[SyncRedisProvider] = []
@@ -841,6 +869,7 @@ async def run_async_case(
         payload,
         case.loader_delay_seconds,
         pre_return_gate=wait_for_active_snapshots if active_snapshot_target else None,
+        overlap_target=2 if case.scenario_id == "unrelated-keys" else 0,
     )
     clients: list[object] = []
     providers: list[AsyncRedisProvider] = []

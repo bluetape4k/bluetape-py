@@ -398,6 +398,42 @@ async def test_async_active_snapshot_gate_is_bound_to_the_running_loop() -> None
     await waiter
 
 
+def test_sync_loader_overlap_gate_is_deterministic_at_zero_delay() -> None:
+    loader = scenario_runtime._SyncLoader(b"", 0.0, overlap_target=2)
+
+    values: tuple[bytes, ...] = ()
+
+    def verify(completed: tuple[bytes, ...]) -> None:
+        nonlocal values
+        values = completed
+
+    sync_measure_calls((lambda: loader("key"),) * 4, timeout=0.5, verify=verify)
+
+    assert values == (b"",) * 4
+    assert loader.count == 4
+    assert loader.overlap is True
+
+
+@pytest.mark.asyncio
+async def test_async_loader_overlap_gate_is_deterministic_at_zero_delay() -> None:
+    loader = scenario_runtime._AsyncLoader(b"", 0.0, overlap_target=2)
+
+    async def call() -> bytes:
+        return await loader("key")
+
+    values: tuple[bytes, ...] = ()
+
+    def verify(completed: tuple[bytes, ...]) -> None:
+        nonlocal values
+        values = completed
+
+    await async_measure_calls((call,) * 4, timeout=0.5, verify=verify)
+
+    assert values == (b"",) * 4
+    assert loader.count == 4
+    assert loader.overlap is True
+
+
 def test_active_snapshot_gate_timeout_has_stable_category() -> None:
     recorder = scenario_runtime._Recorder(active_snapshot_target=2)
     with pytest.raises(scenario_runtime.BenchmarkScenarioError, match="active-snapshot-gate"):
