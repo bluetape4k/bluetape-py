@@ -4,10 +4,12 @@ import sys
 from pathlib import Path
 
 import pytest
+from bluetape.benchmark import BenchmarkRunIdentity, read_report
 from bluetape.cache.redis import RedisCommandPolicy, RedisLoadOptions, SyncRedisProvider
 from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
 
 BENCHMARKS = Path(__file__).parents[1] / "benchmarks"
+ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(BENCHMARKS))
 
 from _coordination_matrix import (  # noqa: E402
@@ -319,3 +321,13 @@ def test_cli_diagnostic_has_only_fixed_safe_fields() -> None:
     error = BenchmarkCliError("provider-failed", mode="sync", scenario_id="local-hit")
     assert str(error) == "provider-failed"
     assert error.code == 3
+
+
+def test_checked_issue_65_artifact_is_clean_smoke_report() -> None:
+    report = read_report(ROOT / "docs/review/artifacts/issue-65-redis-coordination-benchmark.json")
+    assert report.schema_version == 1
+    assert report.profile == "smoke"
+    assert report.environment.source_dirty is False
+    assert report.run == BenchmarkRunIdentity(mode_order=("sync", "async"))
+    assert len(report.scenarios) == 12
+    assert report.production_capacity_claim is False
