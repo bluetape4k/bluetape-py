@@ -394,6 +394,35 @@ def test_sync_client_factory_failure_closes_prior_clients(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_acquisition_cleanup_signal_overrides_primary_failure(monkeypatch) -> None:
+    class Client:
+        async def ping(self) -> None:
+            raise RuntimeError("ping failed")
+
+        async def aclose(self) -> None:
+            raise benchmark_cli._SignalInterrupt(signal.SIGINT)
+
+    monkeypatch.setattr(scenario_runtime, "make_async_client", lambda _url: Client())
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        await scenario_runtime._async_resources("redis://private", 1, recorder=None)
+    assert raised.value.signum == signal.SIGINT
+
+
+def test_sync_acquisition_cleanup_signal_overrides_primary_failure(monkeypatch) -> None:
+    class Client:
+        def ping(self) -> None:
+            raise RuntimeError("ping failed")
+
+        def close(self) -> None:
+            raise benchmark_cli._SignalInterrupt(signal.SIGTERM)
+
+    monkeypatch.setattr(scenario_runtime, "make_sync_client", lambda _url: Client())
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        scenario_runtime._sync_resources("redis://private", 1, recorder=None)
+    assert raised.value.signum == signal.SIGTERM
+
+
+@pytest.mark.asyncio
 async def test_async_cleanup_closes_clients_after_provider_failure() -> None:
     class Provider:
         async def aclose(self) -> None:

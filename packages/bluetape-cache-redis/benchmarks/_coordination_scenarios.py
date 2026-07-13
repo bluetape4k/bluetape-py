@@ -435,6 +435,8 @@ def _sync_resources(
     except BaseException as primary:
         try:
             _close_sync(clients, providers)
+        except KeyboardInterrupt:
+            raise
         except BaseException:
             primary.add_note("benchmark resource cleanup also failed")
         raise
@@ -648,6 +650,8 @@ async def _async_resources(
     except BaseException as primary:
         try:
             await _close_async(clients, providers)
+        except KeyboardInterrupt:
+            raise
         except BaseException:
             primary.add_note("benchmark resource cleanup also failed")
         raise
