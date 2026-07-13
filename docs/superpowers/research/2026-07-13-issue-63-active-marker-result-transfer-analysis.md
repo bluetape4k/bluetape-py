@@ -12,9 +12,9 @@ The full paired benchmark met its primary correctness target:
 
 | Mode | Baseline active bytes | Candidate active bytes | Reduction | Baseline snapshots | Candidate snapshots |
 |---|---:|---:|---:|---:|---:|
-| sync | 1,572,864 | 0 | 100% | 24 | 28 |
+| sync | 1,572,864 | 0 | 100% | 24 | 25 |
 | async | 1,835,008 | 0 | 100% | 28 | 24 |
-| total | 3,407,872 | 0 | 100% | 52 | 52 |
+| total | 3,407,872 | 0 | 100% | 52 | 49 |
 
 Completed-result reuse remained non-zero in all four sync/async cases, every
 scenario invariant passed, and the generic comparison reported
@@ -29,10 +29,10 @@ scenario invariant passed, and the generic comparison reported
 | Runner | `runner-colima-a`, Colima, macOS arm64, 10 CPUs |
 | Python / Redis | 3.13.14 / 8.8.0 (`redis` dependency 8.0.1) |
 | Baseline | `b2f3ad5de9c5b0bdb3e1c206ac1581a3df9af474` |
-| Candidate | `ebdda950c854c69f19ebc61761774762cb46641c` |
+| Candidate | `984c49ad7b701f9e1c17a3176c4ea8fd8f2a1252` |
 | Baseline artifact SHA-256 | `3d0cc4f8f88e0a70ae1cc03a647d4c5c1f25f0a6306cd19f1f7dacfbfb5da1ab` |
-| Candidate artifact SHA-256 | `99619f008559e4ea3b4f2669eb3dbe7199c1196de260db27752647a3523d3361` |
-| Comparison artifact SHA-256 | `93b8bccf3306cec3016d688183f932f77ff155da11f1983f5463780e236b650b` |
+| Candidate artifact SHA-256 | `c57f3a2d34a68845854c37835eee07443d3762c3c8b4f93340b02296db74d39b` |
+| Comparison artifact SHA-256 | `8e287e32e8cd793b59b4b0cc547724d7990476ff63138cd3a77b04c7a4f81861` |
 | Lock / registry digest | `a825207f86a8935492348035f65b942db501fe4fb6d3609797c3e678cdcbbd36` / `2cc0e4b8700f3678aa51e004acfd966a4fdd363a9b5435459188b039849e5566` |
 
 The source was clean for both reports. The paired environment, dependency
@@ -61,8 +61,8 @@ prove one `EVAL` per snapshot in sync and async modes.
 ## Timing observations and limits
 
 Timing was not the acceptance metric. On the selected high case, sync median
-changed from 14,104,875 ns to 14,958,541 ns and async median from 10,806,625 ns
-to 11,981,625 ns. These single baseline-first samples do not demonstrate a
+changed from 14,104,875 ns to 15,495,125 ns and async median from 10,806,625 ns
+to 12,304,083 ns. These single baseline-first samples do not demonstrate a
 latency improvement and must not be used as capacity or SLO evidence. The
 accepted claim is limited to eliminating ignored active-marker result bytes
 while preserving correctness and command shape.
@@ -72,3 +72,10 @@ The fixture also required a pre-baseline repair: the zero-delay
 concurrent loaders instead of relying on scheduler luck. Test-only readiness
 uses `bluetape.testing.eventually` to observe the mapped Redis port before real
 integration cases begin.
+
+The pre-PR review found one small-bound edge case after the first candidate
+capture: `max_marker_size < 7` truncated the marker before Lua could recognize
+`active:`. The final candidate reads a minimum seven-byte internal probe, still
+returns no more than the caller's marker bound, and avoids the result read.
+Sync and async real Redis tests reproduce and lock the six-byte boundary. The
+candidate report above was recaptured at the corrected code checkpoint.
