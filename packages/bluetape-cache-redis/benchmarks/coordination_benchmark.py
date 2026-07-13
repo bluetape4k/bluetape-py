@@ -95,7 +95,7 @@ class BenchmarkCliError(RuntimeError):
         self.exit_code = _EXIT_CODES.get(category, 3) if exit_code is None else exit_code
 
 
-class _SignalInterrupt(BaseException):
+class _SignalInterrupt(KeyboardInterrupt):
     def __init__(self, signum: int) -> None:
         self.signum = signum
 
@@ -394,6 +394,9 @@ def _close_server(server: RedisServer, primary: BaseException | None) -> None:
             interrupted = signal_error
             continue
         except Exception:
+            if interrupted is not None:
+                interrupted.add_note("benchmark cleanup also failed")
+                break
             if primary is None:
                 raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
             primary.add_note("benchmark cleanup also failed")

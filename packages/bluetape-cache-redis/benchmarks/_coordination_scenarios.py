@@ -463,6 +463,8 @@ def _close_sync_preserving(
 ) -> None:
     try:
         _close_sync(clients, providers)
+    except KeyboardInterrupt:
+        raise
     except BaseException:
         if primary is None:
             raise
@@ -667,6 +669,8 @@ async def _close_async_preserving(
 ) -> None:
     try:
         await _close_async(clients, providers)
+    except KeyboardInterrupt:
+        raise
     except BaseException:
         if primary is None:
             raise

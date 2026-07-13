@@ -426,6 +426,22 @@ async def test_async_cleanup_failure_preserves_primary_cancellation() -> None:
     assert primary.__notes__ == ["benchmark resource cleanup also failed"]
 
 
+@pytest.mark.asyncio
+async def test_signal_during_scenario_cleanup_overrides_prior_failure() -> None:
+    class Provider:
+        async def aclose(self) -> None:
+            raise benchmark_cli._SignalInterrupt(signal.SIGTERM)
+
+    primary = RuntimeError("provider failed")
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        await scenario_runtime._close_async_preserving(
+            [],
+            [Provider()],
+            primary,  # type: ignore[list-item]
+        )
+    assert raised.value.signum == signal.SIGTERM
+
+
 def test_cli_requires_seed_and_complete_pair_fields() -> None:
     with pytest.raises(BenchmarkCliError) as raised:
         parser().parse_args(["--profile", "smoke", "--output", "-"])
@@ -523,6 +539,24 @@ def test_first_signal_during_server_cleanup_retries_then_preserves_signal() -> N
     with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
         benchmark_cli._close_server(server, None)  # type: ignore[arg-type]
     assert raised.value.signum == signal.SIGINT
+    assert server.calls == 2
+
+
+def test_first_signal_wins_when_server_cleanup_retry_fails() -> None:
+    class Server:
+        calls = 0
+
+        def close(self) -> None:
+            self.calls += 1
+            if self.calls == 1:
+                raise benchmark_cli._SignalInterrupt(signal.SIGINT)
+            raise RuntimeError("cleanup failed")
+
+    server = Server()
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        benchmark_cli._close_server(server, None)  # type: ignore[arg-type]
+    assert raised.value.signum == signal.SIGINT
+    assert raised.value.__notes__ == ["benchmark cleanup also failed"]
     assert server.calls == 2
 
 
