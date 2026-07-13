@@ -528,9 +528,16 @@
         for values in active_snapshots.values()
         for count in values.values()
     )
+
+    def stable_command_count(item):
+        metrics = dict(item.metrics)
+        commands = metrics["correctness_redis_commands"]
+        if item.scenario_id == "multi-coordinator":
+            return commands - metrics["correctness_active_snapshot_count"]
+        return commands
+
     assert all(
-        dict(before[key].metrics)["correctness_redis_commands"]
-        == dict(after[key].metrics)["correctness_redis_commands"]
+        stable_command_count(before[key]) == stable_command_count(after[key])
         for key in before
     )
     completed_keys = tuple(key for key in before if key[1] == "completed-reuse")
@@ -565,6 +572,9 @@
   - **Evidence:** The script exits `0` and the printed summary contains primary
     baseline/final/delta, per-mode counts, command parity, completed-result
     guard, and `comparable: true` without raw keys, endpoints, or payloads.
+    `multi-coordinator` command parity excludes active-snapshot polling because
+    a same-SHA diagnostic rerun proved that concurrent scheduling changes the
+    raw polling count; all other scenarios retain raw command-count parity.
   - **Failure:** Reject the candidate when any assertion fails. A latency win
     cannot override a correctness failure.
 
