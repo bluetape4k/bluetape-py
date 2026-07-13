@@ -1,8 +1,11 @@
 # Issue #56 RESP3 Near-Cache Invalidation Design
 
-**Status:** conversation design approved; document review pending  
-**Issue:** [#56](https://github.com/bluetape4k/bluetape-py/issues/56)  
-**Parent:** [#51](https://github.com/bluetape4k/bluetape-py/issues/51)  
+**Status:** conversation design approved; document review pending
+
+**Issue:** [#56](https://github.com/bluetape4k/bluetape-py/issues/56)
+
+**Parent:** [#51](https://github.com/bluetape4k/bluetape-py/issues/51)
+
 **Date:** 2026-07-13
 
 ## Summary
@@ -14,11 +17,11 @@ messages invalidate local entries across processes.
 
 The public facades own their local cache so callers cannot bypass readiness
 gating. A dedicated RESP3 reader connection receives
-`CLIENT TRACKING ON BCAST PREFIX <namespace>:` invalidations, while a separate
-command client writes marker keys after authoritative application data has
-changed. Tracking failure is fail-closed: the complete local cache is cleared,
-local reads and population stop, and caching resumes only after tracking has
-been restored and the cache has been cleared again.
+`CLIENT TRACKING ON BCAST PREFIX <derived-namespace-prefix>` invalidations,
+while a separate command client writes marker keys after authoritative
+application data has changed. Tracking failure is fail-closed: the complete
+local cache is cleared, local reads and population stop, and caching resumes
+only after tracking has been restored and the cache has been cleared again.
 
 Implementation begins with a strict redis-py public-API capability gate. Both
 sync and async push delivery and reconnect must be proven with Testcontainers.
@@ -220,8 +223,9 @@ class StringNearCacheKeyCodec(NearCacheKeyCodec[str]):
 
 The default codec accepts exact `str` values only. UTF-8 output must be 1..1024
 bytes. Empty strings, unpaired surrogates, oversized values, and non-`str`
-values are rejected. The marker layer base64url-encodes codec bytes without
-padding, so separators and Unicode cannot collide with the namespace boundary.
+values are rejected. The marker layer base64url-encodes both the validated
+namespace bytes and codec bytes without padding, so separators, nested namespace
+names, and Unicode cannot collide with framing boundaries.
 
 A custom codec must return exact `bytes` of 1..1024 bytes, decode to a hashable
 key, and be canonical: encoding the decoded key must reproduce the original
@@ -348,18 +352,20 @@ has succeeded.
 For a validated namespace and canonical codec payload, the marker key is:
 
 ```text
-<namespace>:<unpadded-base64url(codec.encode(key))>
+bluetape:near:<unpadded-base64url(namespace.encode("utf-8"))>:<unpadded-base64url(codec.encode(key))>
 ```
 
 The tracking reader enables:
 
 ```text
-CLIENT TRACKING ON BCAST PREFIX <namespace>:
+CLIENT TRACKING ON BCAST PREFIX bluetape:near:<unpadded-base64url(namespace.encode("utf-8"))>:
 ```
 
-Base64url keeps the key mapping deterministic and reversible and prevents `:`
-inside encoded key bytes from changing the namespace boundary. Encoding is not
-encryption: Redis operators can decode marker keys. Applications that consider
+Encoding the namespace prevents prefix overlap such as logical namespaces `a`
+and `a:b`; each produces a distinct, delimiter-safe tracking prefix. Base64url
+also keeps the key mapping deterministic and reversible and prevents `:` inside
+encoded key bytes from changing a framing boundary. Encoding is not encryption:
+Redis operators can decode namespace and key bytes. Applications that consider
 cache keys sensitive must provide a reversible codec with an appropriate
 security policy or avoid the provider. A one-way digest is insufficient because
 the receiver must recover the local key without maintaining an unbounded digest
@@ -424,6 +430,14 @@ The second clear removes any state that could have existed before tracking was
 fully established. A failure during initial start clears and cleans up the
 attempt, returns to `NEW`, and raises; no reconnect worker survives a failed
 initial `start()`. The caller may correct configuration and retry `start()`.
+
+The first caller entering `start()` owns the initial attempt. Concurrent
+`start()` callers wait without duplicating a reader and observe the same terminal
+success or stable wrapped failure. `start()` in `READY`, `DEGRADED`, or
+`RECONNECTING` is an idempotent no-op because the facade is already started;
+`CLOSING` or `CLOSED` raises the closed error. Close racing initial start takes
+ownership after the start attempt reaches a cleanup-safe boundary, prevents
+`READY` publication, and then performs normal close.
 
 Concurrent operations while `NEW` or `STARTING` raise a stable not-started/not-
 ready error. `CLOSING` and `CLOSED` operations raise a closed error.
@@ -499,10 +513,17 @@ Close is idempotent and has one cleanup owner:
 2. Clear the local cache and supersede active flights.
 3. Interrupt reconnect backoff or reader waiting.
 4. Stop and join/await the owned reader thread or task.
-5. Disable tracking and detach public push handling when supported.
-6. Close factory-owned Redis clients exactly once.
-7. Preserve caller-supplied borrowed clients.
-8. Transition to `CLOSED` and wake concurrent closers.
+5. Drain public operations admitted before `CLOSING`, including direct degraded
+   loaders and ready-state loader callers.
+6. Disable tracking and detach public push handling when supported.
+7. Close factory-owned Redis clients exactly once.
+8. Preserve caller-supplied borrowed clients.
+9. Transition to `CLOSED` and wake concurrent closers.
+
+Draining prevents an owned async loader task from surviving facade close. User
+loaders and Redis commands require caller-owned finite deadlines; close does not
+invent a timeout that could abandon admitted work. Calling close recursively
+from an admitted loader is rejected rather than deadlocking on itself.
 
 Async cleanup is cancellation-safe: the first `aclose()` establishes one owned
 cleanup task, shields it to terminal state, and re-raises cancellation only
@@ -511,9 +532,11 @@ after resources are settled. Repeated close observes the same terminal result.
 ## Redis Client Ownership
 
 The direct constructor requires separate command and reader clients. Both are
-borrowed. They must be distinct objects, binary-response compatible, and
-configured for finite command bounds. The reader client is contractually
-dedicated to the facade even though the caller owns its final close.
+borrowed. They must be distinct objects backed by distinct connection pools or
+otherwise publicly provable dedicated connections, binary-response compatible,
+and configured for finite command bounds. Merely wrapping one shared pool in two
+client objects is rejected. The reader client is contractually dedicated to the
+facade even though the caller owns its final close.
 
 The provider stops tracking and detaches its consumer from a borrowed reader but
 does not close either borrowed client. Caller code must not use the dedicated
@@ -532,6 +555,9 @@ shared command/reader connection or weaken borrowed-versus-owned behavior.
 
 - Lifecycle state and generation changes are serialized independently from the
   local cache's own lock.
+- Every public operation is admitted and released under the lifecycle condition;
+  close rejects new admissions and drains the existing count before closing
+  Redis clients.
 - No Redis I/O or user loader runs while a lifecycle or local-cache lock is
   held.
 - A ready operation snapshots its generation before leaving the lifecycle gate.
@@ -619,6 +645,8 @@ test without timing guesses:
 
 - initial start success and every failure point;
 - repeated/concurrent start and close;
+- close drains admitted ready/degraded loads, and recursive close from a loader
+  is rejected without deadlock;
 - `NEW`, `STARTING`, `READY`, `DEGRADED`, `RECONNECTING`, `CLOSING`, and
   `CLOSED` operation behavior;
 - stale reconnect completion cannot publish readiness;
@@ -648,7 +676,8 @@ test without timing guesses:
 - two async facades invalidate peer entries;
 - sync and async cross-mode invalidation;
 - self-write invalidation without `NOLOOP`;
-- namespace isolation;
+- namespace isolation including potentially overlapping logical names such as
+  `a` and `a:b`;
 - duplicate marker writes and marker expiry are idempotent;
 - Redis outage clears and disables local values;
 - Redis recovery clears again before readiness;
