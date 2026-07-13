@@ -1,8 +1,9 @@
 # Issue #63 Active-Marker Result Transfer Pre-PR Code Review
 
-Review base: `349ef1417a16d7394bc261b685b489caf4a6bf83`  
-Final code benchmark checkpoint: `984c49ad7b701f9e1c17a3176c4ea8fd8f2a1252`  
-Verified documentation checkpoint: `cda8b80f21f039f8bc8bd6fee1225cac817af72c`
+- Review base: `349ef1417a16d7394bc261b685b489caf4a6bf83`
+- Final code benchmark checkpoint: `984c49ad7b701f9e1c17a3176c4ea8fd8f2a1252`
+- Verified documentation checkpoint: `cda8b80f21f039f8bc8bd6fee1225cac817af72c`
+- CI dependency repair checkpoint: `999924f`
 
 ## Findings and convergence
 
@@ -10,6 +11,7 @@ Verified documentation checkpoint: `cda8b80f21f039f8bc8bd6fee1225cac817af72c`
 |---|---|---|---|
 | P1 | Developer/API | The first Lua branch recognized `active:` only from the caller-bounded marker value. With `max_marker_size < 7`, it returned the stale result prefix. | Added a minimum seven-byte internal marker probe while still returning only the caller-bound prefix. Sync and async real Redis tests reproduce the six-byte boundary and pass after the fix. |
 | P1 | Performance/stability | The first acceptance rule required raw command equality even though concurrent active polling changes snapshot counts between identical runs. | A same-SHA baseline rerun proved the variance. The approved rule now subtracts recorded active snapshots for `multi-coordinator` only; all other scenarios retain raw parity, and provider tests lock one `EVAL` per snapshot. |
+| P1 | Operator/Ops | Package-isolated CI could not collect tests importing `bluetape.testing.eventually` because the Redis package test group omitted the workspace testing helper. | Added `bluetape-testing` to the Redis package test-only dependency group and lockfile; no production dependency changed. The exact isolated CI unit and Testcontainers commands pass. |
 | P2 | Performance | A single baseline-first pair showed slower candidate medians. | Documented as observational only. The accepted claim is the measured 100% removal of ignored active result bytes, not latency or capacity improvement. |
 
 Final unresolved findings: P0=0, P1=0, P2=0, P3=0.
@@ -39,6 +41,7 @@ Final unresolved findings: P0=0, P1=0, P2=0, P3=0.
 
 - `uv sync --all-packages --all-extras --python 3.13.14 --locked`: passed.
 - `uv run pytest`: 1,515 passed, including all real Redis and benchmark integration tests.
+- Package-isolated CI parity: 336 unit tests and 31 Testcontainers tests passed.
 - Boundary RED/GREEN: sync and async six-byte active marker tests failed with 64 stale bytes before the fix and passed with no result afterward.
 - `uv run ruff check .`: passed.
 - `uv run ruff format --check .`: 91 files already formatted.
