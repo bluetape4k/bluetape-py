@@ -133,6 +133,15 @@ def test_environment_rejects_bool_count_and_malformed_digest() -> None:
         replace(environment(), profile_registry_digest="not-a-digest")
 
 
+def test_timing_summary_rejects_inconsistent_derived_values() -> None:
+    with pytest.raises(ValueError):
+        replace(timing(), median_ns=99)
+    with pytest.raises(ValueError):
+        replace(timing(), p95_ns=3)
+    with pytest.raises(ValueError):
+        replace(timing(), throughput_ops_per_sec=1.0)
+
+
 def test_comparison_requires_empty_deltas_when_not_comparable() -> None:
     delta = BenchmarkDelta(
         mode="sync",

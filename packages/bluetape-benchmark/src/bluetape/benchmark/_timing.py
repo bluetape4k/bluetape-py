@@ -48,9 +48,7 @@ def summarize_timings(
         p95_ns=nearest_rank(values, 95) if len(values) >= 20 else None,
         p99_ns=nearest_rank(values, 99) if len(values) >= 100 else None,
         max_ns=max(values),
-        throughput_ops_per_sec=float(
-            operations_per_sample * len(values) * 1_000_000_000 / total
-        ),
+        throughput_ops_per_sec=float(operations_per_sample * len(values) * 1_000_000_000 / total),
     )
 
 

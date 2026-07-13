@@ -4,10 +4,9 @@ import math
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import TypeAlias
 
-BenchmarkScalar: TypeAlias = str | int | float | bool | None
-FieldPairs: TypeAlias = tuple[tuple[str, BenchmarkScalar], ...]
+type BenchmarkScalar = str | int | float | bool | None
+type FieldPairs = tuple[tuple[str, BenchmarkScalar], ...]
 
 _FIELD_NAME = re.compile(r"[a-z][a-z0-9_.-]{0,127}")
 _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
@@ -124,10 +123,26 @@ class TimingSummary:
                 raise TypeError(f"{field} must be an exact int or None")
         if self.min_ns != min(samples) or self.max_ns != max(samples):
             raise ValueError("min_ns and max_ns must match raw samples")
+        ordered = sorted(samples)
+
+        def rank(percentile: int) -> int:
+            return ordered[math.ceil(percentile / 100 * len(ordered)) - 1]
+
+        if self.median_ns != rank(50):
+            raise ValueError("median_ns must match nearest-rank p50")
+        expected_p95 = rank(95) if len(samples) >= 20 else None
+        expected_p99 = rank(99) if len(samples) >= 100 else None
+        if self.p95_ns != expected_p95 or self.p99_ns != expected_p99:
+            raise ValueError("tail percentiles do not match sample-count gates")
         if type(self.throughput_ops_per_sec) is not float:
             raise TypeError("throughput_ops_per_sec must be an exact float")
         if not math.isfinite(self.throughput_ops_per_sec) or self.throughput_ops_per_sec <= 0:
             raise ValueError("throughput_ops_per_sec must be finite and positive")
+        expected_throughput = (
+            self.operations_per_sample * len(samples) * 1_000_000_000 / sum(samples)
+        )
+        if not math.isclose(self.throughput_ops_per_sec, expected_throughput, rel_tol=1e-12):
+            raise ValueError("throughput_ops_per_sec is inconsistent")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -158,7 +173,9 @@ class BenchmarkEnvironment:
             raise TypeError("seed must be an exact int")
         _sha256(self.profile_registry_digest, field="profile_registry_digest")
         _sha256(self.dependency_lock_digest, field="dependency_lock_digest")
-        object.__setattr__(self, "dependencies", _field_pairs(self.dependencies, field="dependencies"))
+        object.__setattr__(
+            self, "dependencies", _field_pairs(self.dependencies, field="dependencies")
+        )
         object.__setattr__(self, "extensions", _field_pairs(self.extensions, field="extensions"))
         if type(self.source_dirty) is not bool:
             raise TypeError("source_dirty must be an exact bool")
