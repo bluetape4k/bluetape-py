@@ -166,6 +166,7 @@ dependencies = [
 test = [
     { name = "bluetape-benchmark" },
     { name = "bluetape-testcontainers" },
+    { name = "bluetape-testing" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -182,6 +183,7 @@ requires-dist = [
 test = [
     { name = "bluetape-benchmark", editable = "packages/bluetape-benchmark" },
     { name = "bluetape-testcontainers", editable = "packages/bluetape-testcontainers" },
+    { name = "bluetape-testing", editable = "packages/bluetape-testing" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0" },
 ]
