@@ -342,9 +342,10 @@ def test_real_active_snapshot_omits_stale_result_until_completed(
         client.set("result", b"x" * 65_536, px=5000)
 
         active = provider.coordination_snapshot(
-            "lease", "result", max_marker_size=138, max_result_size=64
+            "lease", "result", max_marker_size=6, max_result_size=64
         )
-        assert active.marker == b"active:owner"
+        assert active.marker == b"active"
+        assert active.marker_oversized is True
         assert active.result is None
         assert active.result_oversized is False
 
@@ -371,9 +372,10 @@ async def test_real_async_active_snapshot_omits_stale_result_until_completed(
         await client.set("result", b"x" * 65_536, px=5000)
 
         active = await provider.coordination_snapshot(
-            "lease", "result", max_marker_size=138, max_result_size=64
+            "lease", "result", max_marker_size=6, max_result_size=64
         )
-        assert active.marker == b"active:owner"
+        assert active.marker == b"active"
+        assert active.marker_oversized is True
         assert active.result is None
         assert active.result_oversized is False
 
