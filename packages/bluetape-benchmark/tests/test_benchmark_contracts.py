@@ -1,3 +1,5 @@
+"""Contracts for the private benchmark report model."""
+
 from dataclasses import FrozenInstanceError, replace
 
 import pytest

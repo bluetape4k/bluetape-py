@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from bluetape.benchmark import read_report, write_report
-from test_contracts import report
+from test_benchmark_contracts import report
 
 ROOT = Path(__file__).parents[3]
 DESIGN = ROOT / "docs/superpowers/specs/2026-07-12-issue-65-redis-coordination-benchmark-design.md"

@@ -11,7 +11,7 @@ from bluetape.benchmark import (
     write_report,
 )
 from bluetape.benchmark.compare import main
-from test_contracts import report
+from test_benchmark_contracts import report
 
 
 def paired_report(role: str, duration_ns: int):
