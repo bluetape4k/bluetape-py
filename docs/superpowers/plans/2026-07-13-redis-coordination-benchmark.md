@@ -29,7 +29,7 @@
 **Files:**
 - Create: `packages/bluetape-benchmark/pyproject.toml`
 - Create: `packages/bluetape-benchmark/src/bluetape/benchmark/__init__.py`
-- Create: `packages/bluetape-benchmark/tests/test_packaging.py`
+- Create: `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`
 - Modify: `pyproject.toml`
 - Modify: `packages/bluetape-cache-redis/pyproject.toml`
 - Modify: `uv.lock`
@@ -67,7 +67,7 @@ def test_workspace_builds_but_meta_never_installs_benchmark() -> None:
 
 - [ ] **Step 2: Verify RED**
 
-Run: `uv run pytest packages/bluetape-benchmark/tests/test_packaging.py -q`
+Run: `uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py -q`
 
 Expected: FAIL because the package metadata and workspace registration are absent.
 
@@ -101,7 +101,7 @@ Add `bluetape-benchmark = { workspace = true }` and `packages/bluetape-benchmark
 __all__: list[str] = []
 ```
 
-Run: `uv lock && uv sync --all-packages --all-extras && uv run pytest packages/bluetape-benchmark/tests/test_packaging.py packages/bluetape-cache-redis/tests/test_packaging.py -q`
+Run: `uv lock && uv sync --all-packages --all-extras && uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py packages/bluetape-cache-redis/tests/test_packaging.py -q`
 
 Expected: PASS.
 
@@ -838,7 +838,7 @@ git commit -m "docs: record redis coordination benchmark evidence"
 - Modify: `README.md`, `README.ko.md`, `CHANGELOG.md`
 - Modify: `packages/bluetape-cache-redis/README.md`, `packages/bluetape-cache-redis/README.ko.md`
 - Modify: `docs/package-layout.md`, `docs/release.md`, `docs/release/pypi-preflight.md`, `docs/release/release-guide.md`
-- Modify: `packages/bluetape-benchmark/tests/test_packaging.py`
+- Modify: `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`
 - Modify: `packages/bluetape-cache-redis/tests/test_readme_examples.py`
 
 - [ ] **Step 1: Write failing documentation/release tests**
@@ -860,7 +860,7 @@ def test_readme_has_operator_contract(readme: Path) -> None:
 
 - [ ] **Step 2: Verify RED**
 
-Run: `uv run pytest packages/bluetape-benchmark/tests/test_packaging.py packages/bluetape-cache-redis/tests/test_readme_examples.py -q`
+Run: `uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py packages/bluetape-cache-redis/tests/test_readme_examples.py -q`
 
 Expected: FAIL on missing package/release/operator documentation.
 
@@ -874,12 +874,12 @@ Explicitly classify every workspace distribution as publishable or private. Unkn
 
 - [ ] **Step 5: Verify and commit docs**
 
-Run: `uv run pytest packages/bluetape-benchmark/tests/test_packaging.py packages/bluetape-cache-redis/tests/test_readme_examples.py -q`
+Run: `uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py packages/bluetape-cache-redis/tests/test_readme_examples.py -q`
 
 Expected: PASS.
 
 ```bash
-git add README.md README.ko.md CHANGELOG.md docs packages/bluetape-benchmark/README.md packages/bluetape-benchmark/README.ko.md packages/bluetape-benchmark/tests/test_packaging.py packages/bluetape-cache-redis/README.md packages/bluetape-cache-redis/README.ko.md packages/bluetape-cache-redis/tests/test_readme_examples.py
+git add README.md README.ko.md CHANGELOG.md docs packages/bluetape-benchmark/README.md packages/bluetape-benchmark/README.ko.md packages/bluetape-benchmark/tests/test_benchmark_packaging.py packages/bluetape-cache-redis/README.md packages/bluetape-cache-redis/README.ko.md packages/bluetape-cache-redis/tests/test_readme_examples.py
 git commit -m "docs: document benchmark and release boundaries"
 ```
 
