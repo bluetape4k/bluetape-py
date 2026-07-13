@@ -420,9 +420,11 @@ def _sync_repetition(
 def _sync_resources(
     redis_url: str, count: int, *, recorder: _Recorder | None
 ) -> tuple[list[object], list[SyncRedisProvider]]:
-    clients = [make_sync_client(redis_url) for _ in range(count)]
+    clients: list[object] = []
     providers: list[SyncRedisProvider] = []
     try:
+        for _ in range(count):
+            clients.append(make_sync_client(redis_url))
         for client in clients:
             client.ping()
         if recorder is None:
@@ -601,9 +603,11 @@ async def _async_repetition(
 async def _async_resources(
     redis_url: str, count: int, *, recorder: _Recorder | None
 ) -> tuple[list[object], list[AsyncRedisProvider]]:
-    clients = [make_async_client(redis_url) for _ in range(count)]
+    clients: list[object] = []
     providers: list[AsyncRedisProvider] = []
     try:
+        for _ in range(count):
+            clients.append(make_async_client(redis_url))
         for client in clients:
             await client.ping()
         if recorder is None:

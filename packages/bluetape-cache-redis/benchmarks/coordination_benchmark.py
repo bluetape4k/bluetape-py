@@ -468,7 +468,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_diagnostic(error), file=sys.stderr)
             return error.exit_code
         except Exception:
-            error = BenchmarkCliError("provider-failed", phase="execution")
+            error = BenchmarkCliError("provider-failed")
             print(_diagnostic(error), file=sys.stderr)
             return error.exit_code
         except _SignalInterrupt as interrupted:

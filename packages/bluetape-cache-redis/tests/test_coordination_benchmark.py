@@ -346,6 +346,53 @@ async def test_partial_async_resource_failure_closes_every_client(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_async_client_factory_failure_closes_prior_clients(monkeypatch) -> None:
+    class Client:
+        closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    first = Client()
+    calls = 0
+
+    def client_factory(_url: str):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("factory failed")
+        return first
+
+    monkeypatch.setattr(scenario_runtime, "make_async_client", client_factory)
+    with pytest.raises(RuntimeError, match="factory failed"):
+        await scenario_runtime._async_resources("redis://private", 2, recorder=None)
+    assert first.closed is True
+
+
+def test_sync_client_factory_failure_closes_prior_clients(monkeypatch) -> None:
+    class Client:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    first = Client()
+    calls = 0
+
+    def client_factory(_url: str):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("factory failed")
+        return first
+
+    monkeypatch.setattr(scenario_runtime, "make_sync_client", client_factory)
+    with pytest.raises(RuntimeError, match="factory failed"):
+        scenario_runtime._sync_resources("redis://private", 2, recorder=None)
+    assert first.closed is True
+
+
+@pytest.mark.asyncio
 async def test_async_cleanup_closes_clients_after_provider_failure() -> None:
     class Provider:
         async def aclose(self) -> None:
@@ -458,6 +505,7 @@ def test_main_redacts_unexpected_internal_failure(monkeypatch, capsys) -> None:
     assert captured.out == ""
     assert captured.err.startswith("bluetape-benchmark-error ")
     assert "SECRET_SENTINEL" not in captured.err
+    assert '"phase":null' in captured.err
 
 
 def test_checked_issue_65_artifact_is_clean_smoke_report() -> None:
