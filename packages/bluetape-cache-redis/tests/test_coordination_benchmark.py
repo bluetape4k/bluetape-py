@@ -3,23 +3,33 @@ import asyncio
 import json
 import signal
 import sys
+import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from bluetape.benchmark import BenchmarkRunIdentity, read_report
-from bluetape.cache.redis import RedisCommandPolicy, RedisLoadOptions, SyncRedisProvider
+from bluetape.cache.redis import (
+    RedisCommandPolicy,
+    RedisCoordinationSnapshot,
+    RedisLoadOptions,
+    SyncRedisProvider,
+)
 from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
 from bluetape.testcontainers import StartFailureKind, TestcontainerStartError
+from bluetape.testing import eventually, eventually_async
 
 BENCHMARKS = Path(__file__).parents[1] / "benchmarks"
 ROOT = Path(__file__).parents[3]
 sys.path.insert(0, str(BENCHMARKS))
 
 import _coordination_scenarios as scenario_runtime  # noqa: E402
+import _coordination_security as benchmark_security  # noqa: E402
 import coordination_benchmark as benchmark_cli  # noqa: E402
 from _coordination_matrix import (  # noqa: E402
     FULL,
     SMOKE,
+    BenchmarkProfile,
     MatrixTotals,
     derived_seed,
     matrix_totals,
@@ -63,6 +73,7 @@ def test_smoke_registry_is_exact() -> None:
     assert matrix_totals(SMOKE, ("sync", "async")) == MatrixTotals(
         results=12, measured_samples=60, operations=10_400, warmups=12
     )
+    assert all(case.stale_result_bytes == 0 for case in SMOKE.cases)
 
 
 def test_full_registry_has_fixed_safety_totals() -> None:
@@ -70,17 +81,59 @@ def test_full_registry_has_fixed_safety_totals() -> None:
     assert matrix_totals(FULL, ("sync", "async")) == MatrixTotals(
         results=24, measured_samples=412, operations=409_944, warmups=72
     )
+    stale_cases = [
+        (case.scenario_id, case.case_id, case.stale_result_bytes)
+        for case in FULL.cases
+        if case.stale_result_bytes
+    ]
+    assert stale_cases == [("multi-coordinator", "high-medium-short", 65_536)]
     validate_profile(FULL, ("sync", "async"))
 
 
 def test_registry_digest_and_seed_are_stable_vectors() -> None:
     assert registry_digest(SMOKE) == (
-        "9e114b562ced345d7c7aab9295ab074173475dc192d25784811f38c37dfd3285"
+        "fac8eae63c0d6dbeff96cc99827ca1c3d893b53203eb22be1289f85324bfe5e3"
+    )
+    assert registry_digest(FULL) == (
+        "2cc0e4b8700f3678aa51e004acfd966a4fdd363a9b5435459188b039849e5566"
     )
     case = SMOKE.cases[0]
     assert derived_seed(20260712, "smoke", "sync", case, "measurement", 0) == (
         2_577_118_096_661_857_961
     )
+
+
+def test_stale_result_bytes_requires_an_exact_non_negative_int() -> None:
+    case = next(item for item in FULL.cases if item.scenario_id == "multi-coordinator")
+    with pytest.raises(TypeError, match="stale_result_bytes must be an exact int"):
+        replace(case, stale_result_bytes=True)
+    with pytest.raises(ValueError, match="stale_result_bytes must be non-negative"):
+        replace(case, stale_result_bytes=-1)
+
+
+def test_stale_result_fixture_is_bounded_and_requires_multiple_coordinators() -> None:
+    case = next(
+        item
+        for item in FULL.cases
+        if item.scenario_id == "multi-coordinator" and item.case_id == "high-medium-short"
+    )
+    oversized = replace(case, stale_result_bytes=16_777_217)
+    with pytest.raises(ValueError, match="stale result ceiling"):
+        validate_profile(
+            BenchmarkProfile(profile_id="oversized", cases=(oversized,), wall_timeout_seconds=900),
+            ("sync",),
+        )
+    single = replace(
+        case,
+        scenario_id="single-coordinator",
+        coordinators=1,
+        stale_result_bytes=1,
+    )
+    with pytest.raises(ValueError, match="stale result fixture requires multi-coordinator"):
+        validate_profile(
+            BenchmarkProfile(profile_id="single", cases=(single,), wall_timeout_seconds=900),
+            ("sync",),
+        )
 
 
 def test_fixed_policy_matches_provider_discovery() -> None:
@@ -153,6 +206,7 @@ def test_redis_report_field_vocabulary_is_fail_closed() -> None:
             "coordinators": 4,
             "keys": 1,
             "payload_bytes": 1024,
+            "stale_result_bytes": 0,
             "loader_delay_seconds": 0.005,
             "warmups": 1,
             "repetitions": 5,
@@ -160,6 +214,7 @@ def test_redis_report_field_vocabulary_is_fail_closed() -> None:
         metrics={
             "correctness_loader_count": 1,
             "correctness_redis_commands": 4,
+            "correctness_active_snapshot_count": 2,
             "correctness_active_result_bytes": 0,
             "correctness_completed_result_bytes": 1024,
             "correctness_overlap_observed": True,
@@ -179,6 +234,30 @@ def test_redis_report_field_vocabulary_is_fail_closed() -> None:
             metrics={},
             extensions={},
         )
+    assert benchmark_security.PARAMETERS == frozenset(
+        {
+            "case_id",
+            "callers",
+            "coordinators",
+            "keys",
+            "payload_bytes",
+            "stale_result_bytes",
+            "loader_delay_seconds",
+            "warmups",
+            "repetitions",
+        }
+    )
+    assert benchmark_security.METRICS == frozenset(
+        {
+            "correctness_loader_count",
+            "correctness_redis_commands",
+            "correctness_active_snapshot_count",
+            "correctness_active_result_bytes",
+            "correctness_completed_result_bytes",
+            "correctness_overlap_observed",
+            "process_high_water_bytes",
+        }
+    )
 
 
 def test_sync_measurement_verifies_after_stopping_clock() -> None:
@@ -231,11 +310,257 @@ def test_every_scenario_has_exact_correctness_invariants(
     metrics = CorrectnessMetrics(
         loader_count=loader_count,
         redis_commands=0,
+        active_snapshot_count=0,
         active_result_bytes=0,
         completed_result_bytes=1024 if scenario_id == "completed-reuse" else 0,
         overlap_observed=scenario_id == "unrelated-keys",
     )
     assert all(invariants_for(scenario_id, metrics, coordinators=4, keys=4).values())
+
+
+def _snapshot(marker: bytes | None, result: bytes | None) -> RedisCoordinationSnapshot:
+    return RedisCoordinationSnapshot(
+        marker=marker,
+        result=result,
+        marker_oversized=False,
+        result_oversized=False,
+    )
+
+
+def test_recorder_classifies_active_and_completed_result_bytes() -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    snapshots = (
+        _snapshot(b"active:owner-a", b"abc"),
+        _snapshot(b"active:owner-b", b"12345"),
+        _snapshot(b"active:owner-c", None),
+        _snapshot(b"completed:owner-a", b"1234567"),
+        _snapshot(None, b"ignored"),
+    )
+
+    for snapshot in snapshots:
+        recorder.snapshot(snapshot)
+
+    assert recorder.commands == 5
+    assert recorder.active_snapshot_count == 3
+    assert recorder.active_result_bytes == 8
+    assert recorder.completed_result_bytes == 7
+    assert snapshots[0] == _snapshot(b"active:owner-a", b"abc")
+
+
+def test_recorder_ignores_result_bytes_for_non_matching_markers() -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    recorder.snapshot(_snapshot(b"invalid-marker", b"ignored"))
+
+    assert recorder.commands == 1
+    assert recorder.active_snapshot_count == 0
+    assert recorder.active_result_bytes == 0
+    assert recorder.completed_result_bytes == 0
+
+
+def test_sync_active_snapshot_gate_releases_at_exact_boundary() -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    released = threading.Event()
+
+    def wait_for_gate() -> None:
+        recorder.wait_for_active_snapshots(timeout=0.5)
+        released.set()
+
+    waiter = threading.Thread(target=wait_for_gate, daemon=True)
+    waiter.start()
+    recorder.snapshot(_snapshot(b"active:owner-a", None))
+    assert released.is_set() is False
+    recorder.snapshot(_snapshot(b"active:owner-b", None))
+
+    assert eventually(released.is_set, timeout=0.5, interval=0.001) is True
+    waiter.join(timeout=0.5)
+    assert waiter.is_alive() is False
+
+
+@pytest.mark.asyncio
+async def test_async_active_snapshot_gate_is_bound_to_the_running_loop() -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    released = asyncio.Event()
+
+    async def wait_for_gate() -> None:
+        await recorder.wait_for_active_snapshots_async(timeout=0.5)
+        released.set()
+
+    waiter = asyncio.create_task(wait_for_gate())
+    await asyncio.sleep(0)
+    recorder.snapshot(_snapshot(b"active:owner-a", None))
+    assert released.is_set() is False
+    recorder.snapshot(_snapshot(b"active:owner-b", None))
+
+    async def probe() -> bool:
+        return released.is_set()
+
+    assert await eventually_async(probe, timeout=0.5, interval=0.001) is True
+    await waiter
+
+
+def test_active_snapshot_gate_timeout_has_stable_category() -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    with pytest.raises(scenario_runtime.BenchmarkScenarioError, match="active-snapshot-gate"):
+        recorder.wait_for_active_snapshots(timeout=0.001)
+
+
+def test_stale_result_seed_uses_derived_isolated_key_and_result_ttl() -> None:
+    case = next(
+        item
+        for item in FULL.cases
+        if item.scenario_id == "multi-coordinator" and item.case_id == "high-medium-short"
+    )
+    calls: list[tuple[str, bytes, float]] = []
+
+    class Provider:
+        def set(self, key: str, value: bytes, *, ttl: float) -> None:
+            calls.append((key, value, ttl))
+
+    namespace = scenario_runtime._namespace("full", "sync", case, "correctness", 0, 20260713)
+    warmup_namespace = scenario_runtime._namespace("full", "sync", case, "warmup", 0, 20260713)
+    next_warmup_namespace = scenario_runtime._namespace("full", "sync", case, "warmup", 1, 20260713)
+    scenario_runtime._seed_sync_stale_result(
+        case,
+        [Provider()],  # type: ignore[list-item]
+        namespace,
+    )
+
+    assert calls == [
+        (
+            scenario_runtime._stale_result_key(namespace),
+            b"s" * 65_536,
+            load_options(namespace).result_ttl,
+        )
+    ]
+    assert len({namespace, warmup_namespace, next_warmup_namespace}) == 3
+    assert scenario_runtime._stale_result_key(namespace) != scenario_runtime._stale_result_key(
+        warmup_namespace
+    )
+
+
+def test_sync_stale_seed_precedes_measurement_clock(monkeypatch) -> None:
+    case = next(
+        item
+        for item in FULL.cases
+        if item.scenario_id == "multi-coordinator" and item.case_id == "high-medium-short"
+    )
+    events: list[str] = []
+
+    class Coordinator:
+        def __init__(self, cache, provider, codec, *, options) -> None:
+            del cache, provider, codec, options
+
+        def get_or_load(self, key: str, loader) -> bytes:
+            return loader(key)
+
+    def seed(*_args) -> None:
+        events.append("seed")
+
+    def measure(calls, *, timeout, verify) -> int:
+        del timeout
+        events.append("clock")
+        values = tuple(call() for call in calls)
+        verify(values)
+        return 1
+
+    monkeypatch.setattr(scenario_runtime, "SyncRedisLoadCoordinator", Coordinator)
+    monkeypatch.setattr(scenario_runtime, "_seed_sync_stale_result", seed)
+    monkeypatch.setattr(scenario_runtime, "sync_measure_calls", measure)
+
+    result = scenario_runtime._sync_repetition(
+        case,
+        [object()] * case.coordinators,  # type: ignore[list-item]
+        "benchmark:sync",
+        b"value",
+        lambda _key: b"value",
+        timeout=1.0,
+    )
+    assert result == 1
+    assert events[:2] == ["seed", "clock"]
+
+
+@pytest.mark.asyncio
+async def test_async_stale_seed_precedes_measurement_clock(monkeypatch) -> None:
+    case = next(
+        item
+        for item in FULL.cases
+        if item.scenario_id == "multi-coordinator" and item.case_id == "high-medium-short"
+    )
+    events: list[str] = []
+
+    class Coordinator:
+        def __init__(self, cache, provider, codec, *, options) -> None:
+            del cache, provider, codec, options
+
+        async def get_or_load(self, key: str, loader) -> bytes:
+            return await loader(key)
+
+    async def seed(*_args) -> None:
+        events.append("seed")
+
+    async def measure(calls, *, timeout, verify) -> int:
+        del timeout
+        events.append("clock")
+        values = tuple([await call() for call in calls])
+        verify(values)
+        return 1
+
+    async def loader(_key: str) -> bytes:
+        return b"value"
+
+    monkeypatch.setattr(scenario_runtime, "AsyncRedisLoadCoordinator", Coordinator)
+    monkeypatch.setattr(scenario_runtime, "_seed_async_stale_result", seed)
+    monkeypatch.setattr(scenario_runtime, "async_measure_calls", measure)
+
+    result = await scenario_runtime._async_repetition(
+        case,
+        [object()] * case.coordinators,  # type: ignore[list-item]
+        "benchmark:async",
+        b"value",
+        loader,
+        timeout=1.0,
+    )
+    assert result == 1
+    assert events[:2] == ["seed", "clock"]
+
+
+def test_recording_provider_does_not_count_fixture_set(monkeypatch) -> None:
+    recorder = scenario_runtime._Recorder(active_snapshot_target=2)
+    provider = object.__new__(scenario_runtime._RecordingSyncProvider)
+    provider._recorder = recorder
+    monkeypatch.setattr(SyncRedisProvider, "set", lambda *_args, **_kwargs: None)
+
+    provider.set("result-key", b"stale", ttl=2.0)
+
+    assert recorder.commands == 0
+
+
+def test_stale_result_invariant_requires_two_active_snapshots() -> None:
+    metrics = CorrectnessMetrics(
+        loader_count=1,
+        redis_commands=4,
+        active_snapshot_count=1,
+        active_result_bytes=65_536,
+        completed_result_bytes=0,
+        overlap_observed=False,
+    )
+    failed = invariants_for(
+        "multi-coordinator",
+        metrics,
+        coordinators=8,
+        keys=1,
+        stale_result_bytes=65_536,
+    )
+    assert failed["multiple_active_snapshots"] is False
+
+    passed = invariants_for(
+        "multi-coordinator",
+        replace(metrics, active_snapshot_count=2),
+        coordinators=8,
+        keys=1,
+        stale_result_bytes=65_536,
+    )
+    assert passed["multiple_active_snapshots"] is True
 
 
 def test_process_high_water_is_nullable_or_positive() -> None:

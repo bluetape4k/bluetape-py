@@ -10,6 +10,7 @@ MAX_CALLERS = 64
 MAX_COORDINATORS = 8
 MAX_KEYS = 8
 MAX_PAYLOAD_BYTES = 15_728_640
+MAX_STALE_RESULT_BYTES = 16_777_216
 MAX_AGGREGATE_PAYLOAD_BYTES = 32 * 1024 * 1024
 
 
@@ -21,6 +22,7 @@ class ScenarioCase:
     coordinators: int
     keys: int
     payload_bytes: int
+    stale_result_bytes: int
     loader_delay_seconds: float
     operations_per_sample: int
     warmups: int
@@ -32,6 +34,7 @@ class ScenarioCase:
             "coordinators",
             "keys",
             "payload_bytes",
+            "stale_result_bytes",
             "operations_per_sample",
             "warmups",
             "repetitions",
@@ -76,6 +79,7 @@ _SMOKE_CASES = (
         coordinators=4,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.005,
         operations_per_sample=8,
         warmups=1,
@@ -88,6 +92,7 @@ _SMOKE_CASES = (
         coordinators=1,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=1000,
         warmups=1,
@@ -100,6 +105,7 @@ _SMOKE_CASES = (
         coordinators=1,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.005,
         operations_per_sample=8,
         warmups=1,
@@ -112,6 +118,7 @@ _SMOKE_CASES = (
         coordinators=4,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.005,
         operations_per_sample=8,
         warmups=1,
@@ -124,6 +131,7 @@ _SMOKE_CASES = (
         coordinators=4,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=8,
         warmups=1,
@@ -136,6 +144,7 @@ _SMOKE_CASES = (
         coordinators=4,
         keys=4,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.005,
         operations_per_sample=8,
         warmups=1,
@@ -165,6 +174,7 @@ _FULL_ADDITIONS = (
         coordinators=8,
         keys=1,
         payload_bytes=1024,
+        stale_result_bytes=0,
         loader_delay_seconds=0.05,
         operations_per_sample=64,
         warmups=3,
@@ -177,6 +187,7 @@ _FULL_ADDITIONS = (
         coordinators=1,
         keys=1,
         payload_bytes=MAX_PAYLOAD_BYTES,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=3,
         warmups=3,
@@ -189,6 +200,7 @@ _FULL_ADDITIONS = (
         coordinators=1,
         keys=1,
         payload_bytes=65_536,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=16,
         warmups=3,
@@ -201,6 +213,7 @@ _FULL_ADDITIONS = (
         coordinators=8,
         keys=1,
         payload_bytes=65_536,
+        stale_result_bytes=65_536,
         loader_delay_seconds=0.005,
         operations_per_sample=64,
         warmups=3,
@@ -213,6 +226,7 @@ _FULL_ADDITIONS = (
         coordinators=1,
         keys=1,
         payload_bytes=MAX_PAYLOAD_BYTES,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=1,
         warmups=3,
@@ -225,6 +239,7 @@ _FULL_ADDITIONS = (
         coordinators=8,
         keys=8,
         payload_bytes=0,
+        stale_result_bytes=0,
         loader_delay_seconds=0.0,
         operations_per_sample=64,
         warmups=3,
@@ -266,6 +281,12 @@ def validate_profile(profile: BenchmarkProfile, modes: tuple[str, ...]) -> None:
             raise ValueError("profile exceeds concurrency ceiling")
         if case.keys > MAX_KEYS or case.payload_bytes > MAX_PAYLOAD_BYTES:
             raise ValueError("profile exceeds key or payload ceiling")
+        if case.stale_result_bytes > MAX_STALE_RESULT_BYTES:
+            raise ValueError("profile exceeds stale result ceiling")
+        if case.stale_result_bytes and (
+            case.callers < 2 or case.coordinators < 2 or case.scenario_id != "multi-coordinator"
+        ):
+            raise ValueError("stale result fixture requires multi-coordinator waiters")
         if case.callers * case.payload_bytes > MAX_AGGREGATE_PAYLOAD_BYTES:
             raise ValueError("profile exceeds aggregate payload ceiling")
         deadline = 120 if case.near_boundary else 30
@@ -307,6 +328,7 @@ validate_profile(FULL, ("sync", "async"))
 
 __all__ = [
     "FULL",
+    "MAX_STALE_RESULT_BYTES",
     "SMOKE",
     "BenchmarkProfile",
     "MatrixTotals",
