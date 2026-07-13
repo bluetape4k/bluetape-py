@@ -5,6 +5,9 @@ COORDINATION_SNAPSHOT_SCRIPT = """
 local marker_exists = redis.call('exists', KEYS[1])
 local marker_length = redis.call('strlen', KEYS[1])
 local marker_value = redis.call('getrange', KEYS[1], 0, ARGV[1] - 1)
+if string.sub(marker_value, 1, 7) == 'active:' then
+  return {marker_exists, marker_length, marker_value, 0, 0, ''}
+end
 local result_exists = redis.call('exists', KEYS[2])
 local result_length = redis.call('strlen', KEYS[2])
 local result_value = redis.call('getrange', KEYS[2], 0, ARGV[2] - 1)

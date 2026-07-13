@@ -216,7 +216,7 @@ def test_active_marker_poll_then_matching_completed_result(monkeypatch) -> None:
     provider.snapshots = [
         RedisCoordinationSnapshot(
             marker=f"active:{token}".encode(),
-            result=b"ignored",
+            result=None,
             marker_oversized=False,
             result_oversized=False,
         ),

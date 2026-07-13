@@ -28,6 +28,7 @@ from bluetape.cache.redis import (
 )
 from bluetape.serde import SerializedPayload
 from bluetape.testcontainers import RedisServer
+from bluetape.testing import eventually
 
 pytestmark = pytest.mark.testcontainers
 
@@ -158,6 +159,17 @@ def acl_provider(
 @pytest.fixture(scope="module")
 def redis_server() -> Iterator[RedisServer]:
     with RedisServer() as server:
+
+        def host_is_ready() -> bool:
+            client = sync_client(server.url)
+            try:
+                return bool(client.ping())
+            except redis.RedisError:
+                return False
+            finally:
+                client.close()
+
+        eventually(host_is_ready, timeout=1.0, interval=0.01)
         yield server
 
 
@@ -292,12 +304,12 @@ def test_real_snapshot_is_bounded_and_stale_owner_cannot_publish(
     client = sync_client(redis_server.url)
     provider = SyncRedisProvider(client)
     try:
-        client.set("lease", b"active:new", px=5000)
+        client.set("lease", b"completed:new", px=5000)
         client.set("result", b"x" * 20, px=5000)
         snapshot = provider.coordination_snapshot(
             "lease", "result", max_marker_size=6, max_result_size=5
         )
-        assert snapshot.marker == b"active"
+        assert snapshot.marker == b"comple"
         assert snapshot.marker_oversized is True
         assert snapshot.result == b"xxxxx"
         assert snapshot.result_oversized is True
@@ -313,11 +325,68 @@ def test_real_snapshot_is_bounded_and_stale_owner_cannot_publish(
             )
             is False
         )
-        assert client.get("lease") == b"active:new"
+        assert client.get("lease") == b"completed:new"
         assert client.get("result") == b"x" * 20
     finally:
         provider.close()
         client.close()
+
+
+def test_real_active_snapshot_omits_stale_result_until_completed(
+    redis_server: RedisServer,
+) -> None:
+    client = sync_client(redis_server.url)
+    provider = SyncRedisProvider(client)
+    try:
+        client.set("lease", b"active:owner", px=5000)
+        client.set("result", b"x" * 65_536, px=5000)
+
+        active = provider.coordination_snapshot(
+            "lease", "result", max_marker_size=138, max_result_size=64
+        )
+        assert active.marker == b"active:owner"
+        assert active.result is None
+        assert active.result_oversized is False
+
+        client.set("lease", b"completed:owner", px=5000)
+        completed = provider.coordination_snapshot(
+            "lease", "result", max_marker_size=138, max_result_size=64
+        )
+        assert completed.marker == b"completed:owner"
+        assert completed.result == b"x" * 64
+        assert completed.result_oversized is True
+    finally:
+        provider.close()
+        client.close()
+
+
+@pytest.mark.asyncio
+async def test_real_async_active_snapshot_omits_stale_result_until_completed(
+    redis_server: RedisServer,
+) -> None:
+    client = async_client(redis_server.url)
+    provider = AsyncRedisProvider(client)
+    try:
+        await client.set("lease", b"active:owner", px=5000)
+        await client.set("result", b"x" * 65_536, px=5000)
+
+        active = await provider.coordination_snapshot(
+            "lease", "result", max_marker_size=138, max_result_size=64
+        )
+        assert active.marker == b"active:owner"
+        assert active.result is None
+        assert active.result_oversized is False
+
+        await client.set("lease", b"completed:owner", px=5000)
+        completed = await provider.coordination_snapshot(
+            "lease", "result", max_marker_size=138, max_result_size=64
+        )
+        assert completed.marker == b"completed:owner"
+        assert completed.result == b"x" * 64
+        assert completed.result_oversized is True
+    finally:
+        await provider.aclose()
+        await client.aclose()
 
 
 def test_abandoned_lease_expires_and_next_owner_loads(redis_server: RedisServer) -> None:
