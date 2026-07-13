@@ -442,16 +442,23 @@ def _sync_resources(
 
 def _close_sync(clients: Sequence[object], providers: Sequence[SyncRedisProvider]) -> None:
     failure: BaseException | None = None
+    interrupted: KeyboardInterrupt | None = None
     for provider in providers:
         try:
             provider.close()
+        except KeyboardInterrupt as error:
+            interrupted = interrupted or error
         except BaseException as error:
             failure = failure or error
     for client in clients:
         try:
             client.close()  # type: ignore[attr-defined]
+        except KeyboardInterrupt as error:
+            interrupted = interrupted or error
         except BaseException as error:
             failure = failure or error
+    if interrupted is not None:
+        raise interrupted
     if failure is not None:
         raise failure
 
@@ -648,16 +655,23 @@ async def _async_resources(
 
 async def _close_async(clients: Sequence[object], providers: Sequence[AsyncRedisProvider]) -> None:
     failure: BaseException | None = None
+    interrupted: KeyboardInterrupt | None = None
     for provider in providers:
         try:
             await provider.aclose()
+        except KeyboardInterrupt as error:
+            interrupted = interrupted or error
         except BaseException as error:
             failure = failure or error
     for client in clients:
         try:
             await client.aclose()  # type: ignore[attr-defined]
+        except KeyboardInterrupt as error:
+            interrupted = interrupted or error
         except BaseException as error:
             failure = failure or error
+    if interrupted is not None:
+        raise interrupted
     if failure is not None:
         raise failure
 

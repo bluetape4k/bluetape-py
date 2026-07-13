@@ -442,6 +442,41 @@ async def test_signal_during_scenario_cleanup_overrides_prior_failure() -> None:
     assert raised.value.signum == signal.SIGTERM
 
 
+@pytest.mark.asyncio
+async def test_later_async_cleanup_signal_overrides_earlier_close_failure() -> None:
+    class FailedProvider:
+        async def aclose(self) -> None:
+            raise RuntimeError("close failed")
+
+    class InterruptedProvider:
+        async def aclose(self) -> None:
+            raise benchmark_cli._SignalInterrupt(signal.SIGINT)
+
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        await scenario_runtime._close_async(
+            [],
+            [FailedProvider(), InterruptedProvider()],  # type: ignore[list-item]
+        )
+    assert raised.value.signum == signal.SIGINT
+
+
+def test_later_sync_cleanup_signal_overrides_earlier_close_failure() -> None:
+    class FailedProvider:
+        def close(self) -> None:
+            raise RuntimeError("close failed")
+
+    class InterruptedProvider:
+        def close(self) -> None:
+            raise benchmark_cli._SignalInterrupt(signal.SIGTERM)
+
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        scenario_runtime._close_sync(
+            [],
+            [FailedProvider(), InterruptedProvider()],  # type: ignore[list-item]
+        )
+    assert raised.value.signum == signal.SIGTERM
+
+
 def test_cli_requires_seed_and_complete_pair_fields() -> None:
     with pytest.raises(BenchmarkCliError) as raised:
         parser().parse_args(["--profile", "smoke", "--output", "-"])
