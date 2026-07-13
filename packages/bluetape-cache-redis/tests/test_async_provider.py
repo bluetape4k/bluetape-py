@@ -162,23 +162,46 @@ def test_async_command_policy_rejects_unbounded_or_retrying_options(change) -> N
 @pytest.mark.asyncio
 async def test_async_coordination_snapshot_uses_one_bounded_eval() -> None:
     client = AsyncFakeRedis()
-    client.responses["eval"] = [1, 7, b"active", 1, 4, b"res"]
+    client.responses["eval"] = [1, 12, b"active:owner", 0, 0, b""]
 
     snapshot = await AsyncRedisProvider(client).coordination_snapshot(
         "marker",
         "result",
-        max_marker_size=6,
+        max_marker_size=12,
         max_result_size=3,
     )
 
     assert snapshot == RedisCoordinationSnapshot(
-        marker=b"active",
+        marker=b"active:owner",
+        result=None,
+        marker_oversized=False,
+        result_oversized=False,
+    )
+    assert client.calls == [
+        ("eval", (COORDINATION_SNAPSHOT_SCRIPT, 2, "marker", "result", 12, 3), {})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_completed_snapshot_retains_bounded_oversized_result() -> None:
+    client = AsyncFakeRedis()
+    client.responses["eval"] = [1, 15, b"completed:owner", 1, 4, b"res"]
+
+    snapshot = await AsyncRedisProvider(client).coordination_snapshot(
+        "marker",
+        "result",
+        max_marker_size=15,
+        max_result_size=3,
+    )
+
+    assert snapshot == RedisCoordinationSnapshot(
+        marker=b"completed:owner",
         result=b"res",
-        marker_oversized=True,
+        marker_oversized=False,
         result_oversized=True,
     )
     assert client.calls == [
-        ("eval", (COORDINATION_SNAPSHOT_SCRIPT, 2, "marker", "result", 6, 3), {})
+        ("eval", (COORDINATION_SNAPSHOT_SCRIPT, 2, "marker", "result", 15, 3), {})
     ]
 
 

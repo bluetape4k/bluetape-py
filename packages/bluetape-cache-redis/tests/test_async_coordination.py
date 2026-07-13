@@ -165,6 +165,39 @@ async def test_async_completed_none_is_reused() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_active_marker_poll_then_matching_completed_result(
+    monkeypatch,
+) -> None:
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("bluetape.cache.redis._async_coordination._sleep", no_sleep)
+    provider = FakeAsyncProvider()
+    provider.acquire_results = [False]
+    codec = ResultEnvelopeCodec(payload_codec=BytesCodec())
+    provider.snapshots = [
+        RedisCoordinationSnapshot(
+            marker=b"active:remote",
+            result=None,
+            marker_oversized=False,
+            result_oversized=False,
+        ),
+        RedisCoordinationSnapshot(
+            marker=b"completed:remote",
+            result=codec.encode("remote", b"remote"),
+            marker_oversized=False,
+            result_oversized=False,
+        ),
+    ]
+    observer = Observer()
+    coordinator, cache, _, _ = make_coordinator(provider=provider, observer=observer)
+
+    assert await coordinator.get_or_load("key", lambda _: pytest.fail("loader called")) == b"remote"
+    assert await cache.get("key") == b"remote"
+    assert observer.events[-1].polls == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "snapshot",
     [
