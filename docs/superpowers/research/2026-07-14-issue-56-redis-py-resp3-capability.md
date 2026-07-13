@@ -65,11 +65,18 @@ Task 4 full-flush/reconnect and Task 5 expanded runtime-cleanup proofs were not
 run under the conjunctive Gate stop rule. Post-reconnect and full-flush
 delivery depend on the already-blocked key-push primitive, so those proofs
 cannot change the decision. They did not pass and are not claimed as passing.
-The current context managers already clean the command client, reader
-connection, and connection pool deterministically on failure.
+On the observed post-setup assertion-failure path, the context managers close
+the command client, reader connection, and connection pool. Acquisition and
+setup failures were not proven leak-free.
 
 ## Stop Decision
 
 Do not add a sync-only facade, private integration, or production code. Revisit
 Issue #56 only after redis-py exposes a documented public sync and async
 invalidation-handler or invalidation-consumer surface.
+
+This branch and commit are intentionally stopped, non-mergeable evidence. The
+two normally collected pytest probes remain deliberately red, so no PR or merge
+into `develop` should be created from this state. Any future integration first
+requires changed upstream public API support and an approved quarantine or
+opt-in strategy for the probes.
