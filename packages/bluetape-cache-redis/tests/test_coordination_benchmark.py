@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -16,6 +17,12 @@ from _coordination_matrix import (  # noqa: E402
     matrix_totals,
     registry_digest,
     validate_profile,
+)
+from _coordination_runtime import (  # noqa: E402
+    AsyncConvergenceRuntime,
+    ChildConfig,
+    ChildExecutionError,
+    run_sync_case_in_child,
 )
 from _coordination_scenarios import (  # noqa: E402
     CorrectnessMetrics,
@@ -225,3 +232,58 @@ def test_every_scenario_has_exact_correctness_invariants(
 def test_process_high_water_is_nullable_or_positive() -> None:
     value = process_high_water_bytes()
     assert value is None or value > 0
+
+
+def _non_converging_child(sender, config) -> None:
+    del sender, config
+    while True:
+        pass
+
+
+def test_sync_timeout_terminates_spawned_child() -> None:
+    config = ChildConfig(
+        redis_url="redis://127.0.0.1:1/0",
+        profile_id="smoke",
+        scenario_id="local-only",
+        case_id="moderate-small-short",
+        seed=1,
+    )
+    with pytest.raises(ChildExecutionError) as raised:
+        run_sync_case_in_child(
+            config,
+            wall_timeout_seconds=0.05,
+            cleanup_timeout=0.01,
+            terminate_timeout=0.5,
+            kill_timeout=0.5,
+            _target=_non_converging_child,
+        )
+    assert raised.value.category == "live-worker"
+    assert raised.value.events[0] == "abort"
+    assert raised.value.events[-1] == "join"
+
+
+@pytest.mark.asyncio
+async def test_repeated_cancellation_reuses_one_shielded_cleanup() -> None:
+    operation_started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    cleanup_release = asyncio.Event()
+
+    async def operation() -> None:
+        operation_started.set()
+        await asyncio.Event().wait()
+
+    async def cleanup() -> None:
+        cleanup_started.set()
+        await cleanup_release.wait()
+
+    runtime = AsyncConvergenceRuntime(operation, cleanup=cleanup)
+    task = asyncio.create_task(runtime.run())
+    await operation_started.wait()
+    task.cancel()
+    await cleanup_started.wait()
+    task.cancel()
+    cleanup_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert runtime.cleanup_task_creations == 1
+    assert runtime.pending_owned_tasks == ()
