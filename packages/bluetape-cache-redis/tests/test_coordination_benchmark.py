@@ -17,6 +17,13 @@ from _coordination_matrix import (  # noqa: E402
     registry_digest,
     validate_profile,
 )
+from _coordination_scenarios import (  # noqa: E402
+    CorrectnessMetrics,
+    async_measure_calls,
+    invariants_for,
+    process_high_water_bytes,
+    sync_measure_calls,
+)
 from _coordination_security import (  # noqa: E402
     MAX_PAYLOAD_BYTES,
     BenchmarkBytesCodec,
@@ -156,3 +163,65 @@ def test_redis_report_field_vocabulary_is_fail_closed() -> None:
             metrics={},
             extensions={},
         )
+
+
+def test_sync_measurement_verifies_after_stopping_clock() -> None:
+    events: list[str] = []
+
+    def call() -> bytes:
+        events.append("call")
+        return b"value"
+
+    def verify(values: tuple[bytes, ...]) -> None:
+        events.append("verify")
+        assert values == (b"value",) * 4
+
+    elapsed = sync_measure_calls((call,) * 4, timeout=1.0, verify=verify)
+    assert elapsed > 0
+    assert events[-1] == "verify"
+
+
+@pytest.mark.asyncio
+async def test_async_measurement_verifies_after_task_convergence() -> None:
+    events: list[str] = []
+
+    async def call() -> bytes:
+        events.append("call")
+        return b"value"
+
+    def verify(values: tuple[bytes, ...]) -> None:
+        events.append("verify")
+        assert values == (b"value",) * 4
+
+    elapsed = await async_measure_calls((call,) * 4, timeout=1.0, verify=verify)
+    assert elapsed > 0
+    assert events[-1] == "verify"
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "loader_count"),
+    [
+        ("local-only", 4),
+        ("local-hit", 0),
+        ("single-coordinator", 1),
+        ("multi-coordinator", 1),
+        ("completed-reuse", 0),
+        ("unrelated-keys", 4),
+    ],
+)
+def test_every_scenario_has_exact_correctness_invariants(
+    scenario_id: str, loader_count: int
+) -> None:
+    metrics = CorrectnessMetrics(
+        loader_count=loader_count,
+        redis_commands=0,
+        active_result_bytes=0,
+        completed_result_bytes=1024 if scenario_id == "completed-reuse" else 0,
+        overlap_observed=scenario_id == "unrelated-keys",
+    )
+    assert all(invariants_for(scenario_id, metrics, coordinators=4, keys=4).values())
+
+
+def test_process_high_water_is_nullable_or_positive() -> None:
+    value = process_high_water_bytes()
+    assert value is None or value > 0

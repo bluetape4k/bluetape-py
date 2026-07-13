@@ -6,6 +6,7 @@ import math
 from collections.abc import Mapping
 
 import redis
+import redis.asyncio as redis_async
 from bluetape.cache.redis import (
     BinaryEnvelopeFormat,
     RedisLoadOptions,
@@ -98,6 +99,12 @@ def make_sync_client(url: str) -> redis.Redis:
     if type(url) is not str:
         raise TypeError("url must be an exact str")
     return redis.Redis.from_url(url, **CLIENT_OPTIONS)
+
+
+def make_async_client(url: str) -> redis_async.Redis:
+    if type(url) is not str:
+        raise TypeError("url must be an exact str")
+    return redis_async.Redis.from_url(url, **CLIENT_OPTIONS)
 
 
 def load_options(namespace: str) -> RedisLoadOptions:
@@ -194,6 +201,7 @@ __all__ = [
     "BenchmarkBytesCodec",
     "build_envelope_codec",
     "load_options",
+    "make_async_client",
     "make_sync_client",
     "policy_digest",
     "validate_redis_report_fields",
