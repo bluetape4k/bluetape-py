@@ -456,6 +456,19 @@ def _close_sync(clients: Sequence[object], providers: Sequence[SyncRedisProvider
         raise failure
 
 
+def _close_sync_preserving(
+    clients: Sequence[object],
+    providers: Sequence[SyncRedisProvider],
+    primary: BaseException | None,
+) -> None:
+    try:
+        _close_sync(clients, providers)
+    except BaseException:
+        if primary is None:
+            raise
+        primary.add_note("benchmark resource cleanup also failed")
+
+
 def run_sync_case(
     redis_url: str,
     profile: BenchmarkProfile,
@@ -470,6 +483,7 @@ def run_sync_case(
     providers: list[SyncRedisProvider] = []
     if case.scenario_id != "local-only":
         clients, providers = _sync_resources(redis_url, case.coordinators, recorder=recorder)
+    primary: BaseException | None = None
     try:
         _sync_repetition(
             case,
@@ -479,8 +493,11 @@ def run_sync_case(
             correctness_loader,
             timeout=120.0 if case.near_boundary else 30.0,
         )
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        _close_sync(clients, providers)
+        _close_sync_preserving(clients, providers, primary)
     metrics = CorrectnessMetrics(
         loader_count=correctness_loader.count,
         redis_commands=recorder.commands,
@@ -499,6 +516,7 @@ def run_sync_case(
     providers = []
     if case.scenario_id != "local-only":
         clients, providers = _sync_resources(redis_url, case.coordinators, recorder=None)
+    primary = None
     try:
         for repetition in range(case.warmups):
             _sync_repetition(
@@ -520,8 +538,11 @@ def run_sync_case(
                     timeout=120.0 if case.near_boundary else 30.0,
                 )
             )
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        _close_sync(clients, providers)
+        _close_sync_preserving(clients, providers, primary)
     metric_fields = {
         "correctness_active_result_bytes": metrics.active_result_bytes,
         "correctness_completed_result_bytes": metrics.completed_result_bytes,
@@ -639,6 +660,19 @@ async def _close_async(clients: Sequence[object], providers: Sequence[AsyncRedis
         raise failure
 
 
+async def _close_async_preserving(
+    clients: Sequence[object],
+    providers: Sequence[AsyncRedisProvider],
+    primary: BaseException | None,
+) -> None:
+    try:
+        await _close_async(clients, providers)
+    except BaseException:
+        if primary is None:
+            raise
+        primary.add_note("benchmark resource cleanup also failed")
+
+
 async def run_async_case(
     redis_url: str,
     profile: BenchmarkProfile,
@@ -653,6 +687,7 @@ async def run_async_case(
     providers: list[AsyncRedisProvider] = []
     if case.scenario_id != "local-only":
         clients, providers = await _async_resources(redis_url, case.coordinators, recorder=recorder)
+    primary: BaseException | None = None
     try:
         await _async_repetition(
             case,
@@ -662,8 +697,11 @@ async def run_async_case(
             correctness_loader,
             timeout=120.0 if case.near_boundary else 30.0,
         )
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await _close_async(clients, providers)
+        await _close_async_preserving(clients, providers, primary)
     metrics = CorrectnessMetrics(
         loader_count=correctness_loader.count,
         redis_commands=recorder.commands,
@@ -687,6 +725,7 @@ async def run_async_case(
     providers = []
     if case.scenario_id != "local-only":
         clients, providers = await _async_resources(redis_url, case.coordinators, recorder=None)
+    primary = None
     try:
         for repetition in range(case.warmups):
             await _async_repetition(
@@ -708,8 +747,11 @@ async def run_async_case(
                     timeout=120.0 if case.near_boundary else 30.0,
                 )
             )
+    except BaseException as error:
+        primary = error
+        raise
     finally:
-        await _close_async(clients, providers)
+        await _close_async_preserving(clients, providers, primary)
     metric_fields = {
         "correctness_active_result_bytes": metrics.active_result_bytes,
         "correctness_completed_result_bytes": metrics.completed_result_bytes,

@@ -1,8 +1,8 @@
 # Issue #65 Redis Coordination Benchmark Design
 
-Date: 2026-07-12  
-Issue: #65  
-Work type: Type A - Full Feature  
+Date: 2026-07-12
+Issue: #65
+Work type: Type A - Full Feature
 Target branch: `develop`
 
 ## Problem

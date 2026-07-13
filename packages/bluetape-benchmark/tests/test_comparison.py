@@ -105,10 +105,32 @@ def test_cli_returns_four_and_empty_deltas_for_non_comparable_pair(tmp_path: Pat
     mismatched = replace(paired_report("candidate", 110), profile="other")
     write_report(candidate, mismatched)
     assert main(["--baseline", str(baseline), "--candidate", str(candidate), "--output", "-"]) == 4
-    output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
     assert output["comparable"] is False
     assert output["deltas"] == []
     assert output["reasons"] == ["profile-mismatch"]
+    diagnostic = json.loads(captured.err.removeprefix("bluetape-benchmark-error "))
+    assert diagnostic["category"] == "not-comparable"
+    assert diagnostic["code"] == "BTBENCH_NOT_COMPARABLE"
+    assert diagnostic["phase"] == "comparison"
+
+
+def test_cli_parse_failure_emits_exact_diagnostic(capsys) -> None:
+    assert main([]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.count("\n") == 1
+    prefix = "bluetape-benchmark-error "
+    assert json.loads(captured.err.removeprefix(prefix)) == {
+        "case_id": None,
+        "category": "input-invalid",
+        "code": "BTBENCH_INPUT_INVALID",
+        "mode": None,
+        "phase": "comparison",
+        "repetition": None,
+        "scenario_id": None,
+    }
 
 
 def test_cli_writes_comparable_result_atomically(tmp_path: Path) -> None:

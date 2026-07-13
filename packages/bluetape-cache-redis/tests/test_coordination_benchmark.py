@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import signal
 import sys
 from pathlib import Path
 
@@ -410,6 +411,21 @@ async def test_async_cleanup_closes_clients_after_provider_failure() -> None:
     assert client.closed is True
 
 
+@pytest.mark.asyncio
+async def test_async_cleanup_failure_preserves_primary_cancellation() -> None:
+    class Provider:
+        async def aclose(self) -> None:
+            raise RuntimeError("provider close failed")
+
+    primary = asyncio.CancelledError()
+    await scenario_runtime._close_async_preserving(
+        [],
+        [Provider()],
+        primary,  # type: ignore[list-item]
+    )
+    assert primary.__notes__ == ["benchmark resource cleanup also failed"]
+
+
 def test_cli_requires_seed_and_complete_pair_fields() -> None:
     with pytest.raises(BenchmarkCliError) as raised:
         parser().parse_args(["--profile", "smoke", "--output", "-"])
@@ -492,6 +508,22 @@ def test_cleanup_failure_preserves_primary_error() -> None:
         benchmark_cli._close_server(Server(), None)  # type: ignore[arg-type]
     assert raised.value.category == "cleanup-failed"
     assert raised.value.exit_code == 3
+
+
+def test_first_signal_during_server_cleanup_retries_then_preserves_signal() -> None:
+    class Server:
+        calls = 0
+
+        def close(self) -> None:
+            self.calls += 1
+            if self.calls == 1:
+                raise benchmark_cli._SignalInterrupt(signal.SIGINT)
+
+    server = Server()
+    with pytest.raises(benchmark_cli._SignalInterrupt) as raised:
+        benchmark_cli._close_server(server, None)  # type: ignore[arg-type]
+    assert raised.value.signum == signal.SIGINT
+    assert server.calls == 2
 
 
 def test_main_redacts_unexpected_internal_failure(monkeypatch, capsys) -> None:

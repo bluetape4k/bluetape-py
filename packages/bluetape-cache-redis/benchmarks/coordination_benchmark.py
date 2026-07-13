@@ -385,12 +385,21 @@ def _start_server(server: RedisServer) -> None:
 
 
 def _close_server(server: RedisServer, primary: BaseException | None) -> None:
-    try:
-        server.close()
-    except Exception:
-        if primary is None:
-            raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
-        primary.add_note("benchmark cleanup also failed")
+    interrupted: _SignalInterrupt | None = None
+    while True:
+        try:
+            server.close()
+            break
+        except _SignalInterrupt as signal_error:
+            interrupted = signal_error
+            continue
+        except Exception:
+            if primary is None:
+                raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
+            primary.add_note("benchmark cleanup also failed")
+            break
+    if interrupted is not None:
+        raise interrupted
 
 
 def execute(config: RunConfig) -> None:
