@@ -1,0 +1,1122 @@
+{
+  "environment": {
+    "cpu_count": 10,
+    "dependencies": [
+      [
+        "redis",
+        "8.0.1"
+      ]
+    ],
+    "dependency_lock_digest": "a825207f86a8935492348035f65b942db501fe4fb6d3609797c3e678cdcbbd36",
+    "extensions": [
+      [
+        "coordination_policy_digest",
+        "7e7c46760f9c9d04c82f63972e8f7e0ab304710e725b759cb0606d1955bae8ad"
+      ],
+      [
+        "coordination_policy_id",
+        "redis-coordination-benchmark-v1"
+      ],
+      [
+        "redis_configuration_profile",
+        "ephemeral-default"
+      ],
+      [
+        "redis_image_digest",
+        "sha256:2838d5524559494f6f1cd66e97e76b200d64a633a8614200620755ed395daf32"
+      ],
+      [
+        "redis_version",
+        "8.8.0"
+      ]
+    ],
+    "git_sha": "b989f8619a10af22f2c4725dcc2e697663709c6b",
+    "implementation": "CPython",
+    "platform": "darwin",
+    "processor": "arm64",
+    "profile_registry_digest": "9e114b562ced345d7c7aab9295ab074173475dc192d25784811f38c37dfd3285",
+    "python": "3.13.14",
+    "seed": 20260712,
+    "source_dirty": false
+  },
+  "production_capacity_claim": false,
+  "profile": "smoke",
+  "run": {
+    "candidate_order": null,
+    "mode_order": [
+      "sync",
+      "async"
+    ],
+    "pair_id": null,
+    "pair_index": null,
+    "role": "snapshot",
+    "runner_id": null
+  },
+  "scenarios": [
+    {
+      "invariants": [
+        [
+          "independent_cold_caches",
+          true
+        ],
+        [
+          "redis_commands_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          4
+        ],
+        [
+          "correctness_overlap_observed",
+          true
+        ],
+        [
+          "correctness_redis_commands",
+          0
+        ],
+        [
+          "process_high_water_bytes",
+          48971776
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "local-only",
+      "timing": {
+        "max_ns": 7755125,
+        "median_ns": 7704417,
+        "min_ns": 7624500,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          7755125,
+          7704417,
+          7624500,
+          7729458,
+          7639500
+        ],
+        "throughput_ops_per_sec": 1040.2309312667412
+      }
+    },
+    {
+      "invariants": [
+        [
+          "loader_count_zero",
+          true
+        ],
+        [
+          "redis_commands_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          0
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          0
+        ],
+        [
+          "process_high_water_bytes",
+          48857088
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          1
+        ],
+        [
+          "case_id",
+          "steady-small"
+        ],
+        [
+          "coordinators",
+          1
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.0
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "local-hit",
+      "timing": {
+        "max_ns": 457584,
+        "median_ns": 453792,
+        "min_ns": 448541,
+        "operations_per_sample": 1000,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          457042,
+          457584,
+          453792,
+          452000,
+          448541
+        ],
+        "throughput_ops_per_sec": 2203653.7460571127
+      }
+    },
+    {
+      "invariants": [
+        [
+          "one_loader",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          1
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          2
+        ],
+        [
+          "process_high_water_bytes",
+          49184768
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          1
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "single-coordinator",
+      "timing": {
+        "max_ns": 9645292,
+        "median_ns": 9126125,
+        "min_ns": 8832833,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          9126125,
+          9577000,
+          9645292,
+          8832833,
+          8898792
+        ],
+        "throughput_ops_per_sec": 868.0547643598068
+      }
+    },
+    {
+      "invariants": [
+        [
+          "one_loader",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          3450
+        ],
+        [
+          "correctness_loader_count",
+          1
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          17
+        ],
+        [
+          "process_high_water_bytes",
+          49430528
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "multi-coordinator",
+      "timing": {
+        "max_ns": 19065125,
+        "median_ns": 17385333,
+        "min_ns": 12333875,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          12333875,
+          19065125,
+          17385333,
+          12898833,
+          18213916
+        ],
+        "throughput_ops_per_sec": 500.6440660749037
+      }
+    },
+    {
+      "invariants": [
+        [
+          "completed_result_observed",
+          true
+        ],
+        [
+          "waiter_loader_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          4600
+        ],
+        [
+          "correctness_loader_count",
+          0
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          10
+        ],
+        [
+          "process_high_water_bytes",
+          49332224
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-immediate"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.0
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "completed-reuse",
+      "timing": {
+        "max_ns": 1533125,
+        "median_ns": 1466250,
+        "min_ns": 1178334,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          1530500,
+          1372958,
+          1178334,
+          1533125,
+          1466250
+        ],
+        "throughput_ops_per_sec": 5648.786421786126
+      }
+    },
+    {
+      "invariants": [
+        [
+          "loader_overlap",
+          true
+        ],
+        [
+          "one_loader_per_key",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          4
+        ],
+        [
+          "correctness_overlap_observed",
+          true
+        ],
+        [
+          "correctness_redis_commands",
+          8
+        ],
+        [
+          "process_high_water_bytes",
+          49414144
+        ]
+      ],
+      "mode": "sync",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          4
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "unrelated-keys",
+      "timing": {
+        "max_ns": 10052167,
+        "median_ns": 9828083,
+        "min_ns": 9416000,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          10052167,
+          9416000,
+          10050667,
+          9705625,
+          9828083
+        ],
+        "throughput_ops_per_sec": 815.4521329394101
+      }
+    },
+    {
+      "invariants": [
+        [
+          "independent_cold_caches",
+          true
+        ],
+        [
+          "redis_commands_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          4
+        ],
+        [
+          "correctness_overlap_observed",
+          true
+        ],
+        [
+          "correctness_redis_commands",
+          0
+        ],
+        [
+          "process_high_water_bytes",
+          51019776
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "local-only",
+      "timing": {
+        "max_ns": 6541500,
+        "median_ns": 6537333,
+        "min_ns": 6533292,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          6541500,
+          6533292,
+          6541292,
+          6533709,
+          6537333
+        ],
+        "throughput_ops_per_sec": 1223.7233704792523
+      }
+    },
+    {
+      "invariants": [
+        [
+          "loader_count_zero",
+          true
+        ],
+        [
+          "redis_commands_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          0
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          0
+        ],
+        [
+          "process_high_water_bytes",
+          51183616
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          1
+        ],
+        [
+          "case_id",
+          "steady-small"
+        ],
+        [
+          "coordinators",
+          1
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.0
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "local-hit",
+      "timing": {
+        "max_ns": 1014666,
+        "median_ns": 1006209,
+        "min_ns": 1000917,
+        "operations_per_sample": 1000,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          1014666,
+          1006209,
+          1012708,
+          1000917,
+          1002459
+        ],
+        "throughput_ops_per_sec": 992662.4377923267
+      }
+    },
+    {
+      "invariants": [
+        [
+          "one_loader",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          1
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          2
+        ],
+        [
+          "process_high_water_bytes",
+          51265536
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          1
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "single-coordinator",
+      "timing": {
+        "max_ns": 8835833,
+        "median_ns": 8527542,
+        "min_ns": 8147792,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          8527542,
+          8511459,
+          8835833,
+          8147792,
+          8638500
+        ],
+        "throughput_ops_per_sec": 937.621758975607
+      }
+    },
+    {
+      "invariants": [
+        [
+          "one_loader",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          3450
+        ],
+        [
+          "correctness_loader_count",
+          1
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          17
+        ],
+        [
+          "process_high_water_bytes",
+          51412992
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "multi-coordinator",
+      "timing": {
+        "max_ns": 12354750,
+        "median_ns": 10110834,
+        "min_ns": 7093083,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          10110834,
+          12354750,
+          8538000,
+          11790041,
+          7093083
+        ],
+        "throughput_ops_per_sec": 801.8167885521731
+      }
+    },
+    {
+      "invariants": [
+        [
+          "completed_result_observed",
+          true
+        ],
+        [
+          "waiter_loader_zero",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          4600
+        ],
+        [
+          "correctness_loader_count",
+          0
+        ],
+        [
+          "correctness_overlap_observed",
+          false
+        ],
+        [
+          "correctness_redis_commands",
+          10
+        ],
+        [
+          "process_high_water_bytes",
+          51478528
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-immediate"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          1
+        ],
+        [
+          "loader_delay_seconds",
+          0.0
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "completed-reuse",
+      "timing": {
+        "max_ns": 1328667,
+        "median_ns": 1256000,
+        "min_ns": 1193333,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          1328667,
+          1317000,
+          1193333,
+          1256000,
+          1218709
+        ],
+        "throughput_ops_per_sec": 6335.420273566615
+      }
+    },
+    {
+      "invariants": [
+        [
+          "loader_overlap",
+          true
+        ],
+        [
+          "one_loader_per_key",
+          true
+        ]
+      ],
+      "metrics": [
+        [
+          "correctness_active_result_bytes",
+          0
+        ],
+        [
+          "correctness_completed_result_bytes",
+          0
+        ],
+        [
+          "correctness_loader_count",
+          4
+        ],
+        [
+          "correctness_overlap_observed",
+          true
+        ],
+        [
+          "correctness_redis_commands",
+          8
+        ],
+        [
+          "process_high_water_bytes",
+          51560448
+        ]
+      ],
+      "mode": "async",
+      "parameters": [
+        [
+          "callers",
+          8
+        ],
+        [
+          "case_id",
+          "moderate-small-short"
+        ],
+        [
+          "coordinators",
+          4
+        ],
+        [
+          "keys",
+          4
+        ],
+        [
+          "loader_delay_seconds",
+          0.005
+        ],
+        [
+          "payload_bytes",
+          1024
+        ],
+        [
+          "repetitions",
+          5
+        ],
+        [
+          "warmups",
+          1
+        ]
+      ],
+      "scenario_id": "unrelated-keys",
+      "timing": {
+        "max_ns": 7312916,
+        "median_ns": 6882959,
+        "min_ns": 6218125,
+        "operations_per_sample": 8,
+        "p95_ns": null,
+        "p99_ns": null,
+        "raw_samples_ns": [
+          6331375,
+          7074458,
+          6882959,
+          6218125,
+          7312916
+        ],
+        "throughput_ops_per_sec": 1182.7379514263125
+      }
+    }
+  ],
+  "schema_version": 1
+}
