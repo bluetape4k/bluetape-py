@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -40,6 +41,7 @@ from _coordination_security import (  # noqa: E402
     policy_digest,
     validate_redis_report_fields,
 )
+from coordination_benchmark import BenchmarkCliError, exact_int, parser  # noqa: E402
 
 
 def test_smoke_registry_is_exact() -> None:
@@ -287,3 +289,33 @@ async def test_repeated_cancellation_reuses_one_shielded_cleanup() -> None:
         await task
     assert runtime.cleanup_task_creations == 1
     assert runtime.pending_owned_tasks == ()
+
+
+def test_cli_requires_seed_and_complete_pair_fields() -> None:
+    with pytest.raises(SystemExit):
+        parser().parse_args(["--profile", "smoke", "--output", "-"])
+    arguments = parser().parse_args(
+        [
+            "--profile",
+            "full",
+            "--output",
+            "-",
+            "--seed",
+            "1",
+            "--role",
+            "baseline",
+        ]
+    )
+    assert arguments.runner_id is None
+
+
+@pytest.mark.parametrize("value", ["+1", "01", "1.0", " 1", "1 "])
+def test_exact_int_rejects_noncanonical_values(value: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        exact_int(value)
+
+
+def test_cli_diagnostic_has_only_fixed_safe_fields() -> None:
+    error = BenchmarkCliError("provider-failed", mode="sync", scenario_id="local-hit")
+    assert str(error) == "provider-failed"
+    assert error.code == 3

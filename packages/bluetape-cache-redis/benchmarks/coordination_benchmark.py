@@ -1,202 +1,430 @@
-"""Non-gating real-Redis load-coordination latency and command evidence."""
+"""Generate bounded, non-gating Redis coordination benchmark evidence."""
 
+import argparse
+import asyncio
+import hashlib
+import importlib.metadata
 import json
+import os
 import platform
-import statistics
+import re
+import signal
+import subprocess
 import sys
-import threading
-from dataclasses import asdict
-from time import perf_counter_ns
+from dataclasses import dataclass
+from pathlib import Path
+from types import FrameType
 
-import redis
-from bluetape.cache import TTLCache
-from bluetape.cache.redis import (
-    RedisLoadOptions,
-    ResultEnvelopeCodec,
-    SyncRedisLoadCoordinator,
-    SyncRedisProvider,
+from _coordination_matrix import (
+    FULL,
+    SMOKE,
+    BenchmarkProfile,
+    ScenarioCase,
+    registry_digest,
+    validate_profile,
 )
-from bluetape.serde import PayloadMetadata, SerializedPayload, TrustProfile
-from bluetape.testcontainers import RedisServer
+from _coordination_runtime import (
+    ChildConfig,
+    ChildExecutionError,
+    run_async_case_bounded,
+    run_sync_case_in_child,
+)
+from _coordination_security import (
+    POLICY_ID,
+    make_sync_client,
+    policy_digest,
+    validate_redis_report_fields,
+)
+from bluetape.benchmark import (
+    BenchmarkEnvironment,
+    BenchmarkReport,
+    BenchmarkRunIdentity,
+    BenchmarkScenarioResult,
+    write_report,
+)
+from bluetape.benchmark._json import report_to_dict
+from bluetape.testcontainers import DEFAULT_REDIS_IMAGE, RedisServer
 
-CALLERS = 64
-COORDINATORS = 8
-COLD_REPETITIONS = 10
-LOCAL_REPETITIONS = 1_000
-LOCAL_WARMUPS = 100
+_EXACT_INTEGER = re.compile(r"-?(0|[1-9][0-9]*)")
+_PAIR_FIELDS = ("runner_id", "pair_id", "pair_index", "candidate_order")
+_EXIT_CODES = {
+    "input-invalid": 2,
+    "source-dirty": 2,
+    "docker-unavailable": 3,
+    "redis-startup": 3,
+    "correctness-failed": 3,
+    "deadline": 3,
+    "live-worker": 3,
+    "redis-failed": 3,
+    "provider-failed": 3,
+    "codec-failed": 3,
+    "cancelled": 3,
+    "interrupted": 130,
+    "cleanup-failed": 5,
+    "artifact-write-failed": 6,
+}
 
 
-class BytesCodec:
-    def encode(self, value: bytes) -> SerializedPayload:
-        return SerializedPayload(
-            metadata=PayloadMetadata(
-                format="bytes",
-                version=1,
-                content_type="application/octet-stream",
-                trust_profile=TrustProfile.UNTRUSTED,
-            ),
-            data=value,
+class BenchmarkCliError(RuntimeError):
+    """Low-cardinality CLI failure that never includes underlying details."""
+
+    def __init__(
+        self,
+        category: str,
+        *,
+        mode: str | None = None,
+        scenario_id: str | None = None,
+        case_id: str | None = None,
+        phase: str | None = None,
+        repetition: int | None = None,
+        code: int | None = None,
+    ) -> None:
+        super().__init__(category)
+        self.category = category
+        self.mode = mode
+        self.scenario_id = scenario_id
+        self.case_id = case_id
+        self.phase = phase
+        self.repetition = repetition
+        self.code = _EXIT_CODES.get(category, 3) if code is None else code
+
+
+class _SignalInterrupt(BaseException):
+    def __init__(self, signum: int) -> None:
+        self.signum = signum
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RunConfig:
+    profile: BenchmarkProfile
+    modes: tuple[str, ...]
+    cases: tuple[ScenarioCase, ...]
+    output: str
+    seed: int
+    run: BenchmarkRunIdentity
+    repository: Path
+    git_sha: str
+
+
+def exact_int(value: str) -> int:
+    if _EXACT_INTEGER.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError("expected a canonical integer")
+    return int(value)
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser()
+    result.add_argument("--profile", choices=("smoke", "full"), required=True)
+    result.add_argument("--mode", choices=("sync", "async", "both"), default="both")
+    result.add_argument("--scenario", action="append", default=[])
+    result.add_argument("--output", required=True)
+    result.add_argument("--seed", type=exact_int, required=True)
+    result.add_argument("--role", choices=("snapshot", "baseline", "candidate"), default="snapshot")
+    result.add_argument("--runner-id")
+    result.add_argument("--pair-id")
+    result.add_argument("--pair-index", type=exact_int)
+    result.add_argument("--candidate-order", choices=("baseline-first", "candidate-first"))
+    return result
+
+
+def _git(repository: Path, *arguments: str) -> str:
+    completed = subprocess.run(
+        ("git", *arguments),
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def _repository() -> Path:
+    try:
+        return Path(_git(Path.cwd(), "rev-parse", "--show-toplevel")).resolve()
+    except (OSError, subprocess.CalledProcessError):
+        raise BenchmarkCliError("input-invalid") from None
+
+
+def _is_within(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _worktrees(repository: Path) -> tuple[Path, ...]:
+    raw = _git(repository, "worktree", "list", "--porcelain")
+    return tuple(
+        Path(line.removeprefix("worktree ")).resolve()
+        for line in raw.splitlines()
+        if line.startswith("worktree ")
+    )
+
+
+def _validate_output(value: str, repository: Path, *, paired: bool) -> None:
+    if value == "-":
+        if paired:
+            raise BenchmarkCliError("input-invalid")
+        return
+    path = Path(value).expanduser().absolute()
+    if not path.parent.exists() or path.parent.is_symlink() or not path.parent.is_dir():
+        raise BenchmarkCliError("input-invalid")
+    if path.exists() and (path.is_symlink() or not path.is_file()):
+        raise BenchmarkCliError("input-invalid")
+    if paired and any(_is_within(path, worktree) for worktree in _worktrees(repository)):
+        raise BenchmarkCliError("input-invalid")
+
+
+def _source_dirty(repository: Path) -> bool:
+    return bool(_git(repository, "status", "--porcelain", "--untracked-files=all"))
+
+
+def preflight(arguments: argparse.Namespace) -> RunConfig:
+    repository = _repository()
+    profile = {"smoke": SMOKE, "full": FULL}[arguments.profile]
+    modes = ("sync", "async") if arguments.mode == "both" else (arguments.mode,)
+    filters = tuple(arguments.scenario)
+    if len(filters) != len(set(filters)):
+        raise BenchmarkCliError("input-invalid")
+    known = {case.scenario_id for case in profile.cases}
+    if not set(filters) <= known:
+        raise BenchmarkCliError("input-invalid")
+    cases = tuple(case for case in profile.cases if not filters or case.scenario_id in filters)
+    if not cases:
+        raise BenchmarkCliError("input-invalid")
+    selected = BenchmarkProfile(
+        profile_id=profile.profile_id,
+        cases=cases,
+        wall_timeout_seconds=profile.wall_timeout_seconds,
+    )
+    validate_profile(selected, modes)
+    pairing = tuple(getattr(arguments, field) for field in _PAIR_FIELDS)
+    paired = arguments.role != "snapshot"
+    if paired != all(value is not None for value in pairing):
+        raise BenchmarkCliError("input-invalid")
+    if not paired and any(value is not None for value in pairing):
+        raise BenchmarkCliError("input-invalid")
+    try:
+        run = BenchmarkRunIdentity(
+            mode_order=modes,
+            role=arguments.role,
+            runner_id=arguments.runner_id,
+            pair_id=arguments.pair_id,
+            pair_index=arguments.pair_index,
+            candidate_order=arguments.candidate_order,
         )
-
-    def decode(self, payload: SerializedPayload) -> bytes:
-        return payload.data
-
-
-class Recorder:
-    def __init__(self) -> None:
-        self.condition = threading.Condition()
-        self.total = 0
-        self.acquisitions = 0
-
-    def record(self) -> None:
-        with self.condition:
-            self.total += 1
-            self.condition.notify_all()
-
-    def record_acquisition(self) -> None:
-        with self.condition:
-            self.total += 1
-            self.acquisitions += 1
-            self.condition.notify_all()
-
-    def wait_for_acquisitions(self, target: int) -> None:
-        with self.condition:
-            assert self.condition.wait_for(lambda: self.acquisitions >= target, timeout=5)
+    except (TypeError, ValueError):
+        raise BenchmarkCliError("input-invalid") from None
+    _validate_output(arguments.output, repository, paired=paired)
+    if arguments.output != "-" and _source_dirty(repository):
+        raise BenchmarkCliError("source-dirty")
+    return RunConfig(
+        profile=selected,
+        modes=modes,
+        cases=cases,
+        output=arguments.output,
+        seed=arguments.seed,
+        run=run,
+        repository=repository,
+        git_sha=_git(repository, "rev-parse", "HEAD"),
+    )
 
 
-class RecordingProvider(SyncRedisProvider):
-    def __init__(self, client: redis.Redis, recorder: Recorder) -> None:
-        super().__init__(client)
-        self.recorder = recorder
-
-    def set_if_absent(self, key: str, value: bytes, *, ttl: float) -> bool:
-        self.recorder.record_acquisition()
-        return super().set_if_absent(key, value, ttl=ttl)
-
-    def coordination_snapshot(
-        self, marker_key, result_key, *, max_marker_size=138, max_result_size
-    ):
-        self.recorder.record()
-        return super().coordination_snapshot(
-            marker_key,
-            result_key,
-            max_marker_size=max_marker_size,
-            max_result_size=max_result_size,
-        )
-
-    def publish_if_value(self, condition_key, expected_value, **kwargs):
-        self.recorder.record()
-        return super().publish_if_value(condition_key, expected_value, **kwargs)
+def _lock_digest(repository: Path) -> str:
+    return hashlib.sha256((repository / "uv.lock").read_bytes()).hexdigest()
 
 
-def main() -> None:
-    """Print one machine-readable benchmark sample without capacity claims."""
-    with RedisServer() as server:
-        clients = [
-            redis.Redis.from_url(
-                server.url,
-                decode_responses=False,
-                socket_connect_timeout=0.1,
-                socket_timeout=0.1,
-                retry_on_timeout=False,
-            )
-            for _ in range(COORDINATORS)
-        ]
-        recorder = Recorder()
-        providers = [RecordingProvider(client, recorder) for client in clients]
-        caches = [TTLCache[str, bytes](default_ttl=60, max_size=100) for _ in providers]
-        codec = ResultEnvelopeCodec(payload_codec=BytesCodec())
-        coordination_options = RedisLoadOptions(
-            namespace="benchmark:test:value-v1",
-            lease_ttl=2.0,
-            result_ttl=2.0,
-            poll_interval=0.001,
-            max_poll_interval=0.01,
-            wait_timeout=2.0,
-            redis_io_timeout=0.4,
-        )
-        coordinators = [
-            SyncRedisLoadCoordinator(cache, provider, codec, options=coordination_options)
-            for cache, provider in zip(caches, providers, strict=True)
-        ]
-        loader_count = 0
-        loader_lock = threading.Lock()
+def _image_digest() -> str:
+    completed = subprocess.run(
+        ("docker", "image", "inspect", "--format={{json .RepoDigests}}", DEFAULT_REDIS_IMAGE),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    values = json.loads(completed.stdout)
+    if type(values) is not list or not values or "@sha256:" not in values[0]:
+        raise BenchmarkCliError("redis-startup")
+    return values[0].split("@", 1)[1]
 
+
+def _redis_extensions(redis_url: str) -> dict[str, object]:
+    client = make_sync_client(redis_url)
+    try:
+        information = client.info("server")
+        version = information.get("redis_version")
+    finally:
+        client.close()
+    if type(version) is not str:
+        raise BenchmarkCliError("redis-failed")
+    return {
+        "coordination_policy_digest": policy_digest(),
+        "coordination_policy_id": POLICY_ID,
+        "redis_configuration_profile": "ephemeral-default",
+        "redis_image_digest": _image_digest(),
+        "redis_version": version,
+    }
+
+
+def _environment(config: RunConfig, extensions: dict[str, object]) -> BenchmarkEnvironment:
+    dependencies = (("redis", importlib.metadata.version("redis")),)
+    return BenchmarkEnvironment(
+        python=platform.python_version(),
+        implementation=platform.python_implementation(),
+        platform=platform.system().lower(),
+        processor=platform.machine() or "unknown",
+        cpu_count=os.cpu_count(),
+        git_sha=config.git_sha,
+        seed=config.seed,
+        profile_registry_digest=registry_digest(config.profile),
+        dependency_lock_digest=_lock_digest(config.repository),
+        dependencies=dependencies,
+        extensions=extensions,
+        source_dirty=False,
+    )
+
+
+def _run_results(config: RunConfig, redis_url: str) -> tuple[BenchmarkScenarioResult, ...]:
+    results: list[BenchmarkScenarioResult] = []
+    for mode in config.modes:
+        for case in config.cases:
+            try:
+                if mode == "sync":
+                    result = run_sync_case_in_child(
+                        ChildConfig(
+                            redis_url=redis_url,
+                            profile_id=config.profile.profile_id,
+                            scenario_id=case.scenario_id,
+                            case_id=case.case_id,
+                            seed=config.seed,
+                        )
+                    )
+                else:
+                    result = asyncio.run(
+                        run_async_case_bounded(redis_url, config.profile, case, config.seed)
+                    )
+            except ChildExecutionError as error:
+                raise BenchmarkCliError(
+                    error.category,
+                    mode=mode,
+                    scenario_id=case.scenario_id,
+                    case_id=case.case_id,
+                    phase="measurement",
+                ) from None
+            except asyncio.CancelledError:
+                raise BenchmarkCliError(
+                    "cancelled",
+                    mode=mode,
+                    scenario_id=case.scenario_id,
+                    case_id=case.case_id,
+                    phase="measurement",
+                ) from None
+            except Exception:
+                raise BenchmarkCliError(
+                    "provider-failed",
+                    mode=mode,
+                    scenario_id=case.scenario_id,
+                    case_id=case.case_id,
+                    phase="measurement",
+                ) from None
+            results.append(result)
+    return tuple(results)
+
+
+def _write(config: RunConfig, report: BenchmarkReport) -> None:
+    try:
+        if config.output == "-":
+            print(json.dumps(report_to_dict(report), sort_keys=True, indent=2))
+        else:
+            write_report(Path(config.output).expanduser().absolute(), report)
+    except (OSError, TypeError, ValueError):
+        raise BenchmarkCliError("artifact-write-failed", phase="write") from None
+
+
+def execute(config: RunConfig) -> None:
+    server = RedisServer()
+    try:
         try:
-            caches[0].set("local", b"value")
-            for _ in range(LOCAL_WARMUPS):
-                assert coordinators[0].get_or_load("local", lambda _: b"unused") == b"value"
-            local_timings = []
-            for _ in range(LOCAL_REPETITIONS):
-                started = perf_counter_ns()
-                assert coordinators[0].get_or_load("local", lambda _: b"unused") == b"value"
-                local_timings.append(perf_counter_ns() - started)
-
-            cold_timings = []
-            for iteration in range(COLD_REPETITIONS):
-                key = f"cold-{iteration}"
-                start_barrier = threading.Barrier(CALLERS)
-                owner_release = threading.Event()
-                results: list[bytes] = []
-
-                def loader(_: str, release: threading.Event = owner_release) -> bytes:
-                    nonlocal loader_count
-                    with loader_lock:
-                        loader_count += 1
-                    assert release.wait(5)
-                    return b"value"
-
-                def call(
-                    index: int,
-                    barrier: threading.Barrier = start_barrier,
-                    values: list[bytes] = results,
-                    logical_key: str = key,
-                    load=loader,
-                ) -> None:
-                    barrier.wait()
-                    values.append(coordinators[index % COORDINATORS].get_or_load(logical_key, load))
-
-                threads = [threading.Thread(target=call, args=(index,)) for index in range(CALLERS)]
-                acquisition_target = recorder.acquisitions + COORDINATORS
-                started = perf_counter_ns()
-                for thread in threads:
-                    thread.start()
-                recorder.wait_for_acquisitions(acquisition_target)
-                owner_release.set()
-                for thread in threads:
-                    thread.join(10)
-                cold_timings.append(perf_counter_ns() - started)
-                assert results == [b"value"] * CALLERS
-
-            print(
-                json.dumps(
-                    {
-                        "commands_per_caller": recorder.total / (CALLERS * COLD_REPETITIONS),
-                        "contended_cold_burst_median_ns": int(statistics.median(cold_timings)),
-                        "loader_count": loader_count,
-                        "local_hit_median_ns": int(statistics.median(local_timings)),
-                        "metadata": {
-                            "callers": CALLERS,
-                            "cold_repetitions": COLD_REPETITIONS,
-                            "coordinators": COORDINATORS,
-                            "local_repetitions": LOCAL_REPETITIONS,
-                            "options": asdict(coordination_options),
-                            "payload_bytes": len(b"value"),
-                            "platform": platform.platform(),
-                            "python": sys.version.split()[0],
-                            "production_capacity_claim": False,
-                        },
-                        "redis_commands": recorder.total,
-                    },
-                    sort_keys=True,
-                )
+            server.start()
+        except Exception:
+            raise BenchmarkCliError("docker-unavailable", phase="startup") from None
+        extensions = _redis_extensions(server.url)
+        results = _run_results(config, server.url)
+        for result in results:
+            validate_redis_report_fields(
+                parameters=dict(result.parameters),
+                metrics=dict(result.metrics),
+                extensions=extensions,
             )
-        finally:
-            for provider in providers:
-                provider.close()
-            for client in clients:
-                client.close()
+        report = BenchmarkReport(
+            schema_version=1,
+            profile=config.profile.profile_id,
+            environment=_environment(config, extensions),
+            run=config.run,
+            scenarios=results,
+        )
+        _write(config, report)
+    finally:
+        try:
+            server.close()
+        except Exception:
+            raise BenchmarkCliError("cleanup-failed", phase="cleanup") from None
+
+
+def _diagnostic(error: BenchmarkCliError) -> str:
+    value = {
+        "case_id": error.case_id,
+        "category": error.category,
+        "code": error.code,
+        "mode": error.mode,
+        "phase": error.phase,
+        "repetition": error.repetition,
+        "scenario_id": error.scenario_id,
+    }
+    return "bluetape-benchmark-error " + json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _install_signals() -> dict[int, signal.Handlers]:
+    previous: dict[int, signal.Handlers] = {}
+    seen = 0
+
+    def handle(signum: int, _frame: FrameType | None) -> None:
+        nonlocal seen
+        seen += 1
+        if seen > 1:
+            os._exit(128 + signum)
+        raise _SignalInterrupt(signum)
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous[signum] = signal.getsignal(signum)
+        signal.signal(signum, handle)
+    return previous
+
+
+def _restore_signals(previous: dict[int, signal.Handlers]) -> None:
+    for signum, handler in previous.items():
+        signal.signal(signum, handler)
+
+
+def main(argv: list[str] | None = None) -> int:
+    previous = _install_signals()
+    try:
+        try:
+            arguments = parser().parse_args(argv)
+            config = preflight(arguments)
+            execute(config)
+            return 0
+        except BenchmarkCliError as error:
+            print(_diagnostic(error), file=sys.stderr)
+            return error.code
+        except _SignalInterrupt as interrupted:
+            code = 128 + interrupted.signum
+            error = BenchmarkCliError("interrupted", phase="cleanup", code=code)
+            print(_diagnostic(error), file=sys.stderr)
+            return code
+    finally:
+        _restore_signals(previous)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
