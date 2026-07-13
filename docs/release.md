@@ -38,6 +38,9 @@ Before `v1.0.0`, public APIs may still change. Document breaking changes in
   distribution build step.
 - PyPI credentials or trusted publishing are explicitly confirmed before any
   publish action.
+- Release selection classifies every workspace distribution through the exact
+  allowlist in `docs/release/pypi-preflight.md`; an unknown workspace member
+  blocks preflight. `bluetape-benchmark` is private and must never be uploaded.
 
 ## Changelog Rule
 

@@ -357,6 +357,55 @@ algorithm을 바꿀 때 reader를 writer보다 먼저 배포하며, TTL을 제�
 사용하지 않습니다. Coordination도 같은 versioned namespace와 bounded TTL 규칙을
 따릅니다. Local mutation은 local 범위이며 distributed invalidation이 아닙니다.
 
+## Coordination Benchmark
+
+Private source-workspace benchmark는 Docker가 필요하며 ephemeral Redis container
+하나를 소유합니다. Smoke 제한은 120초, full 제한은 900초입니다. Matrix는 최대
+24 result, caller 64개, coordinator/key 8개, 단일 payload 15,728,640 byte,
+aggregate payload 32 MiB도 제한합니다.
+
+```bash
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile smoke --mode both --seed 20260712 --role snapshot --output -
+
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role snapshot \
+  --output /external/full.json
+```
+
+File 및 paired run은 깨끗한 source tree(`source_dirty=false`)가 필요합니다. Paired
+baseline/candidate artifact는 모든 Git worktree 밖에 있어야 합니다. 별도의 clean
+worktree, 같은 runner/pair/seed를 사용하고 짝수 pair index 0은
+`baseline-first`, 홀수는 `candidate-first`로 실행한 뒤
+`bluetape.benchmark.compare`를 실행합니다. `correctness_*` metric은 untimed
+phase에서 수집하고 measured provider는 wrapper 없이 preconnect합니다. Smoke는
+sample이 5개이므로 p95/p99는 null입니다. 결과는 capacity 또는 SLO 보장이 아닙니다.
+
+Pair 0에서는 첫 command를 clean baseline worktree에서, 두 번째 command를 clean
+candidate worktree에서 실행합니다. `/external`은 두 worktree 밖에 있어야 합니다.
+
+```bash
+artifact_dir=/external/issue-63-pair-000
+mkdir -p "$artifact_dir"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role baseline \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/baseline.json"
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role candidate \
+  --runner-id runner-a --pair-id issue-63-pair-000 --pair-index 0 \
+  --candidate-order baseline-first --output "$artifact_dir/candidate.json"
+uv run python -m bluetape.benchmark.compare \
+  --baseline "$artifact_dir/baseline.json" --candidate "$artifact_dir/candidate.json" \
+  --output "$artifact_dir/comparison.json"
+```
+
+Input/source 실패는 exit 2, 실행 및 cleanup 실패는 3, Docker/Redis environment
+실패는 5, artifact write 실패는 6이며 이전 output을 보존합니다. 첫 SIGINT는
+cleanup을 수렴시키고 exit 130을
+보고하며 두 번째 signal은 즉시 escalate합니다. 진단은 고정된 redacted JSON이며
+Redis URL을 포함하지 않습니다.
+
 ## 개발
 
 ```bash

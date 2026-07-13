@@ -18,6 +18,11 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add a private, stdlib-only `bluetape-benchmark` workspace distribution and a
+  bounded Redis coordination benchmark with sync/async correctness evidence,
+  spawn/cancellation containment, atomic schema-v1 reports, paired comparison,
+  and a checked smoke artifact. The package is built and tested but forbidden
+  from publication; benchmark results are not production-capacity claims.
 - Add the opt-in `bluetape-cache-redis` package with byte-only sync and async
   redis-py providers, strict bounded binary/JSON v1 result envelopes, explicit
   compression migration readers, atomic TTL/NX/compare-delete operations,

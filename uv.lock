@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 members = [
     "bluetape",
     "bluetape-async",
+    "bluetape-benchmark",
     "bluetape-cache",
     "bluetape-cache-redis",
     "bluetape-codec",
@@ -141,6 +142,11 @@ version = "0.1.0"
 source = { editable = "packages/bluetape-async" }
 
 [[package]]
+name = "bluetape-benchmark"
+version = "0.1.0"
+source = { editable = "packages/bluetape-benchmark" }
+
+[[package]]
 name = "bluetape-cache"
 version = "0.1.0"
 source = { editable = "packages/bluetape-cache" }
@@ -158,6 +164,7 @@ dependencies = [
 
 [package.dev-dependencies]
 test = [
+    { name = "bluetape-benchmark" },
     { name = "bluetape-testcontainers" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -173,6 +180,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 test = [
+    { name = "bluetape-benchmark", editable = "packages/bluetape-benchmark" },
     { name = "bluetape-testcontainers", editable = "packages/bluetape-testcontainers" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-asyncio", specifier = ">=1.1.0" },

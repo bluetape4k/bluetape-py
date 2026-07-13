@@ -22,6 +22,36 @@ It is a preflight checklist, not permission to publish.
 The `bluetape` meta distribution must keep its default dependency list limited
 to `bluetape-core`.
 
+## Fail-Closed Workspace Classification
+
+Every current workspace distribution is classified below. Release tooling and
+review must fail when a workspace member is absent from both sets.
+
+Publishable distributions (subject to the target-release table and explicit
+release approval):
+
+- `bluetape`
+- `bluetape-async`
+- `bluetape-cache`
+- `bluetape-cache-redis`
+- `bluetape-codec`
+- `bluetape-collections`
+- `bluetape-compression`
+- `bluetape-core`
+- `bluetape-logging`
+- `bluetape-serde`
+- `bluetape-testcontainers`
+- `bluetape-testing`
+
+Private distributions, never publishable:
+
+- `bluetape-benchmark`
+
+The classifier on `bluetape-benchmark` is PyPI defense in depth.
+Exact release selection is the primary control: an unknown member blocks
+preflight, and a publish command must use an explicitly approved subset of the
+publishable set.
+
 ## Trusted Publishing Status
 
 Status: hold.

@@ -30,6 +30,7 @@ package = false
 
 [tool.uv.sources]
 bluetape-async = { workspace = true }
+bluetape-benchmark = { workspace = true }
 bluetape-cache = { workspace = true }
 bluetape-cache-redis = { workspace = true }
 bluetape-codec = { workspace = true }
@@ -45,6 +46,7 @@ bluetape-testing = { workspace = true }
 members = [
     "packages/bluetape",
     "packages/bluetape-async",
+    "packages/bluetape-benchmark",
     "packages/bluetape-cache",
     "packages/bluetape-cache-redis",
     "packages/bluetape-codec",
