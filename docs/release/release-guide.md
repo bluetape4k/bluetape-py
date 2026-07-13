@@ -119,6 +119,12 @@ Publishing remains on hold until PyPI project ownership and trusted publishing
 are confirmed outside the repository. Do not dispatch a publish workflow or
 upload artifacts while issue #5 is open.
 
+The complete fail-closed workspace classification is maintained in
+`docs/release/pypi-preflight.md`. `bluetape-benchmark` is built and tested but
+is private and must never be selected for upload. Its private classifier is
+only defense in depth; any unclassified workspace distribution blocks release
+preflight before build artifacts are selected.
+
 Release sequence:
 
 1. Verify milestone `0.1.0` has zero open issues.

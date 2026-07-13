@@ -3,6 +3,21 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
+PUBLISHABLE = {
+    "bluetape",
+    "bluetape-async",
+    "bluetape-cache",
+    "bluetape-cache-redis",
+    "bluetape-codec",
+    "bluetape-collections",
+    "bluetape-compression",
+    "bluetape-core",
+    "bluetape-logging",
+    "bluetape-serde",
+    "bluetape-testcontainers",
+    "bluetape-testing",
+}
+PRIVATE = {"bluetape-benchmark"}
 
 
 def load_pyproject(path: Path) -> dict[str, object]:
@@ -45,3 +60,15 @@ def test_nested_namespace_is_importable_without_root_convenience_package() -> No
     assert specification is not None
     assert specification.origin is not None
     assert Path(specification.origin).name == "__init__.py"
+
+
+def test_every_workspace_distribution_is_publishable_or_private() -> None:
+    workspace = {
+        load_pyproject(path)["project"]["name"]
+        for path in (ROOT / "packages").glob("*/pyproject.toml")
+    }
+    assert workspace == PUBLISHABLE | PRIVATE
+    assert PUBLISHABLE.isdisjoint(PRIVATE)
+    preflight = (ROOT / "docs/release/pypi-preflight.md").read_text()
+    assert all(f"`{name}`" in preflight for name in workspace)
+    assert "`bluetape-benchmark` is PyPI defense in depth" in preflight

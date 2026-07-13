@@ -27,6 +27,13 @@ Current public distributions:
 - `bluetape-serde`
 - `bluetape-testing`
 
+Private workspace distributions:
+
+- `bluetape-benchmark` owns `bluetape.benchmark`. It is stdlib-only and is
+  built/tested with the workspace, but it is source-only and forbidden from
+  every publish allowlist and meta extra. Its `Private :: Do Not Upload`
+  classifier is defense in depth, not the release-selection mechanism.
+
 The `bluetape` distribution is a meta package. It should not create a root
 `bluetape/__init__.py` import surface. Focused packages own focused import paths
 such as `bluetape.core`, `bluetape.logging`, and `bluetape.testing`.

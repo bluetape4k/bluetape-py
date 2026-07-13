@@ -83,6 +83,24 @@ class UnboundedRecordingAsyncProvider(RecordingAsyncProvider):
         return None
 
 
+@pytest.mark.parametrize("readme", [ENGLISH, KOREAN])
+def test_readme_has_benchmark_operator_contract(readme: Path) -> None:
+    text = readme.read_text()
+    for value in (
+        "--profile smoke",
+        "--profile full",
+        "120",
+        "900",
+        "Docker",
+        "correctness_",
+        "source_dirty",
+        "baseline-first",
+        "exit 130",
+        "bluetape.benchmark.compare",
+    ):
+        assert value in text
+
+
 @pytest.mark.parametrize("name", ["sync-coordination-example", "async-coordination-example"])
 def test_bilingual_coordination_examples_are_identical_and_compile(name: str) -> None:
     english = snippet(ENGLISH.read_text(), name)

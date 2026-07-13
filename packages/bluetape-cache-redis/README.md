@@ -358,6 +358,35 @@ scan TTL-aware namespaces for retirement evidence. Do not use unbounded
 `KEYS`. Coordination follows the same versioned namespace and bounded TTL
 rules. Local mutation remains local and is not distributed invalidation.
 
+## Coordination Benchmark
+
+The private source-workspace benchmark requires Docker and owns one ephemeral
+Redis container. Smoke is capped at 120 seconds and full at 900 seconds; the
+matrix additionally caps results at 24, callers at 64, coordinators/keys at 8,
+one payload at 15,728,640 bytes, and aggregate payload at 32 MiB.
+
+```bash
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile smoke --mode both --seed 20260712 --role snapshot --output -
+
+uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
+  --profile full --mode both --seed 20260712 --role snapshot \
+  --output /external/full.json
+```
+
+File and paired runs require a clean source tree (`source_dirty=false`). Paired
+baseline/candidate artifacts must be outside every Git worktree. Use separate
+clean worktrees, the same runner/pair/seed, even pair index 0 with
+`baseline-first` (odd indexes use `candidate-first`), then run
+`bluetape.benchmark.compare`. The `correctness_*` metrics are collected in an
+untimed phase; measured providers are unwrapped and preconnected. Smoke has
+five samples, so p95/p99 are null. These results are not capacity or SLO claims.
+
+Input/source failures exit 2, execution failures 3, cleanup failures 5, and
+artifact-write failures 6 while preserving the previous output. The first
+SIGINT converges cleanup and reports exit 130; a second signal escalates
+immediately. Diagnostics are fixed, redacted JSON and never include Redis URLs.
+
 ## Development
 
 ```bash

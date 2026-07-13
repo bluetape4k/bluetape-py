@@ -57,6 +57,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
 | `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis providers, bounded result envelopes, and sync/async load coordinators. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8 test server lifecycle and connection details. |
+| `bluetape-benchmark` | `bluetape.benchmark` | no | private, source-only | Built/tested benchmark report and comparison contracts; never published. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
 
 ## Design Position
@@ -414,6 +415,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.md](packages/bluetape-cache-redis/README.md) / [한국어](packages/bluetape-cache-redis/README.ko.md) |
+| `bluetape-benchmark` | [packages/bluetape-benchmark/README.md](packages/bluetape-benchmark/README.md) / [한국어](packages/bluetape-benchmark/README.ko.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
