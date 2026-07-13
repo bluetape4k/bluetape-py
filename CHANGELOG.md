@@ -9,6 +9,10 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Changed
 
+- Stop reading and returning the Redis coordination result key when an atomic
+  snapshot observes an active marker. Sync and async providers still use one
+  `EVAL`; completed or missing markers keep bounded result-prefix behavior, and
+  the public API and Redis ACL requirements are unchanged.
 - Remove the never-emitted `RedisCoordinationErrorCode.CLEANUP_FAILURE` before
   API stabilization. Cleanup failures continue to preserve the original
   exception or cancellation and are reported only through the static note and

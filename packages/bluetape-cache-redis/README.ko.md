@@ -322,6 +322,12 @@ remaining count를 기록하고 quiescence와 readiness를 다시 확인합니�
 fallback하지 않습니다. 따라서 Redis principal에는 해당 operation과 `EVAL` 권한이
 필요합니다.
 
+`coordination_snapshot`은 atomic `EVAL` round trip 한 번을 유지합니다. 제한된
+marker가 active이면 active result를 소비할 수 없으므로 script가 result key를 읽거나
+반환하지 않고 provider는 `result=None`을 보고합니다. Completed 또는 missing
+marker에서는 기존의 bounded result prefix 동작을 유지하므로 public API, ACL 요구
+사항, completion reuse contract는 바뀌지 않습니다.
+
 ```python
 import asyncio
 
@@ -380,6 +386,11 @@ worktree, 같은 runner/pair/seed를 사용하고 짝수 pair index 0은
 `bluetape.benchmark.compare`를 실행합니다. `correctness_*` metric은 untimed
 phase에서 수집하고 measured provider는 wrapper 없이 preconnect합니다. Smoke는
 sample이 5개이므로 p95/p99는 null입니다. 결과는 capacity 또는 SLO 보장이 아닙니다.
+동시 active polling에서는 같은 코드를 실행해도 raw snapshot command 수가 달라질 수
+있습니다. 따라서 correctness 비교는 `multi-coordinator` command에서 기록된 active
+snapshot 수를 빼서 정규화하고, 나머지 모든 scenario는 raw command parity를
+유지합니다. Provider test는 snapshot 호출마다 `EVAL` 한 번이라는 조건을 별도로
+고정합니다.
 
 Pair 0에서는 첫 command를 clean baseline worktree에서, 두 번째 command를 clean
 candidate worktree에서 실행합니다. `/external`은 두 worktree 밖에 있어야 합니다.

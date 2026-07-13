@@ -323,6 +323,12 @@ All writes require a positive TTL. `set_if_absent` uses Redis `SET NX PX`.
 has no racy read/delete fallback when scripts are denied. Its Redis principal
 therefore needs permission for the operation and `EVAL`.
 
+`coordination_snapshot` keeps one atomic `EVAL` round trip. When the bounded
+marker is active, the script does not read or return the result key because an
+active result cannot be consumed. The provider reports `result=None`. Completed
+or missing markers retain the existing bounded result-prefix behavior, so the
+public API, ACL requirements, and completion reuse contract are unchanged.
+
 ```python
 import asyncio
 
@@ -381,6 +387,11 @@ clean worktrees, the same runner/pair/seed, even pair index 0 with
 `bluetape.benchmark.compare`. The `correctness_*` metrics are collected in an
 untimed phase; measured providers are unwrapped and preconnected. Smoke has
 five samples, so p95/p99 are null. These results are not capacity or SLO claims.
+Concurrent active polling can change the raw snapshot command count between
+otherwise identical runs. Correctness comparisons therefore normalize
+`multi-coordinator` commands by its recorded active snapshots while retaining
+raw command parity for every other scenario. Provider tests separately lock
+each snapshot call to one `EVAL`.
 
 For pair 0, run the first command in the clean baseline worktree and the second
 in the clean candidate worktree; `/external` must be outside both:
