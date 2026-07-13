@@ -345,6 +345,24 @@ async def test_partial_async_resource_failure_closes_every_client(monkeypatch) -
     assert all(client.closed for client in clients)
 
 
+@pytest.mark.asyncio
+async def test_async_cleanup_closes_clients_after_provider_failure() -> None:
+    class Provider:
+        async def aclose(self) -> None:
+            raise RuntimeError("provider close failed")
+
+    class Client:
+        closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    client = Client()
+    with pytest.raises(RuntimeError, match="provider close failed"):
+        await scenario_runtime._close_async([client], [Provider()])  # type: ignore[list-item]
+    assert client.closed is True
+
+
 def test_cli_requires_seed_and_complete_pair_fields() -> None:
     with pytest.raises(BenchmarkCliError) as raised:
         parser().parse_args(["--profile", "smoke", "--output", "-"])

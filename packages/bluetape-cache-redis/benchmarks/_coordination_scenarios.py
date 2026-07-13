@@ -430,16 +430,28 @@ def _sync_resources(
         else:
             providers = [_RecordingSyncProvider(client, recorder) for client in clients]
         return clients, providers
-    except BaseException:
-        _close_sync(clients, providers)
+    except BaseException as primary:
+        try:
+            _close_sync(clients, providers)
+        except BaseException:
+            primary.add_note("benchmark resource cleanup also failed")
         raise
 
 
 def _close_sync(clients: Sequence[object], providers: Sequence[SyncRedisProvider]) -> None:
+    failure: BaseException | None = None
     for provider in providers:
-        provider.close()
+        try:
+            provider.close()
+        except BaseException as error:
+            failure = failure or error
     for client in clients:
-        client.close()  # type: ignore[attr-defined]
+        try:
+            client.close()  # type: ignore[attr-defined]
+        except BaseException as error:
+            failure = failure or error
+    if failure is not None:
+        raise failure
 
 
 def run_sync_case(
@@ -599,16 +611,28 @@ async def _async_resources(
         else:
             providers = [_RecordingAsyncProvider(client, recorder) for client in clients]
         return clients, providers
-    except BaseException:
-        await _close_async(clients, providers)
+    except BaseException as primary:
+        try:
+            await _close_async(clients, providers)
+        except BaseException:
+            primary.add_note("benchmark resource cleanup also failed")
         raise
 
 
 async def _close_async(clients: Sequence[object], providers: Sequence[AsyncRedisProvider]) -> None:
+    failure: BaseException | None = None
     for provider in providers:
-        await provider.aclose()
+        try:
+            await provider.aclose()
+        except BaseException as error:
+            failure = failure or error
     for client in clients:
-        await client.aclose()  # type: ignore[attr-defined]
+        try:
+            await client.aclose()  # type: ignore[attr-defined]
+        except BaseException as error:
+            failure = failure or error
+    if failure is not None:
+        raise failure
 
 
 async def run_async_case(
