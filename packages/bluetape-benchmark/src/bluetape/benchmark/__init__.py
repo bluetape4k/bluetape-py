@@ -1,5 +1,6 @@
 """Internal benchmark contracts for source-workspace tooling."""
 
+from ._comparison import compare_reports
 from ._contracts import (
     BenchmarkComparison,
     BenchmarkDelta,
@@ -22,6 +23,7 @@ __all__ = [
     "BenchmarkScalar",
     "BenchmarkScenarioResult",
     "TimingSummary",
+    "compare_reports",
     "nearest_rank",
     "read_report",
     "summarize_timings",
