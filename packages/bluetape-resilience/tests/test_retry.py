@@ -155,6 +155,25 @@ def test_retry_decorator_preserves_metadata_and_rejects_generators() -> None:
         policy(generator)
 
 
+def test_sync_retry_rejects_awaitable_result_without_retrying() -> None:
+    attempts = 0
+    events = []
+
+    async def async_result() -> None:
+        return None
+
+    def operation() -> object:
+        nonlocal attempts
+        attempts += 1
+        return async_result()
+
+    policy = Retry(name="retry", max_attempts=3, observer=events.append)
+    with pytest.raises(TypeError, match="sync operation returned an awaitable"):
+        policy.call(operation)
+    assert attempts == 1
+    assert events == []
+
+
 @pytest.mark.asyncio
 async def test_async_retry_succeeds_and_awaits_sleeper() -> None:
     attempts = 0

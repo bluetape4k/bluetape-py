@@ -1,6 +1,5 @@
 """Immutable synchronous and asynchronous resilience pipelines."""
 
-import inspect
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import ParamSpec, TypeVar
@@ -12,6 +11,7 @@ from bluetape.resilience._retry import (
     Retry,
     _ensure_async_operation,
     _ensure_sync_operation,
+    _ensure_sync_result,
 )
 from bluetape.resilience._timeout import AsyncTimeout
 
@@ -52,13 +52,7 @@ class ResiliencePipeline:
         wrapped: Callable[P, R] = operation
         for policy in self._policies:
             wrapped = policy(wrapped)
-        result = wrapped(*args, **kwargs)
-        if inspect.isawaitable(result):
-            close = getattr(result, "close", None)
-            if callable(close):
-                close()
-            raise TypeError("sync operation returned an awaitable")
-        return result
+        return _ensure_sync_result(wrapped(*args, **kwargs))
 
     def __call__(self, operation: Callable[P, R]) -> Callable[P, R]:
         _ensure_sync_operation(operation)

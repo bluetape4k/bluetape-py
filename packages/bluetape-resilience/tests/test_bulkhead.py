@@ -89,6 +89,36 @@ def test_sync_failure_and_admitted_observer_error_release_permit() -> None:
     assert observed.snapshot().in_flight == 0
 
 
+def test_sync_bulkhead_rejects_awaitable_result_and_releases_permit() -> None:
+    async def async_result() -> None:
+        return None
+
+    bulkhead = Bulkhead(name="bulkhead", max_concurrency=1)
+    with pytest.raises(TypeError, match="sync operation returned an awaitable"):
+        bulkhead.call(lambda: async_result())
+    assert bulkhead.snapshot().in_flight == 0
+
+
+@pytest.mark.parametrize("source", ["observer", "operation"])
+def test_sync_bulkhead_releases_permit_for_base_exception(source: str) -> None:
+    def observer(event: object) -> None:
+        if source == "observer" and getattr(event, "kind", None) is EventKind.ADMITTED:
+            raise KeyboardInterrupt
+
+    def operation() -> None:
+        if source == "operation":
+            raise KeyboardInterrupt
+
+    bulkhead = Bulkhead(
+        name="bulkhead",
+        max_concurrency=1,
+        observer=observer,
+    )
+    with pytest.raises(KeyboardInterrupt):
+        bulkhead.call(operation)
+    assert bulkhead.snapshot().in_flight == 0
+
+
 @pytest.mark.asyncio
 async def test_async_waiter_cancellation_does_not_release_unowned_permit() -> None:
     bulkhead = AsyncBulkhead(name="bulkhead", max_concurrency=1, max_wait=10)
@@ -135,6 +165,88 @@ async def test_async_admitted_cancellation_releases_permit_without_terminal_even
         await task
     assert (await bulkhead.snapshot()).in_flight == 0
     assert [event.kind for event in events] == [EventKind.ADMITTED]
+
+
+@pytest.mark.asyncio
+async def test_async_completion_cancellation_waits_for_permit_reconciliation() -> None:
+    bulkhead = AsyncBulkhead(name="bulkhead", max_concurrency=1)
+    operation_entered = asyncio.Event()
+    finish_operation = asyncio.Event()
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def operation() -> str:
+        operation_entered.set()
+        await finish_operation.wait()
+        return "ok"
+
+    async def hold_condition() -> None:
+        async with bulkhead._condition:
+            lock_held.set()
+            await release_lock.wait()
+
+    call_task = asyncio.create_task(bulkhead.call(operation))
+    await asyncio.wait_for(operation_entered.wait(), 1)
+    holder = asyncio.create_task(hold_condition())
+    await asyncio.wait_for(lock_held.wait(), 1)
+    finish_operation.set()
+    await asyncio.sleep(0)
+    call_task.cancel()
+    release_lock.set()
+    await asyncio.wait_for(holder, 1)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(call_task, 1)
+    assert (await bulkhead.snapshot()).in_flight == 0
+
+
+@pytest.mark.asyncio
+async def test_async_repeated_cancellation_cannot_interrupt_permit_cleanup() -> None:
+    bulkhead = AsyncBulkhead(name="bulkhead", max_concurrency=1)
+    operation_entered = asyncio.Event()
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def operation() -> None:
+        operation_entered.set()
+        await asyncio.Future()
+
+    async def hold_condition() -> None:
+        async with bulkhead._condition:
+            lock_held.set()
+            await release_lock.wait()
+
+    call_task = asyncio.create_task(bulkhead.call(operation))
+    await asyncio.wait_for(operation_entered.wait(), 1)
+    holder = asyncio.create_task(hold_condition())
+    await asyncio.wait_for(lock_held.wait(), 1)
+    call_task.cancel()
+    await asyncio.sleep(0)
+    call_task.cancel()
+    release_lock.set()
+    await asyncio.wait_for(holder, 1)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(call_task, 1)
+    assert (await bulkhead.snapshot()).in_flight == 0
+
+
+@pytest.mark.asyncio
+async def test_async_admitted_observer_cancellation_releases_permit() -> None:
+    def observer(event: object) -> None:
+        if getattr(event, "kind", None) is EventKind.ADMITTED:
+            raise asyncio.CancelledError
+
+    bulkhead = AsyncBulkhead(
+        name="bulkhead",
+        max_concurrency=1,
+        observer=observer,
+    )
+
+    async def operation() -> None:
+        raise AssertionError("operation must not start")
+
+    with pytest.raises(asyncio.CancelledError):
+        await bulkhead.call(operation)
+    assert (await bulkhead.snapshot()).in_flight == 0
 
 
 def test_async_bulkhead_rejects_second_event_loop() -> None:
