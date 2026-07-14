@@ -39,6 +39,7 @@ release approval):
 - `bluetape-compression`
 - `bluetape-core`
 - `bluetape-logging`
+- `bluetape-resilience`
 - `bluetape-serde`
 - `bluetape-testcontainers`
 - `bluetape-testing`
