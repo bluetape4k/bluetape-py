@@ -52,6 +52,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Structural compressor contracts for bounded gzip, zlib, raw-DEFLATE, LZ4, Snappy, and Zstandard payloads. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
+| `bluetape-resilience` | `bluetape.resilience` | no | active, source workspace | Stdlib-only sync/async retry, circuit breaker, bulkhead, and cooperative async timeout policies. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
@@ -67,13 +68,15 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 - `bluetape-core` stays stdlib-only.
 - `bluetape-logging` stays stdlib-first and builds on `logging` plus
   `contextvars`.
+- `bluetape-resilience` stays stdlib-only, separates sync and async policy
+  families, and provides no synchronous timeout or hidden workers.
 - `bluetape-testing` may depend on `pytest`, but starts as an internal support
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
 - The default meta install remains core-only. Cache, Redis, compression providers,
-  serde, and Testcontainers are opt-in; Apache Fory is trusted-internal only
-  and available solely through the explicit `fory` extra.
+  resilience, serde, and Testcontainers are opt-in; Apache Fory is
+  trusted-internal only and available solely through the explicit `fory` extra.
 
 ## Install
 
@@ -95,6 +98,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[logging]"
+pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 only
 pip install "bluetape[testing]"
@@ -118,6 +122,7 @@ pip install "bluetape-compression[snappy]"
 pip install "bluetape-compression[zstd]"
 pip install "bluetape-compression[native]"
 pip install bluetape-logging
+pip install bluetape-resilience
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 only
 pip install bluetape-testing
@@ -131,6 +136,7 @@ uv sync --all-packages --locked
 uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-cache-redis python -c "from bluetape.cache.redis import BinaryEnvelopeFormat, SyncRedisProvider; assert BinaryEnvelopeFormat().format_id == 'binary-v1' and SyncRedisProvider"
+uv run --package bluetape-resilience python -c "from bluetape.resilience import AsyncResiliencePipeline, ResiliencePipeline; assert ResiliencePipeline and AsyncResiliencePipeline"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
@@ -421,6 +427,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
+| `bluetape-resilience` | [packages/bluetape-resilience/README.md](packages/bluetape-resilience/README.md) / [한국어](packages/bluetape-resilience/README.ko.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
 | `bluetape-testcontainers` | [packages/bluetape-testcontainers/README.md](packages/bluetape-testcontainers/README.md) |
 | `bluetape-testing` | [packages/bluetape-testing/README.md](packages/bluetape-testing/README.md) |

@@ -1,6 +1,6 @@
 # WIP
 
-Snapshot: 2026-07-12 KST
+Snapshot: 2026-07-14 KST
 Scope: `v0.1.0` released foundation and `0.2.0` ecosystem package planning.
 
 ## Current Target
@@ -31,6 +31,10 @@ focused distribution model:
   plus structural compressor contracts and opt-in LZ4, Snappy, and Zstandard
   providers from #59. PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
+- `bluetape-resilience`: stdlib-only sync/async retry, circuit breaker,
+  bulkhead, cooperative async timeout, and immutable fluent pipelines,
+  implemented for issue #12 on `feat/issue-12-resilience-policies` while PyPI
+  publication remains on HOLD.
 - `bluetape-serde`: stdlib-only immutable payload contracts and strict,
   bounded JSON v1 serialization, implemented for issue #45 in the source
   workspace, plus a CPython 3.13-only Apache Fory extra implemented for issue
@@ -66,6 +70,9 @@ focused distribution model:
   provides the compressor contracts needed to reduce Redis payloads. #54 Redis
   provider integration is implemented, and #55 Redis load coordination is
   implemented with sync/async parity and real Redis verification.
+- Issue #12 resilience policies are implemented and locally verified on the
+  feature branch. PR review and merge remain pending; PyPI publication stays
+  on HOLD.
 
 ## `0.1.0` Scope
 
@@ -161,7 +168,11 @@ Historical release scope; all items are closed.
 - #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented and
   verified on `feat/issue-57-testcontainers-redis`; consumed by #54 integration
   tests and retained for #55.
-- #12 - Resilience policies.
+- #12 - Stdlib-only resilience policies. Implemented on
+  `feat/issue-12-resilience-policies` with separate sync/async retry, circuit
+  breaker, bulkhead, cooperative async timeout, typed events, immutable state
+  snapshots, and fluent decorator pipelines. PR review and merge are pending;
+  PyPI publication remains on HOLD.
 - #13 - ID, measure, and money value packages.
 - #14 - SQL, repository, and audit outbox strategy research.
 - #15 - Testcontainers fixture packages.

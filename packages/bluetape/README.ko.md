@@ -23,6 +23,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[logging]"
+pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"
 pip install "bluetape[testing]"
@@ -42,6 +43,7 @@ pip install "bluetape[all]"
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
+| `resilience` | `bluetape-resilience` | `bluetape.resilience` | no |
 | `serde` | `bluetape-serde` | `bluetape.serde` | no |
 | `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
 | `testing` | `bluetape-testing` | `bluetape.testing` | no |
@@ -53,6 +55,11 @@ provider와 크기 제한 result envelope를 설치합니다. Redis coordination
 
 `asyncio` extra는 호출 범위가 정해진 bounded structured-concurrency 헬퍼를
 설치합니다. 기본 설치는 계속 `bluetape-core`로 제한합니다.
+
+`resilience` extra는 stdlib-only sync/async retry, circuit breaker, bulkhead,
+cooperative async timeout, immutable fluent pipeline을 설치합니다. Sync timeout,
+hidden worker, scheduler, global registry는 추가하지 않습니다. 같은 policy
+instance를 재사용하면 state 또는 capacity를 의도적으로 공유합니다.
 
 `codec`과 `compression` extra는 각각 strict encoded-text 헬퍼와 제한된
 gzip/zlib/raw-DEFLATE compressor를 설치합니다. Native compression extra는 LZ4

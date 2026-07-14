@@ -43,6 +43,9 @@ contracts change.
 - `bluetape-core` stays stdlib-only.
 - `bluetape-logging` stays stdlib-only around `logging`, `contextvars`, and
   caller-owned redaction helpers.
+- `bluetape-resilience` stays stdlib-only, keeps sync and async policy families
+  separate, and must not add a sync timeout, hidden workers, reset schedulers,
+  detached tasks, global registries, or package-owned logging state.
 - `bluetape-testing` may depend on `pytest`, starts internal-first, and should
   expose only the documented stable helper subset.
 - Planned ecosystem packages belong in issues, WIP, or research notes until

@@ -21,6 +21,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[logging]"
+pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"
 pip install "bluetape[testing]"
@@ -31,7 +32,7 @@ The meta distribution intentionally publishes no root `bluetape` import module.
 Focused packages own focused import paths such as `bluetape.asyncio`,
 `bluetape.cache`, `bluetape.cache.redis`, `bluetape.codec`, `bluetape.collections`,
 `bluetape.compression`, `bluetape.core`, `bluetape.logging`, `bluetape.serde`,
-and `bluetape.testing`.
+`bluetape.resilience`, and `bluetape.testing`.
 
 | Extra | Focused distribution | Import path | Default install |
 |---|---|---|---:|
@@ -46,6 +47,7 @@ and `bluetape.testing`.
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
+| `resilience` | `bluetape-resilience` | `bluetape.resilience` | no |
 | `serde` | `bluetape-serde` | `bluetape.serde` | no |
 | `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
 | `testing` | `bluetape-testing` | `bluetape.testing` | no |
@@ -59,6 +61,11 @@ The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited
 to `bluetape-core`.
 
+The `resilience` extra installs stdlib-only sync/async retry, circuit breaker,
+and bulkhead policies plus cooperative async timeout and immutable fluent
+pipelines. It adds no synchronous timeout, hidden worker, scheduler, or global
+registry. Reusing a policy instance intentionally shares its state or capacity.
+
 The `codec` and `compression` extras install strict encoded-text helpers and
 bounded gzip/zlib/raw-DEFLATE compressors respectively. The focused native
 compression extras add LZ4 frame, raw Snappy, or Zstandard frame support; the
@@ -71,7 +78,7 @@ currently requires CPython 3.13. Fory is intentionally excluded from the base,
 `serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `cache`,
 `cache-redis`, `codec`, `collections`, `compression`, `compression-lz4`,
 `compression-snappy`, `compression-zstd`, `compression-native`, `logging`,
-`serde`, `fory`, `testing`, `dev`, and `all`.
+`resilience`, `serde`, `fory`, `testing`, `dev`, and `all`.
 
 PyPI publication is currently on hold for this repository. The commands above
 describe the intended public install shape after publishing is enabled and are
