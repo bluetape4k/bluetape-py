@@ -118,6 +118,76 @@ def test_stale_failure_cannot_reopen_recovered_epoch() -> None:
     assert breaker.snapshot().state is CircuitState.CLOSED
 
 
+def test_stale_success_cannot_close_reopened_epoch() -> None:
+    clock = FakeClock()
+    breaker = CircuitBreaker(name="breaker", failure_threshold=1, open_duration=1, clock=clock)
+    entered = threading.Event()
+    release = threading.Event()
+
+    def late_success() -> None:
+        breaker.call(lambda: (entered.set(), release.wait(1))[1])
+
+    thread = threading.Thread(target=late_success)
+    thread.start()
+    assert entered.wait(1)
+    with pytest.raises(ValueError):
+        breaker.call(lambda: (_ for _ in ()).throw(ValueError("open")))
+    clock.advance(1)
+    with pytest.raises(ValueError):
+        breaker.call(lambda: (_ for _ in ()).throw(ValueError("reopen")))
+    assert breaker.snapshot().state is CircuitState.OPEN
+    release.set()
+    thread.join(1)
+    assert not thread.is_alive()
+    assert breaker.snapshot().state is CircuitState.OPEN
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("late_failure", [False, True])
+async def test_async_stale_completion_cannot_mutate_newer_epoch(late_failure: bool) -> None:
+    clock = FakeClock()
+    breaker = AsyncCircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def late_operation() -> str:
+        entered.set()
+        await release.wait()
+        if late_failure:
+            raise ValueError("late")
+        return "ok"
+
+    late_task = asyncio.create_task(breaker.call(late_operation))
+    await asyncio.wait_for(entered.wait(), 1)
+
+    async def fail(message: str) -> None:
+        raise ValueError(message)
+
+    with pytest.raises(ValueError):
+        await breaker.call(fail, "open")
+    clock.advance(1)
+    if late_failure:
+        assert await breaker.call(asyncio.sleep, 0, result="recovered") == "recovered"
+        expected = CircuitState.CLOSED
+    else:
+        with pytest.raises(ValueError):
+            await breaker.call(fail, "reopen")
+        expected = CircuitState.OPEN
+    assert (await breaker.snapshot()).state is expected
+    release.set()
+    if late_failure:
+        with pytest.raises(ValueError):
+            await asyncio.wait_for(late_task, 1)
+    else:
+        assert await asyncio.wait_for(late_task, 1) == "ok"
+    assert (await breaker.snapshot()).state is expected
+
+
 def test_predicate_error_and_admitted_observer_error_release_half_open_probe() -> None:
     clock = FakeClock()
     predicate_error = LookupError("predicate")
