@@ -24,6 +24,17 @@ its state or capacity across every pipeline that references it; create a new
 instance for isolation. Circuit recovery is lazy: no timer or worker changes an
 open circuit until a later call attempts admission.
 
+## Circuit Breaker state model
+
+![Circuit Breaker state transitions](../../docs/images/readme-diagrams/bluetape-resilience-circuit-breaker-state.png)
+
+Synchronous and asynchronous breakers share this state model. While `OPEN`,
+admissions fail with `CircuitOpenError`. At or after `open_until`, the next
+admission lazily enters `HALF_OPEN`; no timer or background worker changes the
+state. Enough successful probes close the circuit, while any classified probe
+failure reopens it. Ignored (`failure_if=False`) exceptions and asynchronous
+cancellation release an owned probe slot without counting as success or failure.
+
 ## How policy composition executes
 
 Each `.with_*()` returns a new pipeline. At runtime the last-added policy is

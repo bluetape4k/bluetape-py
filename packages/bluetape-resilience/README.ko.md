@@ -24,6 +24,17 @@ import합니다. 기본 `bluetape` 설치는 계속 core-only입니다. 현재 P
 새 instance를 만듭니다. Circuit recovery는 lazy 방식이며 timer나 worker가
 background에서 상태를 바꾸지 않고 다음 admission 시도에서만 회복을 검사합니다.
 
+## Circuit Breaker 상태 모델
+
+![Circuit Breaker 상태 전이](../../docs/images/readme-diagrams/bluetape-resilience-circuit-breaker-state.png)
+
+동기와 비동기 breaker는 이 상태 모델을 공유합니다. `OPEN` 상태에서는 admission이
+`CircuitOpenError`로 실패합니다. `open_until` 시각 이후 다음 admission이 lazy
+방식으로 `HALF_OPEN`에 진입하며 timer나 background worker가 상태를 바꾸지
+않습니다. 충분한 probe가 성공하면 circuit이 닫히고, classified probe failure가
+하나라도 발생하면 다시 열립니다. 무시한 (`failure_if=False`) exception과 비동기
+cancellation은 소유한 probe slot을 반환하지만 success나 failure로 계산하지 않습니다.
+
 ## Policy 조합 실행 순서
 
 각 `.with_*()`는 새 pipeline을 반환합니다. 실행 시 마지막에 추가한 policy가
