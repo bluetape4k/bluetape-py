@@ -33,7 +33,7 @@
   <rect x="38" y="30" width="1824" height="1040" rx="34" fill="#F1F8FC" stroke="#C9DFEA" stroke-width="3"/>
 
   <text x="950" y="88" text-anchor="middle" class="title" font-size="52" fill="#263B44">Circuit Breaker State Model</text>
-  <text x="950" y="128" text-anchor="middle" class="technical" font-size="22" fill="#5E7078">admission-driven transitions | bounded recovery probes</text>
+  <text x="950" y="128" text-anchor="middle" class="technical" font-size="22" fill="#5E7078">Sync and async breakers share admission-driven recovery; no timer changes state.</text>
 
   <g id="legend" class="technical" font-size="18" fill="#41545D">
     <line x1="155" y1="174" x2="225" y2="174" stroke="#A95D61" stroke-width="6" stroke-linecap="round"/>
@@ -101,13 +101,14 @@
     <text x="908" y="372" font-size="20" fill="#7E4448">classified failures</text>
     <text x="908" y="399" font-size="20" fill="#7E4448">&gt;= failure_threshold</text>
 
-    <rect class="label-box" x="842" y="497" width="400" height="106" rx="16" stroke="#D7BD87"/>
+    <rect class="label-box" x="820" y="497" width="444" height="106" rx="16" stroke="#D7BD87"/>
     <text x="1042" y="527" font-size="18" fill="#76561D">FIRST ADMISSION AT OR AFTER open_until</text>
     <text x="1042" y="557" font-size="20" fill="#76561D">OPEN -&gt; HALF_OPEN</text>
     <text x="1042" y="586" font-size="18" fill="#76561D">lazy transition - checked on admission</text>
 
-    <rect class="label-box" x="350" y="752" width="438" height="62" rx="16" stroke="#B7C8A9"/>
-    <text x="569" y="790" font-size="19" fill="#536D3E">recovery_successes &gt;= recovery_success_threshold</text>
+    <rect class="label-box" x="350" y="748" width="440" height="82" rx="16" stroke="#B7C8A9"/>
+    <text x="570" y="779" font-size="19" fill="#536D3E">recovery_successes &gt;=</text>
+    <text x="570" y="808" font-size="19" fill="#536D3E">recovery_success_threshold</text>
 
     <rect class="label-box" x="1542" y="500" width="278" height="104" rx="16" stroke="#D8AEB1"/>
     <text x="1681" y="530" font-size="18" fill="#7E4448">any classified</text>
@@ -117,9 +118,9 @@
 
   <!-- Rejection decisions are dashed loops and never change state. -->
   <g id="rejection-labels" class="technical" text-anchor="middle">
-    <rect class="label-box" x="1120" y="144" width="300" height="58" rx="15" stroke="#AAB7BC"/>
-    <text x="1270" y="166" font-size="17" fill="#41545D">CircuitOpenError before open_until</text>
-    <text x="1270" y="190" font-size="18" fill="#41545D">state unchanged</text>
+    <rect class="label-box" x="1020" y="144" width="400" height="58" rx="15" stroke="#AAB7BC"/>
+    <text x="1220" y="166" font-size="17" fill="#41545D">CircuitOpenError before open_until</text>
+    <text x="1220" y="190" font-size="18" fill="#41545D">state unchanged</text>
 
     <rect class="label-box" x="1118" y="930" width="452" height="92" rx="15" stroke="#AAB7BC"/>
     <text x="1344" y="958" font-size="18" fill="#41545D">CircuitOpenError when</text>
