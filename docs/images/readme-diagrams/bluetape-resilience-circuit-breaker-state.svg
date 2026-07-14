@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1100" viewBox="0 0 1900 1100" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">Circuit Breaker State Model</title>
+  <desc id="diagram-desc">Admission-driven circuit breaker states, transitions, rejection decisions, and probe invariants.</desc>
+
+  <defs>
+    <marker id="arrow-red" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#A95D61"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#A97924"/>
+    </marker>
+    <marker id="arrow-olive" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#64834A"/>
+    </marker>
+    <marker id="arrow-neutral" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#41545D"/>
+    </marker>
+  </defs>
+
+  <style>
+    .title, .state-name { font-family: 'Architects Daughter', 'Comic Sans MS', cursive; }
+    .technical { font-family: 'Comic Mono', 'SFMono-Regular', Consolas, monospace; }
+    .connector { fill: none; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+    .state-transition { stroke-width: 6; }
+    .rejection-decision { stroke: #41545D; stroke-dasharray: 15 12; marker-end: url(#arrow-neutral); }
+    .initial-transition { stroke: #41545D; marker-end: url(#arrow-neutral); }
+    .state-card { stroke-width: 4; }
+    .label-box { fill: #F8FCFE; stroke-width: 2; }
+  </style>
+
+  <rect width="1900" height="1100" fill="#FFFFFF"/>
+  <rect x="38" y="30" width="1824" height="1040" rx="34" fill="#F1F8FC" stroke="#C9DFEA" stroke-width="3"/>
+
+  <text x="950" y="88" text-anchor="middle" class="title" font-size="52" fill="#263B44">Circuit Breaker State Model</text>
+  <text x="950" y="128" text-anchor="middle" class="technical" font-size="22" fill="#5E7078">admission-driven transitions | bounded recovery probes</text>
+
+  <g id="legend" class="technical" font-size="18" fill="#41545D">
+    <line x1="155" y1="174" x2="225" y2="174" stroke="#A95D61" stroke-width="6" stroke-linecap="round"/>
+    <text x="240" y="181">state transition</text>
+    <line x1="440" y1="174" x2="510" y2="174" stroke="#41545D" stroke-width="5" stroke-linecap="round" stroke-dasharray="15 12"/>
+    <text x="525" y="181">rejection - state unchanged</text>
+  </g>
+
+  <!-- Connectors render beneath cards and labels. -->
+  <g id="connectors">
+    <path id="initial-closed" class="connector initial-transition" d="M 111 535 H 170"/>
+
+    <path id="transition-closed-open" class="connector state-transition" d="M 690 430 H 1120" stroke="#A95D61" marker-end="url(#arrow-red)"/>
+    <path id="transition-open-half-open" class="connector state-transition" d="M 1290 465 V 650" stroke="#A97924" marker-end="url(#arrow-amber)"/>
+    <path id="transition-half-open-closed" class="connector state-transition" d="M 1100 820 H 850 Q 830 820 830 800 V 750 Q 830 730 810 730 H 570 Q 550 730 550 710 V 680" stroke="#64834A" marker-end="url(#arrow-olive)"/>
+    <path id="transition-half-open-open" class="connector state-transition" d="M 1510 650 V 465" stroke="#A95D61" marker-end="url(#arrow-red)"/>
+
+    <path id="rejection-open" class="connector rejection-decision" d="M 1450 215 V 183 Q 1450 163 1470 163 H 1782 Q 1802 163 1802 183 V 322 Q 1802 342 1782 342 H 1700"/>
+    <path id="rejection-half-open" class="connector rejection-decision" d="M 1700 758 H 1778 Q 1798 758 1798 778 V 958 Q 1798 978 1778 978 H 1620 Q 1600 978 1600 958 V 910"/>
+  </g>
+
+  <g id="initial-state" class="initial-node">
+    <circle cx="95" cy="535" r="16" fill="#41545D"/>
+  </g>
+
+  <g id="state-closed" class="state-node">
+    <rect class="state-card" x="170" y="390" width="520" height="290" rx="28" fill="#EDF5FC" stroke="#4F83BF"/>
+    <text x="430" y="449" text-anchor="middle" class="state-name" font-size="42" fill="#315F92">CLOSED</text>
+    <line x1="202" y1="475" x2="658" y2="475" stroke="#AFCBE0" stroke-width="3"/>
+    <g class="technical" font-size="22" fill="#334A54">
+      <text x="208" y="521">• admit calls</text>
+      <text x="208" y="562">• success resets</text>
+      <text x="236" y="593">consecutive_failures</text>
+      <text x="208" y="634">• classified failure increments counter</text>
+    </g>
+  </g>
+
+  <g id="state-open" class="state-node">
+    <rect class="state-card" x="1120" y="215" width="580" height="250" rx="28" fill="#FBEFF0" stroke="#A95D61"/>
+    <text x="1410" y="269" text-anchor="middle" class="state-name" font-size="42" fill="#88454A">OPEN</text>
+    <line x1="1152" y1="294" x2="1668" y2="294" stroke="#DFC0C2" stroke-width="3"/>
+    <g class="technical" font-size="21" fill="#4E4043">
+      <text x="1158" y="337">• reject before open_until</text>
+      <text x="1158" y="377">• entering sets open_until = now + open_duration</text>
+      <text x="1158" y="417">• no timer or worker; admission checks the boundary</text>
+    </g>
+  </g>
+
+  <g id="state-half-open" class="state-node">
+    <rect class="state-card" x="1100" y="650" width="600" height="260" rx="28" fill="#FFF7E8" stroke="#A97924"/>
+    <text x="1400" y="706" text-anchor="middle" class="state-name" font-size="40" fill="#855C18">HALF_OPEN</text>
+    <line x1="1132" y1="731" x2="1668" y2="731" stroke="#E2CA9C" stroke-width="3"/>
+    <g class="technical" font-size="21" fill="#4D473B">
+      <text x="1138" y="773">• bounded concurrent probes</text>
+      <text x="1138" y="813">• success increments recovery_successes</text>
+      <text x="1138" y="853">• ignored or cancelled releases slot</text>
+      <text x="1166" y="883">without count</text>
+    </g>
+  </g>
+
+  <!-- Transition labels. -->
+  <g id="transition-labels" class="technical" text-anchor="middle">
+    <rect class="label-box" x="742" y="342" width="332" height="70" rx="16" stroke="#D8AEB1"/>
+    <text x="908" y="372" font-size="20" fill="#7E4448">classified failures</text>
+    <text x="908" y="399" font-size="20" fill="#7E4448">&gt;= failure_threshold</text>
+
+    <rect class="label-box" x="842" y="497" width="400" height="106" rx="16" stroke="#D7BD87"/>
+    <text x="1042" y="527" font-size="18" fill="#76561D">FIRST ADMISSION AT OR AFTER open_until</text>
+    <text x="1042" y="557" font-size="20" fill="#76561D">OPEN -&gt; HALF_OPEN</text>
+    <text x="1042" y="586" font-size="18" fill="#76561D">lazy transition - checked on admission</text>
+
+    <rect class="label-box" x="350" y="752" width="438" height="62" rx="16" stroke="#B7C8A9"/>
+    <text x="569" y="790" font-size="19" fill="#536D3E">recovery_successes &gt;= recovery_success_threshold</text>
+
+    <rect class="label-box" x="1542" y="500" width="278" height="104" rx="16" stroke="#D8AEB1"/>
+    <text x="1681" y="530" font-size="18" fill="#7E4448">any classified</text>
+    <text x="1681" y="558" font-size="18" fill="#7E4448">probe failure</text>
+    <text x="1681" y="586" font-size="18" fill="#7E4448">new open interval</text>
+  </g>
+
+  <!-- Rejection decisions are dashed loops and never change state. -->
+  <g id="rejection-labels" class="technical" text-anchor="middle">
+    <rect class="label-box" x="1120" y="144" width="300" height="58" rx="15" stroke="#AAB7BC"/>
+    <text x="1270" y="166" font-size="17" fill="#41545D">CircuitOpenError before open_until</text>
+    <text x="1270" y="190" font-size="18" fill="#41545D">state unchanged</text>
+
+    <rect class="label-box" x="1118" y="930" width="452" height="92" rx="15" stroke="#AAB7BC"/>
+    <text x="1344" y="958" font-size="18" fill="#41545D">CircuitOpenError when</text>
+    <text x="1344" y="984" font-size="18" fill="#41545D">in-flight &gt;= half_open_max_calls</text>
+    <text x="1344" y="1010" font-size="18" fill="#41545D">state unchanged</text>
+  </g>
+
+  <g id="invariant-note" class="invariant-note">
+    <rect x="150" y="852" width="850" height="170" rx="24" fill="#EAF7F6" stroke="#2E8F89" stroke-width="3"/>
+    <text x="184" y="891" class="title" font-size="29" fill="#24726D">Probe outcome invariants</text>
+    <g class="technical" font-size="19" fill="#36565B">
+      <text x="184" y="927">ignored exception (failure_if=False): release probe slot; not counted</text>
+      <text x="184" y="962">async cancellation: release probe slot; not counted</text>
+      <text x="184" y="997">stale generation outcomes cannot mutate current state</text>
+    </g>
+  </g>
+</svg>
