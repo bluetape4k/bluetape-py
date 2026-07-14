@@ -270,6 +270,19 @@ paths. Canvas contracts were `canvas_root=1` (`1900x1100`, matching viewBox),
 `canvas_background=1`, and `canvas_frame=1`; external `<image>` and `<symbol>`
 counts were both zero.
 
+Marker provenance: the approved implementation plan at
+`docs/superpowers/plans/2026-07-14-issue-12-circuit-breaker-state-diagram.md:127`
+originally specified uniform `13x13` markers. The governing Bluetape common
+diagram standard requires primary flow/progression markers at `14x14` and
+secondary/static relationships at `10x10`
+(`bluetape-diagram/SKILL.md:56-58` and
+`bluetape-diagram/references/common.md:67-75`). Review-driven repair commit
+`c6591d97c7f6cecf30ab44243c22b73fc554f0bf` intentionally superseded the
+obsolete plan value: real state-changing transitions use `14x14`, while the
+initial guide and state-unchanged rejection relationships use the neutral
+`10x10` marker. This is a standards correction, not unexplained plan
+noncompliance; no behavior or topology changed.
+
 State claims map directly to current behavior:
 
 | Diagram claim | Source/test mapping |
