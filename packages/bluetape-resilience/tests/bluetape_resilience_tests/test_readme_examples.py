@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE_ROOT = Path(__file__).parents[1]
-REPOSITORY_ROOT = Path(__file__).parents[3]
+PACKAGE_ROOT = Path(__file__).parents[2]
+REPOSITORY_ROOT = Path(__file__).parents[4]
 
 
 def _read(path: Path) -> str:

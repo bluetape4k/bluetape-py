@@ -12,7 +12,7 @@ from bluetape.resilience import (
     EventKind,
 )
 
-from ._support import FakeClock
+from .resilience_support import FakeClock
 
 
 def test_circuit_constructor_validates_without_invoking_callbacks() -> None:
