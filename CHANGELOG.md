@@ -22,6 +22,12 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in, stdlib-only `bluetape-resilience` package with separate
+  sync/async retry, circuit breaker, and bulkhead policies, cooperative async
+  timeout, deterministic backoff, typed low-cardinality events, immutable state
+  snapshots, and immutable fluent decorator pipelines. The package has no
+  synchronous timeout, hidden workers, reset schedulers, detached tasks, or
+  global registry and remains under the repository-wide PyPI publication hold.
 - Add a private, stdlib-only `bluetape-benchmark` workspace distribution and a
   bounded Redis coordination benchmark with sync/async correctness evidence,
   spawn/cancellation containment, atomic schema-v1 reports, paired comparison,

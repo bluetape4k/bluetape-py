@@ -24,6 +24,7 @@ Current public distributions:
 - `bluetape-compression`
 - `bluetape-core`
 - `bluetape-logging`
+- `bluetape-resilience`
 - `bluetape-serde`
 - `bluetape-testing`
 
@@ -101,6 +102,16 @@ provider-dependent `bluetape.serde.fory` module and is available only through
 the CPython 3.13 `bluetape-serde[fory]` or forwarding `bluetape[fory]` extra.
 It must not leak into the base, `serde`, `dev`, or `all` dependency sets or
 become an implicit decoder fallback.
+
+`bluetape-resilience` owns `bluetape.resilience` and is available from the
+focused distribution or explicit `bluetape[resilience]` meta extra. It is
+stdlib-only and provides separate sync/async retry, circuit breaker, and
+bulkhead policy families, cooperative async timeout, and immutable fluent
+pipelines. It is not part of the core-only default install. The package must not
+add a synchronous timeout, hidden worker, detached task, reset scheduler,
+global registry, or package-owned logger. Policy instances retain their own
+state or capacity, and pipelines share that state only by retaining the caller's
+explicit instance.
 
 Applications own Fory route identity as a fixed
 `(schema_id, schema_version, type_id)` tuple mapped to one exact registered root
