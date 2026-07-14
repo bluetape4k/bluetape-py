@@ -67,7 +67,7 @@
       <text x="208" y="521">• admit calls</text>
       <text x="208" y="562">• success resets</text>
       <text x="236" y="593">consecutive_failures</text>
-      <text x="208" y="634">• classified failure increments counter</text>
+      <text x="208" y="634">• classified failure: counter +1</text>
     </g>
   </g>
 
@@ -76,9 +76,10 @@
     <text x="1410" y="269" text-anchor="middle" class="state-name" font-size="42" fill="#88454A">OPEN</text>
     <line x1="1152" y1="294" x2="1668" y2="294" stroke="#DFC0C2" stroke-width="3"/>
     <g class="technical" font-size="21" fill="#4E4043">
-      <text x="1158" y="337">• reject before open_until</text>
-      <text x="1158" y="377">• entering sets open_until = now + open_duration</text>
-      <text x="1158" y="417">• no timer or worker; admission checks the boundary</text>
+      <text x="1158" y="333">• reject before open_until</text>
+      <text x="1158" y="367">• entering sets</text>
+      <text x="1186" y="399">open_until = now + open_duration</text>
+      <text x="1158" y="431">• no timer/worker; checked on admission</text>
     </g>
   </g>
 
