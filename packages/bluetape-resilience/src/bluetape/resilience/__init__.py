@@ -3,6 +3,7 @@
 from pkgutil import extend_path
 
 from bluetape.resilience._backoff import Backoff, constant_backoff, exponential_backoff
+from bluetape.resilience._bulkhead import AsyncBulkhead, Bulkhead
 from bluetape.resilience._circuit import AsyncCircuitBreaker, CircuitBreaker
 from bluetape.resilience._core import (
     BulkheadRejectedError,
@@ -28,6 +29,8 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "AsyncRetry",
     "CircuitBreaker",
     "AsyncCircuitBreaker",
+    "Bulkhead",
+    "AsyncBulkhead",
     "AsyncTimeout",
     "Backoff",
     "constant_backoff",
