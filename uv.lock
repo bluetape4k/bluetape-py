@@ -15,6 +15,7 @@ members = [
     "bluetape-core",
     "bluetape-logging",
     "bluetape-py-workspace",
+    "bluetape-resilience",
     "bluetape-serde",
     "bluetape-testcontainers",
     "bluetape-testing",
@@ -265,6 +266,7 @@ dependencies = [
     { name = "bluetape-compression" },
     { name = "bluetape-core" },
     { name = "bluetape-logging" },
+    { name = "bluetape-resilience" },
     { name = "bluetape-serde" },
     { name = "bluetape-testcontainers" },
     { name = "bluetape-testing" },
@@ -287,6 +289,7 @@ requires-dist = [
     { name = "bluetape-compression", editable = "packages/bluetape-compression" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-logging", editable = "packages/bluetape-logging" },
+    { name = "bluetape-resilience", editable = "packages/bluetape-resilience" },
     { name = "bluetape-serde", editable = "packages/bluetape-serde" },
     { name = "bluetape-testcontainers", editable = "packages/bluetape-testcontainers" },
     { name = "bluetape-testing", editable = "packages/bluetape-testing" },
@@ -298,6 +301,11 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.1.0" },
     { name = "ruff", specifier = ">=0.12.0" },
 ]
+
+[[package]]
+name = "bluetape-resilience"
+version = "0.1.0"
+source = { editable = "packages/bluetape-resilience" }
 
 [[package]]
 name = "bluetape-serde"
