@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2100" height="1380" viewBox="0 0 2100 1380" role="img" aria-label="Asynchronous Resilience Pipeline sequence">
+  <defs>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="124%">
+      <feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#203040" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-blue" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#4F83BF" stroke="#4F83BF" stroke-dasharray="none"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#64834A" stroke="#64834A" stroke-dasharray="none"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#A97924" stroke="#A97924" stroke-dasharray="none"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#2E8F89" stroke="#2E8F89" stroke-dasharray="none"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#A95D61" stroke="#A95D61" stroke-dasharray="none"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="13" markerHeight="13" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#755BC6" stroke="#755BC6" stroke-dasharray="none"/>
+    </marker>
+    <style>
+      .canvas{fill:#F6F9FC}
+      .frame{fill:#FBFCF8;stroke:#41545D;stroke-width:3;filter:url(#shadow)}
+      .title{font-family:"Architects Daughter",ui-rounded,system-ui,sans-serif;font-size:42px;fill:#263238}
+      .subtitle,.detail,.footer,.config{font-family:"Comic Mono",ui-monospace,SFMono-Regular,Menlo,monospace;fill:#36464F}
+      .subtitle{font-size:16px}.config{font-size:14px}.footer{font-size:15px}
+      rect.participant{fill:#FFFFFF;stroke:#546E7A;stroke-width:2;filter:url(#shadow)}
+      .participantTitle{font-family:"Architects Daughter",ui-rounded,system-ui,sans-serif;font-size:20px;fill:#1F3138}
+      .participantRole{font-family:"Comic Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;fill:#60727D}
+      .lifeline{stroke:#9AAAB1;stroke-width:2;stroke-dasharray:7 8}
+      .activation{stroke-width:1.5}
+      .seq,.call{fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+      .seqReturn,.return{fill:none;stroke-width:2.5;stroke-dasharray:8 6;stroke-linecap:round;stroke-linejoin:round}
+      .labelPill,.label{fill:#FFFFFF;stroke-width:1.4}
+      .detail{font-size:13px;font-weight:700}
+      .altBox,.loopFrame{fill:#EEF7F0;fill-opacity:.12;stroke:#78909C;stroke-width:2.4;stroke-dasharray:12 7}
+      .branchDivider{stroke:#78909C;stroke-width:2;stroke-dasharray:10 8}
+    </style>
+  </defs>
+
+  <rect class="canvas" width="2100" height="1380"/>
+  <rect class="frame" x="32" y="28" width="2036" height="1324" rx="30"/>
+  <text class="title" x="70" y="82">Asynchronous Resilience Pipeline</text>
+  <text class="subtitle" x="74" y="114">One cooperative task flows through every policy; cancellation identity is preserved.</text>
+
+  <rect x="74" y="136" width="1952" height="42" rx="12" fill="#FFFFFF" stroke="#D7E0E4" stroke-width="1.6"/>
+  <text class="config" x="1050" y="162" text-anchor="middle">configured: circuit -&gt; retry -&gt; timeout -&gt; bulkhead   |   runtime: bulkhead -&gt; timeout -&gt; retry -&gt; circuit -&gt; operation</text>
+
+  <g id="participant-caller">
+    <rect class="participant" x="55" y="205" width="190" height="76" rx="12"/>
+    <text class="participant participantTitle" x="150" y="242" text-anchor="middle">Caller</text>
+    <text class="participantRole" x="150" y="264" text-anchor="middle">await decorated call</text>
+    <line class="lifeline" x1="150" y1="281" x2="150" y2="1275"/>
+  </g>
+  <g id="participant-pipeline">
+    <rect class="participant" x="300" y="205" width="260" height="76" rx="12"/>
+    <text class="participant participantTitle" x="430" y="242" text-anchor="middle">AsyncResiliencePipeline</text>
+    <text class="participantRole" x="430" y="264" text-anchor="middle">immutable wrapper builder</text>
+    <line class="lifeline" x1="430" y1="281" x2="430" y2="1275"/>
+  </g>
+  <g id="participant-bulkhead">
+    <rect class="participant" x="610" y="205" width="240" height="76" rx="12"/>
+    <text class="participant participantTitle" x="730" y="242" text-anchor="middle">AsyncBulkhead</text>
+    <text class="participantRole" x="730" y="264" text-anchor="middle">bounded async admission</text>
+    <line class="lifeline" x1="730" y1="281" x2="730" y2="1275"/>
+  </g>
+  <g id="participant-timeout">
+    <rect class="participant" x="890" y="205" width="240" height="76" rx="12"/>
+    <text class="participant participantTitle" x="1010" y="242" text-anchor="middle">AsyncTimeout</text>
+    <text class="participantRole" x="1010" y="264" text-anchor="middle">asyncio.timeout context</text>
+    <line class="lifeline" x1="1010" y1="281" x2="1010" y2="1275"/>
+  </g>
+  <g id="participant-retry">
+    <rect class="participant" x="1170" y="205" width="240" height="76" rx="12"/>
+    <text class="participant participantTitle" x="1290" y="242" text-anchor="middle">AsyncRetry</text>
+    <text class="participantRole" x="1290" y="264" text-anchor="middle">bounded attempts</text>
+    <line class="lifeline" x1="1290" y1="281" x2="1290" y2="1275"/>
+  </g>
+  <g id="participant-circuit">
+    <rect class="participant" x="1460" y="205" width="260" height="76" rx="12"/>
+    <text class="participant participantTitle" x="1590" y="242" text-anchor="middle">AsyncCircuitBreaker</text>
+    <text class="participantRole" x="1590" y="264" text-anchor="middle">stateful async admission</text>
+    <line class="lifeline" x1="1590" y1="281" x2="1590" y2="1275"/>
+  </g>
+  <g id="participant-operation">
+    <rect class="participant" x="1810" y="205" width="220" height="76" rx="12"/>
+    <text class="participant participantTitle" x="1920" y="242" text-anchor="middle">Async Operation</text>
+    <text class="participantRole" x="1920" y="264" text-anchor="middle">caller-owned coroutine</text>
+    <line class="lifeline" x1="1920" y1="281" x2="1920" y2="1275"/>
+  </g>
+
+  <rect class="activation" x="422" y="332" width="16" height="936" rx="5" fill="#EAF4F8" stroke="#4F83BF"/>
+  <rect class="activation" x="722" y="402" width="16" height="796" rx="5" fill="#FFF7E8" stroke="#A97924"/>
+  <rect class="activation" x="1002" y="472" width="16" height="656" rx="5" fill="#F3ECFF" stroke="#755BC6"/>
+  <rect class="activation" x="1282" y="542" width="16" height="373" rx="5" fill="#EEF7F0" stroke="#64834A"/>
+  <rect class="activation" x="1582" y="612" width="16" height="238" rx="5" fill="#FFF0F0" stroke="#A95D61"/>
+  <rect class="activation" x="1912" y="682" width="16" height="108" rx="5" fill="#EAF7F6" stroke="#2E8F89"/>
+
+  <g id="message-1">
+    <rect class="labelPill label" x="185" y="296" width="210" height="32" rx="16" stroke="#4F83BF"/>
+    <circle cx="205" cy="312" r="12" fill="#EAF4F8" stroke="#4F83BF"/>
+    <text class="detail" x="205" y="313" text-anchor="middle" dominant-baseline="middle" fill="#4F83BF">1</text>
+    <text class="detail" x="300" y="313" text-anchor="middle" dominant-baseline="middle">await decorated call</text>
+    <path class="seq call" d="M 150 340 L 430 340" stroke="#4F83BF" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <g id="message-2">
+    <rect class="labelPill label" x="470" y="366" width="220" height="32" rx="16" stroke="#A97924"/>
+    <circle cx="490" cy="382" r="12" fill="#FFF7E8" stroke="#A97924"/>
+    <text class="detail" x="490" y="383" text-anchor="middle" dominant-baseline="middle" fill="#A97924">2</text>
+    <text class="detail" x="592" y="383" text-anchor="middle" dominant-baseline="middle">acquire async permit</text>
+    <path class="seq call" d="M 430 410 L 730 410" stroke="#A97924" marker-end="url(#arrow-amber)"/>
+  </g>
+
+  <g id="message-3">
+    <rect class="labelPill label" x="760" y="436" width="220" height="32" rx="16" stroke="#4F83BF"/>
+    <circle cx="780" cy="452" r="12" fill="#EAF4F8" stroke="#4F83BF"/>
+    <text class="detail" x="780" y="453" text-anchor="middle" dominant-baseline="middle" fill="#4F83BF">3</text>
+    <text class="detail" x="882" y="453" text-anchor="middle" dominant-baseline="middle">enter timeout context</text>
+    <path class="seq call" d="M 730 480 L 1010 480" stroke="#4F83BF" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <rect class="loopFrame" x="1140" y="505" width="840" height="395" rx="18"/>
+  <rect class="labelPill label" x="1164" y="489" width="286" height="32" rx="16" stroke="#64834A"/>
+  <text class="detail" x="1307" y="506" text-anchor="middle" dominant-baseline="middle">loop retryable failure / max_attempts</text>
+
+  <g id="message-4">
+    <rect class="labelPill label" x="1040" y="526" width="220" height="32" rx="16" stroke="#64834A"/>
+    <circle cx="1060" cy="542" r="12" fill="#EEF7F0" stroke="#64834A"/>
+    <text class="detail" x="1060" y="543" text-anchor="middle" dominant-baseline="middle" fill="#64834A">4</text>
+    <text class="detail" x="1162" y="543" text-anchor="middle" dominant-baseline="middle">begin bounded attempt</text>
+    <path class="seq call" d="M 1010 570 L 1290 570" stroke="#64834A" marker-end="url(#arrow-green)"/>
+  </g>
+
+  <g id="message-5">
+    <rect class="labelPill label" x="1330" y="596" width="230" height="32" rx="16" stroke="#A95D61"/>
+    <circle cx="1350" cy="612" r="12" fill="#FFF0F0" stroke="#A95D61"/>
+    <text class="detail" x="1350" y="613" text-anchor="middle" dominant-baseline="middle" fill="#A95D61">5</text>
+    <text class="detail" x="1457" y="613" text-anchor="middle" dominant-baseline="middle">request circuit admission</text>
+    <path class="seq call" d="M 1290 640 L 1590 640" stroke="#A95D61" marker-end="url(#arrow-red)"/>
+  </g>
+
+  <g id="message-6">
+    <rect class="labelPill label" x="1630" y="666" width="250" height="32" rx="16" stroke="#4F83BF"/>
+    <circle cx="1650" cy="682" r="12" fill="#EAF4F8" stroke="#4F83BF"/>
+    <text class="detail" x="1650" y="683" text-anchor="middle" dominant-baseline="middle" fill="#4F83BF">6</text>
+    <text class="detail" x="1765" y="683" text-anchor="middle" dominant-baseline="middle">await caller coroutine</text>
+    <path class="seq call" d="M 1590 710 L 1920 710" stroke="#4F83BF" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <g id="message-7">
+    <rect class="labelPill label" x="1605" y="736" width="290" height="32" rx="16" stroke="#2E8F89"/>
+    <circle cx="1625" cy="752" r="12" fill="#EAF7F6" stroke="#2E8F89"/>
+    <text class="detail" x="1625" y="753" text-anchor="middle" dominant-baseline="middle" fill="#2E8F89">7</text>
+    <text class="detail" x="1768" y="753" text-anchor="middle" dominant-baseline="middle">value / failure / cancellation</text>
+    <path class="seqReturn return" d="M 1920 780 L 1590 780" stroke="#2E8F89" marker-end="url(#arrow-teal)"/>
+  </g>
+
+  <g id="message-8">
+    <rect class="labelPill label" x="1330" y="801" width="230" height="32" rx="16" stroke="#A95D61"/>
+    <circle cx="1350" cy="817" r="12" fill="#FFF0F0" stroke="#A95D61"/>
+    <text class="detail" x="1350" y="818" text-anchor="middle" dominant-baseline="middle" fill="#A95D61">8</text>
+    <text class="detail" x="1457" y="818" text-anchor="middle" dominant-baseline="middle">record or preserve cancel</text>
+    <path class="seqReturn return" d="M 1590 845 L 1290 845" stroke="#A95D61" marker-end="url(#arrow-red)"/>
+  </g>
+
+  <g id="message-9">
+    <rect class="labelPill label" x="1040" y="846" width="220" height="32" rx="16" stroke="#64834A"/>
+    <circle cx="1060" cy="862" r="12" fill="#EEF7F0" stroke="#64834A"/>
+    <text class="detail" x="1060" y="863" text-anchor="middle" dominant-baseline="middle" fill="#64834A">9</text>
+    <text class="detail" x="1162" y="863" text-anchor="middle" dominant-baseline="middle">final retry outcome</text>
+    <path class="seqReturn return" d="M 1290 890 L 1010 890" stroke="#64834A" marker-end="url(#arrow-green)"/>
+  </g>
+
+  <rect class="altBox" x="665" y="925" width="410" height="230" rx="16"/>
+  <rect class="labelPill label" x="690" y="909" width="310" height="32" rx="16" stroke="#78909C"/>
+  <text class="detail" x="845" y="926" text-anchor="middle" dominant-baseline="middle">alt timeout and cancellation semantics</text>
+  <line class="branchDivider" x1="665" y1="995" x2="1075" y2="995"/>
+  <line class="branchDivider" x1="665" y1="1065" x2="1075" y2="1065"/>
+
+  <g id="message-10">
+    <rect class="labelPill label" x="740" y="936" width="260" height="32" rx="16" stroke="#2E8F89"/>
+    <circle cx="760" cy="952" r="12" fill="#EAF7F6" stroke="#2E8F89"/>
+    <text class="detail" x="760" y="953" text-anchor="middle" dominant-baseline="middle" fill="#2E8F89">10</text>
+    <text class="detail" x="875" y="953" text-anchor="middle" dominant-baseline="middle">value or operation failure</text>
+    <path class="seqReturn return" d="M 1010 980 L 730 980" stroke="#2E8F89" marker-end="url(#arrow-teal)"/>
+  </g>
+
+  <g id="message-11">
+    <rect class="labelPill label" x="720" y="1006" width="300" height="32" rx="16" stroke="#A95D61"/>
+    <circle cx="740" cy="1022" r="12" fill="#FFF0F0" stroke="#A95D61"/>
+    <text class="detail" x="740" y="1023" text-anchor="middle" dominant-baseline="middle" fill="#A95D61">11</text>
+    <text class="detail" x="875" y="1023" text-anchor="middle" dominant-baseline="middle">own expiry: PolicyTimeoutError</text>
+    <path class="seqReturn return" d="M 1010 1050 L 730 1050" stroke="#A95D61" marker-end="url(#arrow-red)"/>
+  </g>
+
+  <g id="message-12">
+    <rect class="labelPill label" x="700" y="1076" width="340" height="32" rx="16" stroke="#755BC6"/>
+    <circle cx="720" cy="1092" r="12" fill="#F3ECFF" stroke="#755BC6"/>
+    <text class="detail" x="720" y="1093" text-anchor="middle" dominant-baseline="middle" fill="#755BC6">12</text>
+    <text class="detail" x="875" y="1093" text-anchor="middle" dominant-baseline="middle">external CancelledError unchanged</text>
+    <path class="seqReturn return" d="M 1010 1120 L 730 1120" stroke="#755BC6" marker-end="url(#arrow-purple)"/>
+  </g>
+
+  <g id="message-13">
+    <rect class="labelPill label" x="460" y="1146" width="240" height="32" rx="16" stroke="#A97924"/>
+    <circle cx="480" cy="1162" r="12" fill="#FFF7E8" stroke="#A97924"/>
+    <text class="detail" x="480" y="1163" text-anchor="middle" dominant-baseline="middle" fill="#A97924">13</text>
+    <text class="detail" x="592" y="1163" text-anchor="middle" dominant-baseline="middle">release acquired permit</text>
+    <path class="seqReturn return" d="M 730 1190 L 430 1190" stroke="#A97924" marker-end="url(#arrow-amber)"/>
+  </g>
+
+  <g id="message-14">
+    <rect class="labelPill label" x="175" y="1216" width="230" height="32" rx="16" stroke="#4F83BF"/>
+    <circle cx="195" cy="1232" r="12" fill="#EAF4F8" stroke="#4F83BF"/>
+    <text class="detail" x="195" y="1233" text-anchor="middle" dominant-baseline="middle" fill="#4F83BF">14</text>
+    <text class="detail" x="300" y="1233" text-anchor="middle" dominant-baseline="middle">return / raise / cancel</text>
+    <path class="seqReturn return" d="M 430 1260 L 150 1260" stroke="#4F83BF" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <rect x="220" y="1290" width="1660" height="42" rx="12" fill="#FFFFFF" stroke="#D7E0E4" stroke-width="1.6"/>
+  <text class="footer" x="1050" y="1317" text-anchor="middle">One cooperative task: reverse cleanup releases the permit, and no detached task outlives the caller.</text>
+</svg>
