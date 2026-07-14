@@ -24,6 +24,27 @@ import합니다. 기본 `bluetape` 설치는 계속 core-only입니다. 현재 P
 새 instance를 만듭니다. Circuit recovery는 lazy 방식이며 timer나 worker가
 background에서 상태를 바꾸지 않고 다음 admission 시도에서만 회복을 검사합니다.
 
+## Policy 조합 실행 순서
+
+각 `.with_*()`는 새 pipeline을 반환합니다. 실행 시 마지막에 추가한 policy가
+가장 바깥 wrapper가 되어 먼저 실행되고, cleanup은 반대 순서로 진행됩니다.
+
+### 동기 pipeline
+
+![동기 resilience pipeline sequence](../../docs/images/readme-diagrams/bluetape-resilience-sync-sequence.png)
+
+동기 pipeline은 bulkhead, retry, circuit breaker policy를 조합합니다. 호출보다
+오래 살거나 호출을 선점할 수 있는 worker를 패키지가 소유하지 않으므로 timeout은
+의도적으로 제공하지 않습니다.
+
+### 비동기 pipeline
+
+![비동기 resilience pipeline sequence](../../docs/images/readme-diagrams/bluetape-resilience-async-sequence.png)
+
+비동기 pipeline은 cooperative `asyncio.timeout()` 처리를 추가합니다. Policy가
+소유한 timeout은 `PolicyTimeoutError`가 되고, 외부 cancellation은 cleanup 뒤에도
+변경 없이 전파됩니다.
+
 ## 동기 사용
 
 <!-- resilience-example:sync:start -->
