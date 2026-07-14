@@ -24,6 +24,27 @@ its state or capacity across every pipeline that references it; create a new
 instance for isolation. Circuit recovery is lazy: no timer or worker changes an
 open circuit until a later call attempts admission.
 
+## How policy composition executes
+
+Each `.with_*()` returns a new pipeline. At runtime the last-added policy is
+the outermost wrapper and runs first; cleanup unwinds in reverse order.
+
+### Synchronous pipeline
+
+![Synchronous resilience pipeline sequence](../../docs/images/readme-diagrams/bluetape-resilience-sync-sequence.png)
+
+The synchronous pipeline composes bulkhead, retry, and circuit-breaker policies.
+It deliberately has no timeout because the package does not own a worker that
+could safely outlive or preempt the call.
+
+### Asynchronous pipeline
+
+![Asynchronous resilience pipeline sequence](../../docs/images/readme-diagrams/bluetape-resilience-async-sequence.png)
+
+The asynchronous pipeline adds cooperative `asyncio.timeout()` handling.
+Policy-owned timeout becomes `PolicyTimeoutError`, while external cancellation
+propagates unchanged after cleanup.
+
 ## Synchronous use
 
 <!-- resilience-example:sync:start -->
