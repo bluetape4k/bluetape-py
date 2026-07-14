@@ -18,6 +18,7 @@ compression-native = ["bluetape-compression[native]==0.1.0"]
 compression-snappy = ["bluetape-compression[snappy]==0.1.0"]
 compression-zstd = ["bluetape-compression[zstd]==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
+resilience = ["bluetape-resilience==0.1.0"]
 serde = ["bluetape-serde==0.1.0"]
 fory = ["bluetape-serde[fory]==0.1.0"]
 testing = ["bluetape-testing==0.1.0"]
@@ -29,6 +30,7 @@ dev = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
     "bluetape-testcontainers==0.1.0",
     "bluetape-testing==0.1.0",
@@ -40,6 +42,7 @@ all = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
     "bluetape-testcontainers==0.1.0",
     "bluetape-testing==0.1.0",
@@ -54,6 +57,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-resilience = { workspace = true }
 bluetape-serde = { workspace = true }
 bluetape-testcontainers = { workspace = true }
 bluetape-testing = { workspace = true }
