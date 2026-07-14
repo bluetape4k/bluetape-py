@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Result: **PASS** (sync sequence 23/23, async sequence 23/23, Circuit Breaker state 17/17, Blocked=0)
+Result: **PASS** (sync sequence 23/23, async sequence 23/23, Circuit Breaker state required 16/16, N/A 1, Blocked 0)
 
 ## Scope and authorities
 
@@ -207,7 +207,7 @@ floor.
 | DIA-05 | PASS | Connector `markers=4 cards=3 connectors=7 intrusions=0 crossings=0`; geometry failures `0`; endpoint PASS; mixed corner `paths=7 q_bends=9 failures=0`; targeted state XPath=`3/1/4/2/7/4/1`. |
 | DIA-06 | PASS | Original-detail inspection of the absolute `3800x2200` PNG found the exact subtitle, three readable states, readable labels/note, four transitions, two dashed rejections, solid heads, rounded corners, no clipping/overflow/overlap/intrusion/crossing, and balanced whitespace. |
 | DIA-07 | PASS | Relative and absolute canonical links resolve; English and Korean READMEs each embed the state PNG once; final scoped `git diff --check` is clean. |
-| DIA-08 | PASS | This ledger records commands, hashes, dimensions, audits, XPath/contracts, source/test limitations, visual notes, exposure, and all 17 rows. `X=17`, `Y=17`, `Blocked=0`. |
+| DIA-08 | PASS | This ledger records commands, hashes, dimensions, audits, XPath/contracts, source/test limitations, visual notes, exposure, and all 17 physical rows. `Required checks: 16/16; N/A: 1; Blocked: 0`. |
 | DIA-COM-01 | PASS | Target README prose, `_circuit.py`, `test_circuit.py`, approved design spec, related resilience4j module/assets, and source mapping are enumerated above; `failure_if=False` is explicitly limited to source-only branch evidence. |
 | DIA-COM-02 | PASS | Original PNG shows `Architects Daughter` title/state names and `Comic Mono` technical text; exact subtitle, state summaries, transition/rejection labels, and invariant note are legible with no evidence logs inside the art. Minimum measured label-box padding is `35.5` SVG units, above `24`. |
 | DIA-COM-03 | N/A | The approved state design requires text-only states and no decorative/infrastructure icons. XPath reports `<image>=0` and `<symbol>=0`, so there is no external-image, invented-logo, or duplicate-icon surface. |
@@ -218,7 +218,7 @@ floor.
 | DIA-COM-08 | PASS | Fresh XML, exact temporary CairoSVG render, byte comparison, dimensions, connector, geometry, endpoint, mixed-corner, XPath, marker/canvas, exposure, targeted `19 passed`, and diff results are recorded above with nonzero counts and zero failures. |
 | DIA-COM-09 | PASS | Review links target the current worktree's canonical state SVG/PNG; both files exist, hashes are recorded, and each locale embeds the PNG exactly once. |
 
-Circuit Breaker state final: `X=17`, `Y=17`, `Blocked=0`.
+Circuit Breaker state final: `Required checks: 16/16; N/A: 1; Blocked: 0`.
 
 ## Synchronous checklist ledger
 
