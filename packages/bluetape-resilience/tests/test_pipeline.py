@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+from functools import partial
 
 import bluetape.resilience as resilience
 import pytest
@@ -174,3 +175,19 @@ async def test_async_pipeline_is_immutable_outermost_and_preserves_metadata() ->
         AsyncResiliencePipeline().with_retry(Retry(name="sync", max_attempts=1))
     with pytest.raises(TypeError):
         AsyncResiliencePipeline()(lambda: 1)
+
+
+@pytest.mark.asyncio
+async def test_pipelines_classify_partial_async_callable_before_invocation() -> None:
+    invoked = False
+
+    async def operation(value: int) -> int:
+        nonlocal invoked
+        invoked = True
+        return value
+
+    bound = partial(operation, 9)
+    with pytest.raises(TypeError):
+        ResiliencePipeline().call(bound)
+    assert not invoked
+    assert await AsyncResiliencePipeline().call(bound) == 9

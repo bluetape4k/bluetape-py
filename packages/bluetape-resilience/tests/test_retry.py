@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 import math
+from functools import partial
 
 import pytest
 from bluetape.resilience import (
@@ -174,6 +175,20 @@ def test_sync_retry_rejects_awaitable_result_without_retrying() -> None:
     assert events == []
 
 
+def test_retry_rejects_partial_generator_functions() -> None:
+    def generator(value: int):
+        yield value
+
+    async def async_generator(value: int):
+        yield value
+
+    policy = Retry(name="retry", max_attempts=1)
+    with pytest.raises(TypeError):
+        policy.call(partial(generator, 1))
+    with pytest.raises(TypeError):
+        policy.call(partial(async_generator, 1))
+
+
 @pytest.mark.asyncio
 async def test_async_retry_succeeds_and_awaits_sleeper() -> None:
     attempts = 0
@@ -194,6 +209,15 @@ async def test_async_retry_succeeds_and_awaits_sleeper() -> None:
     )
     assert await policy.call(operation) == "ok"
     assert sleeps == [0.5]
+
+
+@pytest.mark.asyncio
+async def test_async_retry_accepts_partial_async_callable() -> None:
+    async def operation(value: int) -> int:
+        return value
+
+    policy = AsyncRetry(name="retry", max_attempts=1)
+    assert await policy.call(partial(operation, 7)) == 7
 
 
 @pytest.mark.asyncio

@@ -35,29 +35,25 @@ class _SyncResultContractError(TypeError):
 
 
 def _ensure_sync_operation(operation: Callable[..., object]) -> None:
-    target = (
-        operation
-        if inspect.isfunction(operation) or inspect.ismethod(operation)
-        else operation.__call__
-    )
-    if (
+    if not callable(operation):
+        raise TypeError("operation must be callable")
+    targets = (operation, operation.__call__)
+    if any(
         inspect.iscoroutinefunction(target)
         or inspect.isgeneratorfunction(target)
         or inspect.isasyncgenfunction(target)
+        for target in targets
     ):
         raise TypeError("sync resilience policy requires a non-generator sync callable")
 
 
 def _ensure_async_operation(operation: Callable[..., object]) -> None:
-    target = (
-        operation
-        if inspect.isfunction(operation) or inspect.ismethod(operation)
-        else operation.__call__
-    )
-    if (
-        not inspect.iscoroutinefunction(target)
-        or inspect.isgeneratorfunction(target)
-        or inspect.isasyncgenfunction(target)
+    if not callable(operation):
+        raise TypeError("operation must be callable")
+    targets = (operation, operation.__call__)
+    if not any(inspect.iscoroutinefunction(target) for target in targets) or any(
+        inspect.isgeneratorfunction(target) or inspect.isasyncgenfunction(target)
+        for target in targets
     ):
         raise TypeError("async resilience policy requires an async callable")
 
