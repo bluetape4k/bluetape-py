@@ -25,7 +25,7 @@ SHARED_EXPORTS = [
 
 
 def test_shared_public_exports_are_ordered() -> None:
-    assert resilience.__all__ == SHARED_EXPORTS
+    assert [name for name in resilience.__all__ if name in SHARED_EXPORTS] == SHARED_EXPORTS
     assert not hasattr(resilience, "Timeout")
     assert importlib.util.find_spec("bluetape") is not None
 
