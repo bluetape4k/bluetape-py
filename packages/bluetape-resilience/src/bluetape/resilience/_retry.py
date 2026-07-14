@@ -31,19 +31,29 @@ R = TypeVar("R")
 
 
 def _ensure_sync_operation(operation: Callable[..., object]) -> None:
+    target = (
+        operation
+        if inspect.isfunction(operation) or inspect.ismethod(operation)
+        else operation.__call__
+    )
     if (
-        inspect.iscoroutinefunction(operation)
-        or inspect.isgeneratorfunction(operation)
-        or inspect.isasyncgenfunction(operation)
+        inspect.iscoroutinefunction(target)
+        or inspect.isgeneratorfunction(target)
+        or inspect.isasyncgenfunction(target)
     ):
         raise TypeError("sync resilience policy requires a non-generator sync callable")
 
 
 def _ensure_async_operation(operation: Callable[..., object]) -> None:
+    target = (
+        operation
+        if inspect.isfunction(operation) or inspect.ismethod(operation)
+        else operation.__call__
+    )
     if (
-        not inspect.iscoroutinefunction(operation)
-        or inspect.isgeneratorfunction(operation)
-        or inspect.isasyncgenfunction(operation)
+        not inspect.iscoroutinefunction(target)
+        or inspect.isgeneratorfunction(target)
+        or inspect.isasyncgenfunction(target)
     ):
         raise TypeError("async resilience policy requires an async callable")
 

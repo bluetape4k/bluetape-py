@@ -19,6 +19,7 @@ from bluetape.resilience._core import (
     PolicyType,
     RetryExhaustedError,
 )
+from bluetape.resilience._pipeline import AsyncResiliencePipeline, ResiliencePipeline
 from bluetape.resilience._retry import AsyncRetry, Retry
 from bluetape.resilience._timeout import AsyncTimeout
 
@@ -32,6 +33,8 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "Bulkhead",
     "AsyncBulkhead",
     "AsyncTimeout",
+    "ResiliencePipeline",
+    "AsyncResiliencePipeline",
     "Backoff",
     "constant_backoff",
     "exponential_backoff",
