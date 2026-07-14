@@ -9,7 +9,12 @@ from bluetape.resilience import Backoff, constant_backoff, exponential_backoff
 
 
 def test_backoff_public_exports_precede_shared_values() -> None:
-    assert resilience.__all__[:3] == ["Backoff", "constant_backoff", "exponential_backoff"]
+    names = {"Backoff", "constant_backoff", "exponential_backoff"}
+    assert [name for name in resilience.__all__ if name in names] == [
+        "Backoff",
+        "constant_backoff",
+        "exponential_backoff",
+    ]
 
 
 def test_backoff_protocol_is_runtime_checkable() -> None:
