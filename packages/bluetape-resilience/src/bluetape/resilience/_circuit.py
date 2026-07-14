@@ -25,7 +25,12 @@ from bluetape.resilience._core import (
     _validate_callable,
     _validate_name,
 )
-from bluetape.resilience._retry import _ensure_async_operation, _ensure_sync_operation
+from bluetape.resilience._retry import (
+    _ensure_async_operation,
+    _ensure_sync_operation,
+    _ensure_sync_result,
+    _SyncResultContractError,
+)
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -239,19 +244,26 @@ class CircuitBreaker:
                 self._observer,
                 self._events.make(EventKind.ADMITTED, None, FailureCategory.NONE, snapshot),
             )
-        except Exception:
+        except BaseException:
             if admission is not None:
                 self._release(admission)
             raise
         try:
-            result = operation(*args, **kwargs)
+            result = _ensure_sync_result(operation(*args, **kwargs))
+        except _SyncResultContractError:
+            self._release(admission)
+            raise
         except Exception as error:
             try:
                 classified = self._classify(error)
-            except Exception:
+            except BaseException:
                 self._release(admission)
                 raise
-            now = _finite_non_negative(self._clock(), "clock result")
+            try:
+                now = _finite_non_negative(self._clock(), "clock result")
+            except BaseException:
+                self._release(admission)
+                raise
             with self._lock:
                 changed = self._data.fail(admission, now) if classified else None
                 if not classified:
@@ -278,7 +290,14 @@ class CircuitBreaker:
                 ),
             )
             raise
-        now = _finite_non_negative(self._clock(), "clock result")
+        except BaseException:
+            self._release(admission)
+            raise
+        try:
+            now = _finite_non_negative(self._clock(), "clock result")
+        except BaseException:
+            self._release(admission)
+            raise
         with self._lock:
             changed = self._data.succeed(admission, now)
             snapshot = self._data.snapshot(self.name)
@@ -365,6 +384,16 @@ class AsyncCircuitBreaker:
             self._data.ignore(admission)
             return self._data.snapshot(self.name)
 
+    async def _release_preserving_cancellation(
+        self, admission: _Admission
+    ) -> tuple[CircuitSnapshot, bool]:
+        cancelled = False
+        while True:
+            try:
+                return await self._release(admission), cancelled
+            except asyncio.CancelledError:
+                cancelled = True
+
     def _classify(self, error: Exception) -> bool:
         if self._failure_if is None:
             return True
@@ -410,27 +439,45 @@ class AsyncCircuitBreaker:
                 self._observer,
                 self._events.make(EventKind.ADMITTED, None, FailureCategory.NONE, snapshot),
             )
-        except Exception:
+        except asyncio.CancelledError:
             if admission is not None:
-                await self._release(admission)
+                await self._release_preserving_cancellation(admission)
+            raise
+        except BaseException:
+            if admission is not None:
+                _, cancelled = await self._release_preserving_cancellation(admission)
+                if cancelled:
+                    raise asyncio.CancelledError from None
             raise
         try:
             result = await operation(*args, **kwargs)
         except asyncio.CancelledError:
-            await self._release(admission)
+            await self._release_preserving_cancellation(admission)
             raise
         except Exception as error:
             try:
                 classified = self._classify(error)
-            except Exception:
-                await self._release(admission)
+            except BaseException:
+                _, cancelled = await self._release_preserving_cancellation(admission)
+                if cancelled:
+                    raise asyncio.CancelledError from None
                 raise
-            now = _finite_non_negative(self._clock(), "clock result")
-            async with self._lock:
-                changed = self._data.fail(admission, now) if classified else None
-                if not classified:
-                    self._data.ignore(admission)
-                snapshot = self._data.snapshot(self.name)
+            try:
+                now = _finite_non_negative(self._clock(), "clock result")
+            except BaseException:
+                _, cancelled = await self._release_preserving_cancellation(admission)
+                if cancelled:
+                    raise asyncio.CancelledError from None
+                raise
+            try:
+                async with self._lock:
+                    changed = self._data.fail(admission, now) if classified else None
+                    if not classified:
+                        self._data.ignore(admission)
+                    snapshot = self._data.snapshot(self.name)
+            except asyncio.CancelledError:
+                await self._release_preserving_cancellation(admission)
+                raise
             if changed is not None:
                 _emit(
                     self._observer,
@@ -452,10 +499,25 @@ class AsyncCircuitBreaker:
                 ),
             )
             raise
-        now = _finite_non_negative(self._clock(), "clock result")
-        async with self._lock:
-            changed = self._data.succeed(admission, now)
-            snapshot = self._data.snapshot(self.name)
+        except BaseException:
+            _, cancelled = await self._release_preserving_cancellation(admission)
+            if cancelled:
+                raise asyncio.CancelledError from None
+            raise
+        try:
+            now = _finite_non_negative(self._clock(), "clock result")
+        except BaseException:
+            _, cancelled = await self._release_preserving_cancellation(admission)
+            if cancelled:
+                raise asyncio.CancelledError from None
+            raise
+        try:
+            async with self._lock:
+                changed = self._data.succeed(admission, now)
+                snapshot = self._data.snapshot(self.name)
+        except asyncio.CancelledError:
+            await self._release_preserving_cancellation(admission)
+            raise
         if changed is not None:
             _emit(
                 self._observer,

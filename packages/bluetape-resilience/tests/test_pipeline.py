@@ -12,6 +12,7 @@ from bluetape.resilience import (
     AsyncTimeout,
     Bulkhead,
     CircuitBreaker,
+    CircuitState,
     EventKind,
     ResiliencePipeline,
     Retry,
@@ -124,6 +125,32 @@ def test_sync_pipeline_rejects_async_generators_and_awaitable_results() -> None:
         pipeline(generator)
     with pytest.raises(TypeError):
         pipeline.call(lambda: async_operation())
+
+
+def test_sync_pipeline_propagates_awaitable_contract_error_through_policies() -> None:
+    attempts = 0
+    breaker = CircuitBreaker(name="breaker", failure_threshold=1, open_duration=1)
+    bulkhead = Bulkhead(name="bulkhead", max_concurrency=1)
+    pipeline = (
+        ResiliencePipeline()
+        .with_bulkhead(bulkhead)
+        .with_circuit_breaker(breaker)
+        .with_retry(Retry(name="retry", max_attempts=3))
+    )
+
+    async def async_result() -> None:
+        return None
+
+    def operation() -> object:
+        nonlocal attempts
+        attempts += 1
+        return async_result()
+
+    with pytest.raises(TypeError, match="sync operation returned an awaitable"):
+        pipeline.call(operation)
+    assert attempts == 1
+    assert breaker.snapshot().state is CircuitState.CLOSED
+    assert bulkhead.snapshot().in_flight == 0
 
 
 @pytest.mark.asyncio

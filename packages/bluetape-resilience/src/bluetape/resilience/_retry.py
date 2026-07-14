@@ -30,6 +30,10 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+class _SyncResultContractError(TypeError):
+    """A sync callable returned an awaitable instead of its declared result."""
+
+
 def _ensure_sync_operation(operation: Callable[..., object]) -> None:
     target = (
         operation
@@ -56,6 +60,15 @@ def _ensure_async_operation(operation: Callable[..., object]) -> None:
         or inspect.isasyncgenfunction(target)
     ):
         raise TypeError("async resilience policy requires an async callable")
+
+
+def _ensure_sync_result[T](result: T) -> T:
+    if inspect.isawaitable(result):
+        close = getattr(result, "close", None)
+        if callable(close):
+            close()
+        raise _SyncResultContractError("sync operation returned an awaitable")
+    return result
 
 
 def _event(
@@ -118,11 +131,8 @@ class Retry:
         while True:
             try:
                 result = operation(*args, **kwargs)
-                if inspect.isawaitable(result):
-                    close = getattr(result, "close", None)
-                    if callable(close):
-                        close()
-                    raise TypeError("sync operation returned an awaitable")
+            except _SyncResultContractError:
+                raise
             except Exception as error:
                 retryable = self._is_retryable(error)
                 if not retryable:
@@ -164,6 +174,7 @@ class Retry:
                 self._sleeper(delay)
                 attempt += 1
                 continue
+            result = _ensure_sync_result(result)
             _emit(
                 self._observer,
                 _event(

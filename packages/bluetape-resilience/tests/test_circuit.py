@@ -167,6 +167,92 @@ def test_predicate_error_and_admitted_observer_error_release_half_open_probe() -
     assert seed.snapshot().half_open_in_flight == 0
 
 
+def test_sync_circuit_rejects_awaitable_result_without_counting_failure() -> None:
+    async def async_result() -> None:
+        return None
+
+    breaker = CircuitBreaker(name="breaker", failure_threshold=1, open_duration=1)
+    with pytest.raises(TypeError, match="sync operation returned an awaitable"):
+        breaker.call(lambda: async_result())
+    snapshot = breaker.snapshot()
+    assert snapshot.state is CircuitState.CLOSED
+    assert snapshot.consecutive_failures == 0
+    assert snapshot.half_open_in_flight == 0
+
+
+@pytest.mark.parametrize("operation_fails", [False, True])
+def test_sync_completion_clock_error_releases_half_open_probe(operation_fails: bool) -> None:
+    clock_values = iter([0.0, 0.0, 1.0])
+    clock_error = LookupError("clock")
+
+    def clock() -> float:
+        try:
+            return next(clock_values)
+        except StopIteration:
+            raise clock_error from None
+
+    breaker = CircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+    with pytest.raises(ValueError):
+        breaker.call(lambda: (_ for _ in ()).throw(ValueError("open")))
+
+    def probe() -> str:
+        if operation_fails:
+            raise ValueError("probe")
+        return "ok"
+
+    with pytest.raises(LookupError) as captured:
+        breaker.call(probe)
+    assert captured.value is clock_error
+    snapshot = breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation_fails", [False, True])
+async def test_async_completion_clock_error_releases_half_open_probe(
+    operation_fails: bool,
+) -> None:
+    clock_values = iter([0.0, 0.0, 1.0])
+    clock_error = LookupError("clock")
+
+    def clock() -> float:
+        try:
+            return next(clock_values)
+        except StopIteration:
+            raise clock_error from None
+
+    breaker = AsyncCircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+
+    async def fail() -> None:
+        raise ValueError("open")
+
+    with pytest.raises(ValueError):
+        await breaker.call(fail)
+
+    async def probe() -> str:
+        if operation_fails:
+            raise ValueError("probe")
+        return "ok"
+
+    with pytest.raises(LookupError) as captured:
+        await breaker.call(probe)
+    assert captured.value is clock_error
+    snapshot = await breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
+
+
 @pytest.mark.asyncio
 async def test_async_circuit_cancellation_releases_probe_without_terminal_event() -> None:
     clock = FakeClock()
@@ -199,6 +285,147 @@ async def test_async_circuit_cancellation_releases_probe_without_terminal_event(
     snapshot = await breaker.snapshot()
     assert snapshot.half_open_in_flight == 0
     assert events[-1].kind is EventKind.ADMITTED
+
+
+@pytest.mark.asyncio
+async def test_async_completion_cancellation_waits_for_probe_reconciliation() -> None:
+    clock = FakeClock()
+    breaker = AsyncCircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+
+    async def fail() -> None:
+        raise ValueError
+
+    with pytest.raises(ValueError):
+        await breaker.call(fail)
+    clock.advance(1)
+    operation_entered = asyncio.Event()
+    finish_operation = asyncio.Event()
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def probe() -> str:
+        operation_entered.set()
+        await finish_operation.wait()
+        return "ok"
+
+    async def hold_lock() -> None:
+        async with breaker._lock:
+            lock_held.set()
+            await release_lock.wait()
+
+    call_task = asyncio.create_task(breaker.call(probe))
+    await asyncio.wait_for(operation_entered.wait(), 1)
+    holder = asyncio.create_task(hold_lock())
+    await asyncio.wait_for(lock_held.wait(), 1)
+    finish_operation.set()
+    await asyncio.sleep(0)
+    call_task.cancel()
+    release_lock.set()
+    await asyncio.wait_for(holder, 1)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(call_task, 1)
+    snapshot = await breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
+
+
+@pytest.mark.asyncio
+async def test_async_repeated_cancellation_cannot_interrupt_probe_cleanup() -> None:
+    clock = FakeClock()
+    breaker = AsyncCircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+
+    async def fail() -> None:
+        raise ValueError
+
+    with pytest.raises(ValueError):
+        await breaker.call(fail)
+    clock.advance(1)
+    operation_entered = asyncio.Event()
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def probe() -> None:
+        operation_entered.set()
+        await asyncio.Future()
+
+    async def hold_lock() -> None:
+        async with breaker._lock:
+            lock_held.set()
+            await release_lock.wait()
+
+    call_task = asyncio.create_task(breaker.call(probe))
+    await asyncio.wait_for(operation_entered.wait(), 1)
+    holder = asyncio.create_task(hold_lock())
+    await asyncio.wait_for(lock_held.wait(), 1)
+    call_task.cancel()
+    await asyncio.sleep(0)
+    call_task.cancel()
+    release_lock.set()
+    await asyncio.wait_for(holder, 1)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(call_task, 1)
+    snapshot = await breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
+
+
+def test_sync_half_open_base_exception_releases_probe() -> None:
+    clock = FakeClock()
+    breaker = CircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        clock=clock,
+    )
+    with pytest.raises(ValueError):
+        breaker.call(lambda: (_ for _ in ()).throw(ValueError("open")))
+    clock.advance(1)
+    with pytest.raises(KeyboardInterrupt):
+        breaker.call(lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+    snapshot = breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
+
+
+@pytest.mark.asyncio
+async def test_async_admitted_observer_cancellation_releases_probe() -> None:
+    clock = FakeClock()
+    cancel_observer = False
+
+    def observer(event: object) -> None:
+        if cancel_observer and getattr(event, "kind", None) is EventKind.ADMITTED:
+            raise asyncio.CancelledError
+
+    breaker = AsyncCircuitBreaker(
+        name="breaker",
+        failure_threshold=1,
+        open_duration=1,
+        observer=observer,
+        clock=clock,
+    )
+
+    async def fail() -> None:
+        raise ValueError
+
+    with pytest.raises(ValueError):
+        await breaker.call(fail)
+    clock.advance(1)
+    cancel_observer = True
+    with pytest.raises(asyncio.CancelledError):
+        await breaker.call(asyncio.sleep, 0)
+    snapshot = await breaker.snapshot()
+    assert snapshot.state is CircuitState.HALF_OPEN
+    assert snapshot.half_open_in_flight == 0
 
 
 def test_async_circuit_rejects_second_event_loop_before_operation() -> None:

@@ -22,7 +22,12 @@ from bluetape.resilience._core import (
     _validate_callable,
     _validate_name,
 )
-from bluetape.resilience._retry import _ensure_async_operation, _ensure_sync_operation
+from bluetape.resilience._retry import (
+    _ensure_async_operation,
+    _ensure_sync_operation,
+    _ensure_sync_result,
+    _SyncResultContractError,
+)
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -121,11 +126,14 @@ class Bulkhead:
                 self._observer,
                 _event(self.name, EventKind.ADMITTED, None, FailureCategory.NONE, snapshot),
             )
-        except Exception:
+        except BaseException:
             self._release()
             raise
         try:
-            result = operation(*args, **kwargs)
+            result = _ensure_sync_result(operation(*args, **kwargs))
+        except _SyncResultContractError:
+            self._release()
+            raise
         except Exception as error:
             released = self._release()
             _emit(
@@ -138,6 +146,9 @@ class Bulkhead:
                     released,
                 ),
             )
+            raise
+        except BaseException:
+            self._release()
             raise
         released = self._release()
         _emit(
@@ -222,6 +233,14 @@ class AsyncBulkhead:
             self._condition.notify()
             return self._snapshot_locked()
 
+    async def _release_preserving_cancellation(self) -> tuple[BulkheadSnapshot, bool]:
+        cancelled = False
+        while True:
+            try:
+                return await self._release(), cancelled
+            except asyncio.CancelledError:
+                cancelled = True
+
     async def call(
         self, operation: Callable[P, Awaitable[R]], *args: P.args, **kwargs: P.kwargs
     ) -> R:
@@ -247,16 +266,23 @@ class AsyncBulkhead:
                 self._observer,
                 _event(self.name, EventKind.ADMITTED, None, FailureCategory.NONE, snapshot),
             )
-        except Exception:
-            await self._release()
+        except asyncio.CancelledError:
+            await self._release_preserving_cancellation()
+            raise
+        except BaseException:
+            _, cancelled = await self._release_preserving_cancellation()
+            if cancelled:
+                raise asyncio.CancelledError from None
             raise
         try:
             result = await operation(*args, **kwargs)
         except asyncio.CancelledError:
-            await self._release()
+            await self._release_preserving_cancellation()
             raise
         except Exception as error:
-            released = await self._release()
+            released, cancelled = await self._release_preserving_cancellation()
+            if cancelled:
+                raise asyncio.CancelledError from None
             _emit(
                 self._observer,
                 _event(
@@ -268,7 +294,14 @@ class AsyncBulkhead:
                 ),
             )
             raise
-        released = await self._release()
+        except BaseException:
+            _, cancelled = await self._release_preserving_cancellation()
+            if cancelled:
+                raise asyncio.CancelledError from None
+            raise
+        released, cancelled = await self._release_preserving_cancellation()
+        if cancelled:
+            raise asyncio.CancelledError from None
         _emit(
             self._observer,
             _event(
