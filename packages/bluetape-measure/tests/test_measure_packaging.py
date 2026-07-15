@@ -25,4 +25,24 @@ def test_distribution_metadata_is_stdlib_only() -> None:
     assert metadata["tool"]["uv"]["build-backend"]["module-name"] == "bluetape.measure"
     assert not (PACKAGE / "src/bluetape/__init__.py").exists()
     module = importlib.import_module("bluetape.measure")
-    assert module.__all__ == []
+    assert module.__all__ == [
+        "MeasureError",
+        "InvalidUnitError",
+        "InvalidMeasureError",
+        "IncompatibleUnitError",
+        "Dimension",
+        "Unit",
+        "Measure",
+        "parse_measure",
+        "BUILTIN_UNITS",
+        "METER",
+        "KILOMETER",
+        "CENTIMETER",
+        "MILLIMETER",
+        "SECOND",
+        "MILLISECOND",
+        "MINUTE",
+        "HOUR",
+        "GRAM",
+        "KILOGRAM",
+    ]
