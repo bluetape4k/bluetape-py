@@ -50,8 +50,9 @@ pip install "bluetape[all]"
 
 `cache` extra는 표준 라이브러리만 사용하는 bounded sync/async local TTL loading
 cache를 설치합니다. 별도 `cache-redis` extra는 byte-only sync/async Redis
-provider와 크기 제한 result envelope를 설치합니다. Redis coordination은 #55
-범위입니다.
+provider, 크기 제한 result envelope, bounded cross-process load coordination을
+설치합니다. Durable Redis L2 caching과 upstream에 막힌 별도 near-cache
+invalidation issue #56은 제공하지 않습니다.
 
 `asyncio` extra는 호출 범위가 정해진 bounded structured-concurrency 헬퍼를
 설치합니다. 기본 설치는 계속 `bluetape-core`로 제한합니다.

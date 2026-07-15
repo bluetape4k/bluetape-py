@@ -24,7 +24,7 @@ install commands describe the intended post-publication shape only.
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
 ecosystem issues #7 through #34, serialization follow-ups #45/#46, local cache
-#50, compressor contracts #59, Redis provider #54, and coordination follow-up #55.
+#50, compressor contracts #59, Redis provider #54, and coordination #55.
 Detailed planning lives in
 [`WIP.md`](WIP.md), and completed user-facing changes are tracked in
 [`CHANGELOG.md`](CHANGELOG.md).
@@ -151,8 +151,8 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 The #54 Redis provider tests consume `RedisServer` from the ecosystem wrapper
 and verify Redis 8 commands, TTL, NX, Lua compare-and-delete, lifecycle, ACL,
 and redaction behavior. Values use explicit `serialize -> compress -> store`
-composition. Issue #55 adds bounded sync/async Redis lease coordination while
-preserving the opt-in package boundary.
+composition. Issue #55 provides bounded sync/async Redis lease coordination
+while preserving the opt-in package boundary.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:
@@ -332,8 +332,9 @@ coalescing, mutation supersession, and immutable statistics semantics. Include
 tenant and authorization context in keys, redact `KeyError(key)` and loader
 exceptions before logging, and give async callers deadlines because a
 cancellation-resistant loader keeps its `max_inflight` slot until terminal.
-Redis-backed storage is available through the opt-in provider below; load
-coordination remains issue #55 work.
+Redis-backed storage and bounded cross-process load coordination are available
+through the opt-in provider below. RESP3 near-cache invalidation remains a
+separate upstream-blocked track in issue #56.
 
 ### Redis byte provider
 

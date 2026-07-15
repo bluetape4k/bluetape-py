@@ -20,8 +20,8 @@ focused distribution model:
 - `bluetape-async`: stdlib-only bounded `asyncio` helpers, added for issue #8
   in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-cache`: stdlib-only bounded synchronous and async local TTL loading
-  caches, implemented for issue #50 on `feat/issue-50-local-cache` while PyPI
-  publication remains on HOLD. Redis coordination is tracked separately in #51.
+  caches, implemented and merged for issue #50 while PyPI publication remains
+  on HOLD.
 - `bluetape-cache-redis`: byte-only sync and async Redis providers, strict
   bounded result envelopes, and bounded Redis lease load coordination,
   implemented for issues #54 and #55 while PyPI publication remains on HOLD.
@@ -60,8 +60,9 @@ focused distribution model:
 - PyPI publication remains on HOLD until project ownership and trusted
   publishing are confirmed outside this repository.
 - Milestone `0.2.0` tracks ecosystem issues #7 through #34, serialization
-  follow-ups #45/#46, local cache #50, and Redis follow-up #51; issues #35
-  through #44 and #47 through #49 are not implied by these explicit ranges.
+  follow-ups #45/#46, local cache #50, and the completed Redis provider and
+  coordination umbrella #51; issues #35 through #44 and #47 through #49 are
+  not implied by these explicit ranges.
 - Research-first issues #10 and #23 have source-backed decisions. Issues #14,
   #16, #21, #31, and #34 must produce package boundary decisions before
   implementation starts.
@@ -69,11 +70,12 @@ focused distribution model:
   Apache Fory is implemented and locally verified with Python, Go, Rust, and
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
   on HOLD.
-- Issue #11 remains the cache/Redis umbrella. Issue #50 local caches are
-  complete. Issue #57 is the implemented Testcontainers prerequisite, and #59
-  provides the compressor contracts needed to reduce Redis payloads. #54 Redis
-  provider integration is implemented, and #55 Redis load coordination is
-  implemented with sync/async parity and real Redis verification.
+- Issue #11 remains the cache/Redis parent umbrella. Issue #50 local caches are
+  complete, and issue #51 is complete through the merged #57 Testcontainers
+  prerequisite, #54 Redis provider, and #55 sync/async load coordination.
+  Issue #56 near-cache invalidation is an independent upstream-blocked track,
+  not a requirement for #51 completion. Issue #59 provides the compressor
+  contracts used to reduce Redis payloads.
 - Issue #12 resilience policies are implemented and locally verified on the
   feature branch. PR review and merge remain pending; PyPI publication stays
   on HOLD.
@@ -160,18 +162,20 @@ Historical release scope; all items are closed.
   trusted-internal CPython 3.13 extra implemented and locally verified in the
   source workspace; PyPI publication remains on HOLD.
 - #11 - Cache and Redis coordination umbrella.
-- #50 - Bounded sync and async local TTL loading caches. Implemented by
-  `bluetape-cache` on `feat/issue-50-local-cache`; PR review and merge are
-  pending.
-- #51 - Redis cache coordination and provider boundary. Pending after the
-  local cache contract; split into #54, #55, #56, and prerequisite #57.
+- #50 - Bounded sync and async local TTL loading caches. Implemented and merged
+  as `bluetape-cache`.
+- #51 - Redis cache coordination and provider boundary. Required delivery is
+  complete through #57, #54, and #55. The explicitly independent #56 near-cache
+  invalidation track remains upstream-blocked and does not block #51 closeout.
 - #54 - Redis byte provider and bounded result-envelope substrate. Implemented
   and merged into `develop`; it is the provider substrate used by #55.
-- #55 - Bounded sync/async Redis load coordination. Implemented on the #54
-  provider substrate with expiring leases and atomic token-checked publish.
-- #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented and
-  verified on `feat/issue-57-testcontainers-redis`; consumed by #54 integration
-  tests and retained for #55.
+- #55 - Bounded sync/async Redis load coordination. Implemented and merged on
+  the #54 provider substrate with expiring leases and atomic token-checked
+  publish.
+- #56 - RESP3 client-tracking near-cache invalidation. Independent from #51
+  coordination delivery and currently blocked by upstream client behavior.
+- #57 - Ecosystem-owned Testcontainers Redis 8 wrapper. Implemented, merged,
+  and consumed by the #54 and #55 integration suites.
 - #12 - Stdlib-only resilience policies. Implemented on
   `feat/issue-12-resilience-policies` with separate sync/async retry, circuit
   breaker, bulkhead, cooperative async timeout, typed events, immutable state
