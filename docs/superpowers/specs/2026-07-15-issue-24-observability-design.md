@@ -475,8 +475,10 @@ the published `bluetape` meta distribution.
   span event names and allowlisted attributes.
 - Verify counters, duration histograms, units, nanosecond-to-second conversion, and the absence
   of forbidden dimensions.
-- Verify the meter instrumentation scope name and version are `bluetape.observability` and
-  the installed `bluetape-observability` distribution version.
+- Capture the default `get_meter` call directly and verify its arguments are
+  `bluetape.observability` and the installed `bluetape-observability` distribution version.
+  Injected-meter tests verify emitted instruments and measurements but do not stand in for this
+  default-scope test.
 - Verify `inspect.signature()` exposes postponed domain annotations without runtime domain
   imports and document that raw `get_type_hints()` without explicit globals is unsupported.
 - Verify every exact instrument name, type, unit, description, and construction call.
@@ -487,8 +489,8 @@ the published `bluetape` meta distribution.
 
 ### Failure-isolation tests
 
-- Throw from current-span operations, counter creation/add, and histogram creation/record using
-  controlled fakes; verify independent channels are still attempted and valid domain calls do
+- Throw from current-span operations, counter `add`, and histogram `record` using controlled
+  fakes; verify runtime channels are still attempted independently and valid domain calls do
   not receive those `Exception` values.
 - Throw `KeyboardInterrupt` from a controlled telemetry fake and verify it propagates.
 - Make meter acquisition and each instrument-construction call raise; verify adapter construction
