@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from _support import RecordingMeter, coordination_event, policy_event, redis_event
-from bluetape.logging import ContextLogFilter, log_context
 from opentelemetry import baggage, context, trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 
@@ -15,6 +14,7 @@ pytestmark = pytest.mark.observability_workspace
 def test_log_context_baggage_and_trace_ids_remain_separate(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    from bluetape.logging import ContextLogFilter, log_context
     from bluetape.observability.redis import (
         OpenTelemetryRedisCoordinationObserver,
         OpenTelemetryRedisObserver,
