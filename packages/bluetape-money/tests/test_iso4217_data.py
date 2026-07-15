@@ -30,6 +30,25 @@ def test_iso4217_provenance_matches_source() -> None:
     assert len(generated.CURRENCY_ROWS) == generated.SOURCE_UNIQUE_CURRENCY_COUNT - 2
 
 
+def test_iso4217_source_bytes_match_the_git_index() -> None:
+    relative_source = SOURCE.relative_to(ROOT)
+    attribute = subprocess.run(
+        ["git", "check-attr", "text", "--", str(relative_source)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert attribute.stdout.rstrip().endswith(": text: unset")
+    indexed = subprocess.run(
+        ["git", "show", f":{relative_source}"],
+        cwd=ROOT,
+        capture_output=True,
+        check=True,
+    )
+    assert indexed.stdout == SOURCE.read_bytes()
+
+
 def test_full_iso4217_source_regenerates_the_committed_table(tmp_path: Path) -> None:
     generated = importlib.import_module("bluetape.money._iso4217")
     output = tmp_path / "_iso4217.py"

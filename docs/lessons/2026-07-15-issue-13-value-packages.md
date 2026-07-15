@@ -28,6 +28,11 @@ Canonical URL을 사용한 생성은 단순히 XML well-formed 여부만 검사�
 대해 보수적인 하한 250/150을 적용해야 잘린 응답을 정상 current table로 오인하지 않는다. Full source
 재생성 결과와 committed module의 byte identity까지 묶어야 provenance가 실제 output을 증명한다.
 
+다운로드 원문의 SHA-256을 provenance로 보존할 때 Git text normalization도 데이터 파이프라인의
+일부다. CRLF 원본을 일반 text로 add하면 maintainer worktree와 Linux checkout의 blob bytes가 달라질
+수 있다. Raw digest가 계약이면 해당 source family를 `.gitattributes`의 `binary`로 고정하고,
+worktree bytes와 Git index bytes가 같은지 CI에서 직접 검사해야 한다.
+
 ### bounded Decimal과 exact Decimal은 다른 계약이다
 
 precision 256 context에서 결과가 256 digits 이내라는 사실은 입력의 정확한 값이 보존됐다는 뜻이
@@ -58,7 +63,7 @@ top-level module 이름으로 충돌한다. package별 focused test가 통과해
 ## Verification evidence
 
 - ID 15개, measure 18개, money 85개, meta/docs 6개 targeted test가 통과했다.
-- CI-shaped workspace는 `1710 passed, 139 deselected`로 통과했다.
+- PR portability repair 후 CI-shaped workspace는 `1711 passed, 139 deselected`로 통과했다.
 - 18개 배포판 build와 10개 격리 환경 value-wheel verifier가 통과했다.
 - Ruff, format, actionlint, diff hygiene, SVG/PNG 감사가 통과했다.
 - 세 독립 구현 재검토는 최종 `P0=0, P1=0, P2=0`으로 수렴했다.

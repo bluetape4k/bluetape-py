@@ -1,0 +1,2 @@
+# Preserve downloaded provenance sources byte-for-byte across platforms.
+docs/research/sources/iso4217/*.xml binary

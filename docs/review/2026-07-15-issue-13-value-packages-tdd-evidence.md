@@ -67,3 +67,14 @@ independent re-reviews converged at P0=0, P1=0, P2=0.
 
 The evidence commit is intentionally not self-referential. Its SHA and the
 fresh post-commit rerun belong to the delivery report and workflow receipt.
+
+## PR CI portability repair
+
+The first Linux PR run exposed that the downloaded SIX XML retained CRLF bytes
+in the maintainer worktree while Git's default text normalization stored LF in
+the repository blob. The manifest and generated module correctly described the
+downloaded `838d...` bytes, but Linux checked out the normalized `dabc...` blob.
+The repair marks the exact provenance-source XML family as Git `binary`,
+re-stores the original 47,463 CRLF bytes, and adds a regression test proving
+the worktree bytes equal the Git index bytes. The repaired CI-shaped suite is
+`1711 passed, 139 deselected`.

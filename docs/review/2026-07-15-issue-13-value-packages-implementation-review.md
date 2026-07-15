@@ -20,6 +20,7 @@ diagram. P0/P1 findings blocked delivery until repair and re-review.
 | P2 | Developer/API | Invalid rounding could be ignored by unquantized formatting, and unknown-minor-unit error priority differed by argument | Validate the public rounding argument consistently and resolve the currency quantum before rounding validation | Closed in `76e8961` |
 | P2 | Operator/Ops | Provenance tests did not bind every manifest field or full generated output | Assert URLs, dates, digest, bytes, counts, exclusions, and byte-identical full-source regeneration | Closed in `76e8961` |
 | P2 | Security/privacy | Wheel verifier labeled imports network-free without denying Python sockets | Deny `socket.socket` and `socket.create_connection` inside all ten isolated import probes | Closed in `76e8961` |
+| P1 | Operator/Ops, CI | Git normalized the CRLF provenance source to LF in Linux checkout, invalidating the raw download digest and regeneration equality | Mark the ISO source family `binary`, re-store exact bytes, and assert Git index/worktree byte equality | Closed during PR CI |
 
 ## Final lens results
 
