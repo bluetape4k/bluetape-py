@@ -126,6 +126,9 @@ packages/bluetape-observability/
   exact public export contract is an empty `__all__`.
 - Adapter instances cache their instruments at construction and hold no per-call mutable
   state. They create no lock, registry, thread, task, queue, or network client.
+- Every event first passes a closed fail-safe normalizer that returns bounded private scalar
+  values or drops the whole event. Runtime structural access therefore does not turn arbitrary
+  duck objects into an open attribute channel.
 
 ## Public API
 
@@ -172,11 +175,11 @@ The exact public exports are:
 - `bluetape.observability.redis.__all__ = ["OpenTelemetryRedisObserver",
   "OpenTelemetryRedisCoordinationObserver"]`
 
-All constructors are keyword-only. Supplying `meter=None` obtains a meter from
-`opentelemetry.metrics.get_meter("bluetape.observability")`. Supplying a `Meter` uses that
-exact instance and never changes the global provider. There is no tracer or provider setter:
-trace recording uses `opentelemetry.trace.get_current_span()` because the adapter adds an
-event to caller-owned current work rather than starting a new span.
+All constructors are keyword-only. Supplying `meter=None` obtains a versioned instrumentation
+scope with `opentelemetry.metrics.get_meter("bluetape.observability", "0.1.0")`. Supplying a
+`Meter` uses that exact instance and never changes the global provider. There is no tracer or
+provider setter: trace recording uses `opentelemetry.trace.get_current_span()` because the
+adapter adds an event to caller-owned current work rather than starting a new span.
 
 The first version has no feature flags, custom instrument names, custom attributes, callback,
 or subclassing contract. Installing and passing an adapter is the explicit opt-in.
@@ -188,16 +191,20 @@ For each valid domain event, the adapter performs this bounded synchronous flow:
 ```text
 domain producer
   -> existing inline observer call
-  -> fixed event-to-attribute mapping
+  -> closed fail-safe normalization of every consumed field
   -> attempt current-span add_event
   -> independently attempt counter.add
   -> independently attempt histogram.record when the event has duration
   -> return None
 ```
 
-The adapter does not retain events or defer work. Span and metric recording are isolated so
-one failed signal does not prevent attempting the other. SDK/exporter execution behind OTel
-API calls remains application-owned.
+The adapter does not retain events or defer work. It normalizes once into bounded private
+scalars, builds the metric attribute mapping once only when at least one metric instrument was
+created, and builds span-only detail only for a recording span. Span and metric recording are
+isolated so one failed signal does not prevent attempting the other. An API no-op instrument
+cannot be distinguished through the public OTel API, so an existing no-op instrument still
+receives the bounded metric mapping. SDK/exporter execution behind OTel API calls remains
+application-owned.
 
 ### Span events
 
@@ -282,6 +289,27 @@ not encoded as empty strings. The bridge never adds Redis keys, values, result p
 lease tokens, namespaces, raw exceptions, exception messages, stack traces, generated IDs,
 logging context, baggage, or arbitrary caller attributes.
 
+### Fail-safe normalization
+
+Before any signal emission, the adapter reads and validates every field it consumes. A field
+access or conversion that raises `Exception`, an unsupported enum value, an invalid scalar
+type, a non-finite number, or an out-of-range integer drops the entire event and returns
+`None`. No partial span or metric emission occurs for a rejected event. `BaseException` is not
+caught.
+
+- Enum-like `.value` fields must resolve to the exact closed value sets already published by
+  the three domain events.
+- `bool` is never accepted as an integer. Counts and `elapsed_ns` must be exact non-negative
+  integers no greater than `2**63 - 1`; resilience `attempt` must additionally be positive.
+- Resilience `delay` and `timeout` must be finite non-negative `int` or `float` values and are
+  normalized to `float`. Optional values may be `None`.
+- `cleanup_failed` must be an exact `bool`.
+- Required fields may not be absent or `None`; optional fields are either validated or omitted.
+
+This defensive behavior does not make arbitrary duck objects a supported public input. It
+ensures that a forged or malformed object cannot create an open telemetry attribute channel or
+change a protected domain call through an adapter exception.
+
 ## Error and Lifecycle Semantics
 
 - Exact domain event producers remain unchanged and continue to validate event values.
@@ -299,9 +327,8 @@ logging context, baggage, or arbitrary caller attributes.
 - The package intentionally does not log telemetry failures. Logging here risks recursion and
   would make the bridge own application diagnostics. Applications observe SDK/exporter health
   through their OTel configuration.
-- Passing an object outside the documented domain event type is unsupported. Telemetry
-  isolation guarantees apply to valid events emitted by the existing packages, not arbitrary
-  duck-typed inputs.
+- Recovery from meter acquisition or instrument-construction failure requires constructing a
+  new adapter. Existing instances do not retry, mutate, or schedule recovery.
 - Adapter construction and calls create no owned resource and require no close, flush, or
   shutdown method. Application-owned providers/exporters retain lifecycle ownership.
 
@@ -321,10 +348,12 @@ but never copy values between them automatically.
 ## Package and Dependency Boundary
 
 - Distribution: `bluetape-observability`
+- Distribution version: `0.1.0`, matching the current independent workspace package line
 - Import root: `bluetape.observability`
 - Python: `>=3.13`
 - Runtime dependency: `opentelemetry-api>=1.43,<2`
-- Test-only dependency group: `opentelemetry-sdk>=1.43,<2`, `pytest>=8.4.0`,
+- Test-only dependency group: `bluetape-resilience==0.1.0`,
+  `bluetape-cache-redis==0.1.0`, `opentelemetry-sdk>=1.43,<2`, `pytest>=8.4.0`,
   `pytest-asyncio>=1.1.0`
 - Build backend: repository-standard `uv_build>=0.11.28,<0.12`
 - No distribution extras in v1
@@ -352,6 +381,9 @@ the published `bluetape` meta distribution.
   fixtures; calls return `None` without SDK configuration.
 - Prove import does not configure or replace global trace/meter providers.
 - Prove no domain or SDK module is imported as a side effect.
+- Pass forged events and duck objects containing hostile strings, unsupported enum values,
+  raising properties, booleans-as-integers, non-finite numbers, and integers beyond signed
+  64-bit range; verify no signal emission and no escaping `Exception`.
 
 ### SDK-backed tests
 
@@ -361,8 +393,12 @@ the published `bluetape` meta distribution.
   span event names and allowlisted attributes.
 - Verify counters, duration histograms, units, nanosecond-to-second conversion, and the absence
   of forbidden dimensions.
+- Verify the meter instrumentation scope name and version are `bluetape.observability` and
+  `0.1.0`.
 - Exercise the observer in an ordinary sync scope and inside an async coroutine; both must
   attach to the correct current span without separate adapter types.
+- Construct actual `PolicyEvent`, `RedisEvent`, and `RedisCoordinationEvent` instances from the
+  test-only domain dependencies and verify observer protocol compatibility.
 
 ### Failure-isolation tests
 
@@ -370,7 +406,27 @@ the published `bluetape` meta distribution.
   controlled fakes; verify independent channels are still attempted and valid domain calls do
   not receive those `Exception` values.
 - Throw `KeyboardInterrupt` from a controlled telemetry fake and verify it propagates.
+- Simulate transient instrument-construction failure, construct a fresh adapter with a healthy
+  meter, and verify recording recovers only through reconstruction.
 - Verify no exception logging or background work appears.
+
+### Performance acceptance
+
+A stdlib benchmark script runs all three adapters after warmup against an empty-observer
+baseline. It records three same-process runs on CPython 3.13.14 and reports median and p95
+incremental latency per event.
+
+- API-only/no-recording-span path: median increment at most `25 us`, p95 at most `75 us`.
+- Local in-memory SDK path: median increment at most `150 us`, p95 at most `500 us`.
+- API-only steady state: after construction and warmup, 100,000 calls followed by collection
+  retain at most `64 KiB` above the baseline observer in `tracemalloc`.
+- Static and runtime evidence must show zero package-owned locks, threads, tasks, queues, and
+  event retention.
+
+Timing budgets are recorded implementation evidence rather than ordinary CI assertions because
+shared runners are noisy. A budget exceeded in two of three same-environment runs is a Step 4-P
+blocker requiring optimization or explicit spec reapproval. Allocation and ownership checks
+remain deterministic test/inspection gates.
 
 ### Packaging and integration tests
 
@@ -407,12 +463,14 @@ the published `bluetape` meta distribution.
 | No current recording span exists | Span event is skipped; metric recording is still attempted. |
 | Current span or custom SDK raises `Exception` | The failing signal call is isolated; remaining metric calls are still attempted. |
 | Metric instrument construction fails | Disable only that instrument for the adapter instance; preserve trace and other instruments. |
+| Metric setup later becomes healthy | Existing adapter remains unchanged; constructing a new adapter performs a fresh setup attempt. |
 | Exporter/provider work is slow | The bridge adds no worker, timeout, retry, or queue; application owns SDK performance and configuration. |
 | Caller uses sensitive/high-cardinality policy names or logging context | Those values are never promoted by the fixed mapper. |
 | Adapter is invoked from async code | Current coroutine context is read inline; no task is spawned or retained. |
 | Work crosses an unsupported thread/process/transport boundary | No implicit propagation is promised; application must propagate explicitly. |
 | `KeyboardInterrupt` or another `BaseException` occurs | It propagates and is never converted into a telemetry no-op. |
 | A future domain event adds new fields | New fields are ignored until explicitly reviewed and allowlisted; existing mapping remains compatible. |
+| A forged or malformed event reaches the adapter | Closed normalization drops the whole event before emission and suppresses only ordinary `Exception`. |
 
 ## Alternatives Considered
 
@@ -472,8 +530,8 @@ require an explicit design and changelog entry.
 4. No synthetic span, global provider mutation, SDK/exporter configuration, background work,
    logging bridge, or automatic context/baggage promotion is introduced.
 5. Telemetry `Exception` failures are isolated per signal call; `BaseException` propagates.
-6. API-only, local-SDK, sync, async, privacy/cardinality, failure, wheel-isolation, and metadata
-   tests pass with fresh evidence.
+6. API-only, local-SDK, sync, async, privacy/cardinality, hostile-input, failure/reconstruction,
+   wheel-isolation, metadata, and performance checks pass with fresh evidence.
 7. Existing domain packages retain their public API and behavior, and the default `bluetape`
    wheel remains core-only without observability or OTel dependencies.
 8. Package/root README locale pairs, package layout, WIP, changelog, CI, and all triggered
