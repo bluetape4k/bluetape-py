@@ -128,17 +128,47 @@ def test_sdk_records_exact_metrics_for_all_adapters(sdk_state: SimpleNamespace) 
         OpenTelemetryRedisObserver,
     )
     from bluetape.observability.resilience import OpenTelemetryPolicyObserver
+    from opentelemetry.sdk.metrics.export import Histogram, Sum
 
     OpenTelemetryPolicyObserver(meter=sdk_state.meter)(policy_event())
     OpenTelemetryRedisObserver(meter=sdk_state.meter).on_event(redis_event())
     OpenTelemetryRedisCoordinationObserver(meter=sdk_state.meter).on_event(coordination_event())
 
     metrics = metrics_by_name(sdk_state.reader)
+    expected_descriptors = {
+        "bluetape.resilience.policy.events": (
+            "{event}",
+            "Number of observed Bluetape resilience policy events.",
+            Sum,
+        ),
+        "bluetape.redis.operations": (
+            "{operation}",
+            "Number of observed Bluetape Redis operations.",
+            Sum,
+        ),
+        "bluetape.redis.operation.duration": (
+            "s",
+            "Duration of observed Bluetape Redis operations.",
+            Histogram,
+        ),
+        "bluetape.redis.coordination.operations": (
+            "{operation}",
+            "Number of observed Bluetape Redis coordination operations.",
+            Sum,
+        ),
+        "bluetape.redis.coordination.duration": (
+            "s",
+            "Duration of observed Bluetape Redis coordination operations.",
+            Histogram,
+        ),
+    }
+    assert set(metrics) == set(expected_descriptors)
+    for name, (unit, description, data_type) in expected_descriptors.items():
+        metric = metrics[name]
+        assert (metric.unit, metric.description) == (unit, description)
+        assert isinstance(metric.data, data_type)
+
     policy = metrics["bluetape.resilience.policy.events"]
-    assert (policy.unit, policy.description) == (
-        "{event}",
-        "Number of observed Bluetape resilience policy events.",
-    )
     policy_point = only_point(policy)
     assert policy_point.value == 1
     assert dict(policy_point.attributes) == {

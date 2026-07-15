@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,7 @@ from _support import (
     redis_event,
 )
 from bluetape.cache.redis import (
+    AsyncRedisProvider,
     RedisCoordinationErrorCode,
     RedisCoordinationOperation,
     RedisCoordinationOutcome,
@@ -20,6 +22,8 @@ from bluetape.cache.redis import (
     RedisMode,
     RedisOperation,
     RedisOutcome,
+    RedisProviderError,
+    SyncRedisProvider,
 )
 
 
@@ -128,6 +132,30 @@ def test_redis_rejects_invalid_consumed_fields_before_emission(
     assert span.events == []
 
 
+def test_redis_propagates_process_control_from_consumed_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ProcessControlEvent:
+        operation = RedisOperation.GET
+        outcome = RedisOutcome.SUCCESS
+        error_code = None
+        elapsed_ns = 1
+
+        def __init__(self, failure: BaseException) -> None:
+            self.failure = failure
+
+        @property
+        def mode(self) -> RedisMode:
+            raise self.failure
+
+    for failure in (KeyboardInterrupt(), SystemExit(), GeneratorExit()):
+        observer, meter, span = observer_with_span(monkeypatch, "OpenTelemetryRedisObserver")
+        with pytest.raises(type(failure)):
+            observer.on_event(ProcessControlEvent(failure))
+        assert all(instrument.calls == [] for instrument in meter.instruments)
+        assert span.events == []
+
+
 def test_redis_never_reads_forbidden_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     observer, meter, span = observer_with_span(monkeypatch, "OpenTelemetryRedisObserver")
 
@@ -194,27 +222,85 @@ def test_redis_runtime_channels_are_independent(monkeypatch: pytest.MonkeyPatch)
         instrument.failure = None
 
 
-def test_actual_sync_and_async_provider_behavior_is_preserved() -> None:
+async def test_actual_sync_and_async_provider_behavior_is_preserved() -> None:
     from bluetape.observability.redis import (
         OpenTelemetryRedisCoordinationObserver,
         OpenTelemetryRedisObserver,
     )
 
-    provider_meter = RecordingMeter()
-    coordination_meter = RecordingMeter()
-    provider = OpenTelemetryRedisObserver(meter=provider_meter)
-    coordination = OpenTelemetryRedisCoordinationObserver(meter=coordination_meter)
+    options = {
+        "decode_responses": False,
+        "socket_connect_timeout": 0.1,
+        "socket_timeout": 0.2,
+        "retry_on_timeout": False,
+        "retry_on_error": [],
+    }
 
-    provider.on_event(
-        SimpleNamespace(
-            mode=RedisMode.SYNC,
-            operation=RedisOperation.GET,
-            outcome=RedisOutcome.SUCCESS,
-            error_code=None,
-            elapsed_ns=1,
-        )
+    class SyncClient:
+        def __init__(self, failure: BaseException | None = None) -> None:
+            self.connection_pool = SimpleNamespace(connection_kwargs=options)
+            self.failure = failure
+
+        def get(self, _key: str) -> bytes:
+            if self.failure is not None:
+                raise self.failure
+            return b"value"
+
+    class AsyncClient:
+        def __init__(self, failure: BaseException | None = None) -> None:
+            self.connection_pool = SimpleNamespace(connection_kwargs=options)
+            self.failure = failure
+
+        async def get(self, _key: str) -> bytes:
+            if self.failure is not None:
+                raise self.failure
+            return b"value"
+
+    sync_meter = RecordingMeter()
+    async_meter = RecordingMeter()
+    sync_control = SyncRedisProvider(SyncClient())  # type: ignore[arg-type]
+    sync_observed = SyncRedisProvider(  # type: ignore[arg-type]
+        SyncClient(), observer=OpenTelemetryRedisObserver(meter=sync_meter)
     )
-    coordination.on_event(
+    async_control = AsyncRedisProvider(AsyncClient())  # type: ignore[arg-type]
+    async_observed = AsyncRedisProvider(  # type: ignore[arg-type]
+        AsyncClient(), observer=OpenTelemetryRedisObserver(meter=async_meter)
+    )
+
+    assert sync_control.get("key") == sync_observed.get("key") == b"value"
+    assert await async_control.get("key") == await async_observed.get("key") == b"value"
+
+    control_failure = RuntimeError("control")
+    observed_failure = RuntimeError("observed")
+    sync_control = SyncRedisProvider(SyncClient(control_failure))  # type: ignore[arg-type]
+    sync_observed = SyncRedisProvider(  # type: ignore[arg-type]
+        SyncClient(observed_failure), observer=OpenTelemetryRedisObserver(meter=sync_meter)
+    )
+    with pytest.raises(RedisProviderError) as control_error:
+        sync_control.get("key")
+    with pytest.raises(RedisProviderError) as observed_error:
+        sync_observed.get("key")
+    assert (control_error.value.operation, control_error.value.code) == (
+        observed_error.value.operation,
+        observed_error.value.code,
+    )
+    assert control_error.value.__cause__ is control_failure
+    assert observed_error.value.__cause__ is observed_failure
+
+    async_control = AsyncRedisProvider(  # type: ignore[arg-type]
+        AsyncClient(asyncio.CancelledError())
+    )
+    async_observed = AsyncRedisProvider(  # type: ignore[arg-type]
+        AsyncClient(asyncio.CancelledError()),
+        observer=OpenTelemetryRedisObserver(meter=async_meter),
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await async_control.get("key")
+    with pytest.raises(asyncio.CancelledError):
+        await async_observed.get("key")
+
+    coordination_meter = RecordingMeter()
+    OpenTelemetryRedisCoordinationObserver(meter=coordination_meter).on_event(
         SimpleNamespace(
             mode=RedisMode.ASYNC,
             operation=RedisCoordinationOperation.GET_OR_LOAD,
@@ -226,5 +312,20 @@ def test_actual_sync_and_async_provider_behavior_is_preserved() -> None:
             elapsed_ns=3,
         )
     )
-    assert len(provider_meter.instruments[0].calls) == 1
+    assert (
+        sum(
+            len(instrument.calls)
+            for instrument in sync_meter.instruments
+            if isinstance(instrument, RecordingCounter)
+        )
+        == 2
+    )
+    assert (
+        sum(
+            len(instrument.calls)
+            for instrument in async_meter.instruments
+            if isinstance(instrument, RecordingCounter)
+        )
+        == 2
+    )
     assert len(coordination_meter.instruments[0].calls) == 1
