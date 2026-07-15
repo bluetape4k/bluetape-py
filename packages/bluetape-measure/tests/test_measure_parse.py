@@ -1,3 +1,5 @@
+"""Parsing contract tests for bluetape-measure."""
+
 import pytest
 from bluetape.measure import METER, Dimension, InvalidMeasureError, Measure, Unit, parse_measure
 

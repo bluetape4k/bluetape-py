@@ -1,3 +1,5 @@
+"""Serialization contract tests for bluetape-id."""
+
 import json
 import uuid
 

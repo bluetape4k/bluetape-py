@@ -1,3 +1,5 @@
+"""Parsing contract tests for bluetape-money."""
+
 from decimal import ROUND_DOWN, Decimal
 
 import pytest
