@@ -74,3 +74,32 @@ def test_historical_release_target_does_not_gain_observability() -> None:
     )[0]
 
     assert "`bluetape-observability`" not in target_table
+
+
+def test_ci_and_wheel_verifier_own_focused_gates() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    verifier = (ROOT / "scripts/verify-observability-wheels.sh").read_text()
+
+    assert "observability:" in workflow
+    assert "Sync observability test dependencies" in workflow
+    assert "Test observability SDK contracts without skips" in workflow
+    assert "not observability_sdk and not observability_workspace" in workflow
+    assert "issue24-observability-sdk.xml" not in workflow
+    assert "scripts/verify-observability-wheels.sh" in workflow
+    assert 'find_spec("opentelemetry.sdk") is None' in workflow
+    assert 'find_spec("bluetape.observability")' in workflow
+
+    for value in (
+        "set -euo pipefail",
+        "mktemp -d",
+        "--require-hashes",
+        "--no-emit-local",
+        "trap 'rm -rf \"$tmp_dir\"' EXIT",
+        '"$tmp_dir/focused/bin/python" -I',
+        '"$tmp_dir/default/bin/python" -I',
+        '"$tmp_dir/readme/bin/python" -I',
+        "uv pip check",
+        "observability-requirements.txt",
+        "redis-requirements.txt",
+    ):
+        assert value in verifier

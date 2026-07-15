@@ -1,41 +1,41 @@
 # bluetape-observability
 
-English | [한국어](README.ko.md)
+[English](README.md) | 한국어
 
-Opt-in OpenTelemetry API adapters for Bluetape resilience and Redis observer events.
+Bluetape resilience와 Redis observer event를 OpenTelemetry API에 연결하는 opt-in 패키지입니다.
 
-## Install and prerequisites
+## 설치와 선행 패키지
 
 ```bash
 pip install bluetape-observability
 ```
 
-There is no root extra. Install the focused bridge and only the domain packages the
-application uses:
+root extra는 제공하지 않습니다. bridge와 application이 실제로 쓰는 domain 패키지만 직접
+설치합니다.
 
-| Use | Direct distributions |
+| 사용 범위 | 직접 설치할 배포 패키지 |
 |---|---|
-| Policy events | `bluetape-observability + bluetape-resilience` |
-| Redis provider and coordination events | `bluetape-observability + bluetape-cache-redis` |
-| Both domains | `bluetape-observability + bluetape-resilience + bluetape-cache-redis` |
+| Policy event | `bluetape-observability + bluetape-resilience` |
+| Redis provider와 coordination event | `bluetape-observability + bluetape-cache-redis` |
+| 두 domain 모두 | `bluetape-observability + bluetape-resilience + bluetape-cache-redis` |
 
-Domain packages are deliberately test-only dependencies of this bridge. Applications own and
-install their domain packages directly.
+Domain 패키지는 이 bridge의 test-only dependency입니다. Application이 필요한 domain 패키지를
+직접 소유하고 설치합니다.
 
-## Public adapters and fixed signals
+## 공개 adapter와 고정 signal
 
-- `OpenTelemetryPolicyObserver` records `bluetape.resilience.policy.events`.
-- `OpenTelemetryRedisObserver` records `bluetape.redis.operations` and duration.
-- `OpenTelemetryRedisCoordinationObserver` records
-  `bluetape.redis.coordination.operations` and duration.
+- `OpenTelemetryPolicyObserver`는 `bluetape.resilience.policy.events`를 기록합니다.
+- `OpenTelemetryRedisObserver`는 `bluetape.redis.operations`와 duration을 기록합니다.
+- `OpenTelemetryRedisCoordinationObserver`는
+  `bluetape.redis.coordination.operations`와 duration을 기록합니다.
 
-Only pinned low-cardinality enum values, bounded counts, booleans, and durations are consumed.
-Policy names, Redis keys/values/namespaces, exception messages, arbitrary attributes, log
-context, baggage, and trace ID values are never promoted automatically.
+고정된 low-cardinality enum, 범위가 제한된 count, boolean, duration만 읽습니다. Policy 이름,
+Redis key/value/namespace, exception message, 임의 attribute, log context, baggage, trace ID 값은
+자동으로 올리지 않습니다.
 
-## API-only example
+## API-only 예제
 
-The OpenTelemetry API no-op path works without configuring an SDK.
+SDK를 설정하지 않아도 OpenTelemetry API의 no-op 경로로 안전하게 호출할 수 있습니다.
 
 <!-- api-only-example:start -->
 ```python
@@ -101,10 +101,9 @@ OpenTelemetryRedisCoordinationObserver().on_event(
 ```
 <!-- api-only-example:end -->
 
-## Application-owned SDK example
+## Application-owned SDK 예제
 
-Production exporter selection, provider configuration, flushing, and shutdown are
-application-owned.
+운영 exporter 선택, provider 설정, flush, shutdown은 application-owned 책임입니다.
 
 <!-- sdk-example:start -->
 ```python
@@ -144,12 +143,12 @@ finally:
 ```
 <!-- sdk-example:end -->
 
-## Caller-owned composition
+## Caller-owned 조합
 
-Each producer accepts one observer. Assigning only the OTel adapter replaces the previous observer.
-A caller-owned composite makes order and failure policy explicit.
+각 producer는 observer 하나를 받습니다. OTel adapter만 지정하면 replaces the previous observer
+상태가 됩니다. 순서와 실패 정책은 caller-owned composite에서 명시합니다.
 
-This resilience example is `fail-stop`: the first failure stops later callbacks.
+Resilience 예제는 `fail-stop`입니다. 앞 callback이 실패하면 뒤 callback을 호출하지 않습니다.
 
 <!-- resilience-composition:start -->
 ```python
@@ -171,8 +170,7 @@ compose(audit, otel)(object())
 ```
 <!-- resilience-composition:end -->
 
-This Redis example is `fail-continue`: it keeps later callbacks running and leaves diagnosis to
-the application.
+Redis 예제는 `fail-continue`입니다. 뒤 callback을 계속 호출하고 진단은 application에 남깁니다.
 
 <!-- redis-composition:start -->
 ```python
@@ -200,22 +198,21 @@ Composite(Recorder("audit"), Recorder("otel")).on_event(object())
 ```
 <!-- redis-composition:end -->
 
-Alternate ordering and failure handling remain caller decisions.
+다른 순서와 실패 처리는 caller가 정합니다.
 
-## Failure, context, and diagnostics
+## 실패, context, 진단
 
-Construction is fail-fast: meter lookup or instrument creation errors are application wiring
-failures. Per-event ordinary OpenTelemetry errors are isolated independently so domain results
-are preserved; process-control `BaseException` values still propagate. The package exposes
-no mutable health state and no diagnostic callback. SDK/exporter delivery health belongs to the
-application-owned OpenTelemetry configuration.
+생성은 fail-fast입니다. Meter 조회나 instrument 생성 실패는 application wiring 실패입니다. Event별
+일반 OpenTelemetry 오류는 독립적으로 격리해 domain 결과를 보존하고, process-control
+`BaseException`은 전파합니다. no mutable health 상태와 diagnostic callback은 제공하지 않습니다.
+SDK/exporter 전송 상태는 application-owned OpenTelemetry 설정으로 진단합니다.
 
-Current span lookup follows normal synchronous and coroutine `contextvars` behavior. There is no
-implicit propagation guarantee for raw threads, `run_in_executor`, detached or background tasks,
-processes, remote transports, or callbacks after a context ends. The package does not promote
-log context or baggage into telemetry and does not add trace ID or span ID fields to logs.
+현재 span은 일반 sync와 coroutine `contextvars` 범위에서만 찾습니다. raw threads,
+`run_in_executor`, detached/background task, process, remote transport, context 종료 뒤 callback에는
+암묵적 전파 보장이 없습니다. Log context나 baggage를 telemetry로 올리지 않으며, log에 trace ID나
+span ID를 자동으로 추가하지 않습니다.
 
 ## rollback
 
-Rollback removes the adapter from the producer and restores the prior observer or caller-owned
-composite. No data or schema migration is required.
+Rollback은 producer에서 adapter를 제거하고 restores the prior observer 또는 caller-owned
+composite를 복원하는 작업입니다. Data/schema migration은 필요하지 않습니다.

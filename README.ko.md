@@ -51,6 +51,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | 표준 라이브러리만 사용하는 eager iterable/list/dict 헬퍼. |
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | gzip, zlib, raw-DEFLATE, LZ4, Snappy, Zstandard를 제한된 크기로 처리하는 structural compressor 계약. |
 | `bluetape-logging` | `bluetape.logging` | no | active | 표준 `logging`, `contextvars`, redaction 헬퍼. |
+| `bluetape-observability` | `bluetape.observability` | no | active, source workspace | Resilience와 Redis observer event를 위한 API-only OpenTelemetry adapter. |
 | `bluetape-resilience` | `bluetape.resilience` | no | active, source workspace | 표준 라이브러리 기반 sync/async retry, circuit breaker, bulkhead, cooperative async timeout policy. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | 이 워크스페이스 내부 테스트를 우선 지원하는 pytest 헬퍼와 작은 공개 안정 API. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
@@ -69,12 +70,14 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
   유지합니다.
 - `bluetape-resilience`는 stdlib-only로 유지하고 sync/async policy family를
   분리하며 sync timeout이나 hidden worker를 제공하지 않습니다.
+- `bluetape-observability`는 직접 설치하며 runtime에는 OpenTelemetry API만
+  사용합니다. SDK/exporter lifecycle은 application이 소유합니다.
 - `bluetape-testing`은 `pytest`에 의존할 수 있지만, 넓은 공개 API를 약속하기
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
 - 기본 meta 설치는 계속 core-only입니다. Cache, Redis, compression provider,
-  resilience, serde, Testcontainers는 opt-in이며 Apache Fory는 trusted-internal
+  resilience, observability, serde, Testcontainers는 opt-in이며 Apache Fory는 trusted-internal
   전용 `fory` extra로만 제공합니다.
 
 ## 설치
@@ -121,6 +124,7 @@ pip install "bluetape-compression[snappy]"
 pip install "bluetape-compression[zstd]"
 pip install "bluetape-compression[native]"
 pip install bluetape-logging
+pip install bluetape-observability
 pip install bluetape-resilience
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 전용
@@ -135,6 +139,7 @@ uv sync --all-packages --locked
 uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-cache-redis python -c "from bluetape.cache.redis import BinaryEnvelopeFormat, SyncRedisProvider; assert BinaryEnvelopeFormat().format_id == 'binary-v1' and SyncRedisProvider"
+uv run --package bluetape-observability python -c "from bluetape.observability.redis import OpenTelemetryRedisObserver; from bluetape.observability.resilience import OpenTelemetryPolicyObserver; assert OpenTelemetryPolicyObserver and OpenTelemetryRedisObserver"
 uv run --package bluetape-resilience python -c "from bluetape.resilience import AsyncResiliencePipeline, ResiliencePipeline; assert ResiliencePipeline and AsyncResiliencePipeline"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
@@ -422,6 +427,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | `bluetape-compression` | [한국어](packages/bluetape-compression/README.ko.md) / [English](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
+| `bluetape-observability` | [한국어](packages/bluetape-observability/README.ko.md) / [English](packages/bluetape-observability/README.md) |
 | `bluetape-resilience` | [한국어](packages/bluetape-resilience/README.ko.md) / [English](packages/bluetape-resilience/README.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
 | `bluetape-testcontainers` | [packages/bluetape-testcontainers/README.ko.md](packages/bluetape-testcontainers/README.ko.md) |
@@ -432,7 +438,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | 트랙 | 계획 |
 |---|---|
 | `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
-| `0.2.0` | Ecosystem 이슈 #7-#34, local cache #50, compressor 계약 #59, Redis provider #54, coordination #55, serialization #45/#46을 추적합니다. |
+| `0.2.0` | Observability #24를 포함한 ecosystem 이슈 #7-#34와 cache/Redis #50/#54/#55, compressor #59, serialization #45/#46을 추적합니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.

@@ -31,6 +31,9 @@ focused distribution model:
   plus structural compressor contracts and opt-in LZ4, Snappy, and Zstandard
   providers from #59. PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
+- `bluetape-observability`: API-only OpenTelemetry adapters for resilience and
+  Redis observer events, implemented for issue #24 with caller-owned SDK and
+  exporter lifecycle. PyPI publication remains on HOLD.
 - `bluetape-resilience`: stdlib-only sync/async retry, circuit breaker,
   bulkhead, cooperative async timeout, and immutable fluent pipelines,
   implemented for issue #12 on `feat/issue-12-resilience-policies` while PyPI
@@ -188,7 +191,8 @@ Historical release scope; all items are closed.
   `docs/research/2026-07-15-issue-23-observability-opentelemetry-boundaries.md`:
   keep domain packages OTel-free and use a separate API-only opt-in bridge if
   #24 proceeds; applications retain SDK/exporter/global lifecycle ownership.
-- #24 - Observability hooks and telemetry helpers.
+- #24 - Observability hooks and telemetry helpers. Implemented as the focused
+  `bluetape-observability` API-only bridge; PR review and merge are pending.
 - #25 - Audit event and outbox publisher packages.
 - #26 - AWS integration provider packages.
 - #27 - Graph package and backend conformance suites.
