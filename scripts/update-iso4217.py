@@ -16,7 +16,13 @@ from xml.etree import ElementTree
 MAX_INPUT_BYTES = 2 * 1024 * 1024
 MAX_SOURCE_ROWS = 1024
 MAX_UNIQUE_CURRENCIES = 512
+MIN_CANONICAL_SOURCE_ROWS = 250
+MIN_CANONICAL_UNIQUE_CURRENCIES = 150
 EXCLUDED_CODES = ("XTS", "XXX")
+CANONICAL_SOURCE_URL = (
+    "https://www.six-group.com/dam/download/financial-information/"
+    "data-center/iso-currrency/lists/list-one.xml"
+)
 EXPECTED_ROW_TAGS = {"CtryNm", "CcyNm", "Ccy", "CcyNbr", "CcyMnrUnts"}
 EXIT_CODES = {
     "size": 10,
@@ -55,10 +61,22 @@ def _single_text(element: ElementTree.Element, tag: str, *, required: bool) -> s
     children = element.findall(tag)
     if len(children) > 1:
         raise GenerationError("schema", "a currency row contains a duplicate field")
-    value = "" if not children else (children[0].text or "").strip()
+    if not children:
+        value = ""
+    else:
+        child = children[0]
+        allowed_attributes = ({"IsFund": "true"}, {}) if tag == "CcyNm" else ({},)
+        if child.attrib not in allowed_attributes or list(child):
+            raise GenerationError("schema", "a currency field schema changed")
+        value = (child.text or "").strip()
     if required and not value:
         raise GenerationError("schema", "a currency row is missing a required field")
     return value
+
+
+def _require_whitespace(value: str | None, message: str) -> None:
+    if value is not None and value.strip():
+        raise GenerationError("schema", message)
 
 
 def _parse_xml(payload: bytes) -> Snapshot:
@@ -71,6 +89,7 @@ def _parse_xml(payload: bytes) -> Snapshot:
         raise GenerationError("schema", "input is not valid ISO 4217 XML") from error
     if root.tag != "ISO_4217" or set(root.attrib) != {"Pblshd"}:
         raise GenerationError("schema", "the ISO 4217 root schema changed")
+    _require_whitespace(root.text, "the ISO 4217 root schema changed")
     published_date = root.attrib["Pblshd"]
     try:
         date.fromisoformat(published_date)
@@ -80,22 +99,40 @@ def _parse_xml(payload: bytes) -> Snapshot:
     tables = root.findall("CcyTbl")
     if len(tables) != 1 or list(root) != tables:
         raise GenerationError("schema", "the ISO 4217 table schema changed")
-    entries = list(tables[0])
+    table = tables[0]
+    if table.attrib:
+        raise GenerationError("schema", "the ISO 4217 table schema changed")
+    _require_whitespace(table.text, "the ISO 4217 table schema changed")
+    _require_whitespace(table.tail, "the ISO 4217 root schema changed")
+    entries = list(table)
     if any(entry.tag != "CcyNtry" for entry in entries):
         raise GenerationError("schema", "the ISO 4217 row schema changed")
+    if not entries:
+        raise GenerationError("schema", "the ISO 4217 table is empty")
     if len(entries) > MAX_SOURCE_ROWS:
         raise GenerationError("bounds", "the source row limit was exceeded")
 
     currencies: dict[str, CurrencyRow] = {}
     numeric_to_code: dict[str, str] = {}
     for entry in entries:
+        if entry.attrib:
+            raise GenerationError("schema", "the ISO 4217 row schema changed")
+        _require_whitespace(entry.text, "the ISO 4217 row schema changed")
+        _require_whitespace(entry.tail, "the ISO 4217 table schema changed")
         tags = [child.tag for child in entry]
         if set(tags) - EXPECTED_ROW_TAGS or len(tags) != len(set(tags)):
             raise GenerationError("schema", "the ISO 4217 row schema changed")
+        for child in entry:
+            _require_whitespace(child.tail, "the ISO 4217 row schema changed")
+        _single_text(entry, "CtryNm", required=True)
         code = _single_text(entry, "Ccy", required=False)
         if not code:
+            if set(tags) != {"CtryNm", "CcyNm"}:
+                raise GenerationError("schema", "an empty-currency row is incomplete")
             _single_text(entry, "CcyNm", required=True)
             continue
+        if set(tags) != EXPECTED_ROW_TAGS:
+            raise GenerationError("schema", "a currency row is incomplete")
         name = _single_text(entry, "CcyNm", required=True)
         numeric_code = _single_text(entry, "CcyNbr", required=True)
         minor_text = _single_text(entry, "CcyMnrUnts", required=True)
@@ -208,6 +245,11 @@ def generate(
     if len(payload) > MAX_INPUT_BYTES:
         raise GenerationError("size", "the XML input exceeds 2 MiB")
     snapshot = _parse_xml(payload)
+    if source_url == CANONICAL_SOURCE_URL and (
+        snapshot.source_row_count < MIN_CANONICAL_SOURCE_ROWS
+        or snapshot.unique_currency_count < MIN_CANONICAL_UNIQUE_CURRENCIES
+    ):
+        raise GenerationError("bounds", "the canonical ISO 4217 snapshot is incomplete")
     digest = hashlib.sha256(payload).hexdigest()
     content = _render(snapshot, source_url, retrieved_date, digest)
     _atomic_write(output_path, content)

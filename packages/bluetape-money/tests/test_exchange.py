@@ -7,6 +7,7 @@ from bluetape.money import (
     USD,
     CurrencyMismatchError,
     ExchangeRate,
+    InvalidAmountError,
     InvalidExchangeRateError,
     Money,
     convert,
@@ -43,6 +44,13 @@ def test_exchange_rate_both_directions() -> None:
         convert(dollars, "USD/EUR")  # type: ignore[arg-type]
     identity = ExchangeRate.of(USD, USD, 1)
     assert convert(dollars, identity) == dollars
+
+
+def test_exchange_conversion_never_silently_rounds() -> None:
+    wide_fraction = "0." + ("1" * 200)
+    rate = ExchangeRate.of(USD, EUR, wide_fraction)
+    with pytest.raises(InvalidAmountError):
+        convert(Money.of(wide_fraction, USD), rate)
 
 
 def test_exchange_conversion_ignores_ambient_decimal_precision() -> None:

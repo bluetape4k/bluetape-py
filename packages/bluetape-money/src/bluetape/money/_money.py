@@ -95,9 +95,12 @@ class Money:
         return Decimal(1).scaleb(-minor_unit)
 
     def quantize(self, *, rounding: str = ROUND_HALF_EVEN) -> Money:
-        normalized_rounding = require_rounding(rounding)
         quantum = self._quantum()
-        amount = calculate(lambda: self.amount.quantize(quantum, rounding=normalized_rounding))
+        normalized_rounding = require_rounding(rounding)
+        amount = calculate(
+            lambda: self.amount.quantize(quantum, rounding=normalized_rounding),
+            allow_rounding=True,
+        )
         return Money(amount, self.currency)
 
     def minor_units(self, *, rounding: str | None = None) -> int:
@@ -118,7 +121,8 @@ class Money:
     ) -> str:
         if not isinstance(quantize, bool):
             raise TypeError("quantize must be a boolean")
-        value = self.quantize(rounding=rounding) if quantize else self
+        normalized_rounding = require_rounding(rounding)
+        value = self.quantize(rounding=normalized_rounding) if quantize else self
         return f"{value.currency.code} {value.amount:f}"
 
     def to_dict(self) -> dict[str, str]:

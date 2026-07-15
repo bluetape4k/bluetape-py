@@ -15,8 +15,10 @@ from decimal import (
     Decimal,
     DecimalException,
     DivisionByZero,
+    Inexact,
     InvalidOperation,
     Overflow,
+    Rounded,
     localcontext,
 )
 
@@ -49,7 +51,7 @@ MONEY_CONTEXT = Context(
     Emin=-256,
     Emax=256,
 )
-for _signal in (InvalidOperation, DivisionByZero, Overflow):
+for _signal in (InvalidOperation, DivisionByZero, Overflow, Inexact, Rounded):
     MONEY_CONTEXT.traps[_signal] = True
 
 
@@ -107,9 +109,13 @@ def calculate(
     *,
     error_type: type[MoneyError] = InvalidAmountError,
     label: str = "amount",
+    allow_rounding: bool = False,
 ) -> Decimal:
     try:
-        with localcontext(MONEY_CONTEXT):
+        with localcontext(MONEY_CONTEXT) as context:
+            if allow_rounding:
+                context.traps[Inexact] = False
+                context.traps[Rounded] = False
             result = operation()
     except (DecimalException, ValueError) as error:
         _raise_invalid(error_type, label, error)

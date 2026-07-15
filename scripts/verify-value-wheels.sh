@@ -96,10 +96,17 @@ def inspect_focused_metadata(wheel: Path) -> dict[str, object]:
 PROBE = r'''
 import importlib.util
 import json
+import socket
 import sys
 from pathlib import Path
 
 request = json.loads(sys.argv[1])
+
+def deny_network(*args, **kwargs):
+    raise AssertionError("network access is forbidden during isolated imports")
+
+socket.socket = deny_network
+socket.create_connection = deny_network
 
 def find(name):
     try:
@@ -294,7 +301,8 @@ with tempfile.TemporaryDirectory(prefix="bluetape-value-wheels-") as temporary:
             "requirements_sha256": sha256(requirements),
             "preparation": "uv-export-locked+uv-pip-sync-require-hashes",
             "installation": "uv-offline+no-index+no-deps+local-wheels",
-            "network_free": True,
+        "network_free": True,
+        "network_guard": "socket.socket+socket.create_connection",
             "pip_check": True,
             "python_isolated": True,
         }

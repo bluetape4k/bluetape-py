@@ -115,6 +115,16 @@ def test_money_arithmetic_and_context_contract() -> None:
         _ = Money.of("9e256", USD) * 10
 
 
+def test_arithmetic_never_silently_rounds_exact_caller_values() -> None:
+    wide_fraction = "0." + ("1" * 200)
+    with pytest.raises(InvalidAmountError):
+        _ = Money.of(wide_fraction, USD) * wide_fraction
+    with pytest.raises(InvalidAmountError):
+        _ = Money.of(1, USD) / 3
+    with pytest.raises(InvalidAmountError):
+        _ = Money.of(1, USD) + Money.of("1e-256", USD)
+
+
 def test_arithmetic_uses_package_context_without_mutating_ambient_context() -> None:
     original_precision = getcontext().prec
     with localcontext() as caller_context:
@@ -139,6 +149,8 @@ def test_minor_unit_and_rounding_contract() -> None:
         value.minor_units()
     with pytest.raises(InvalidAmountError):
         value.quantize(rounding="nearest")
+    with pytest.raises(InvalidAmountError):
+        value.format(quantize=False, rounding="nearest")
     with pytest.raises(TypeError):
         Money.from_minor(True, USD)
     assert Money.from_minor(-1234, USD).minor_units() == -1234
@@ -155,6 +167,8 @@ def test_missing_minor_unit_fails_for_minor_unit_operations() -> None:
         Money.from_minor(1, currency)
     with pytest.raises(InvalidCurrencyError):
         money.quantize()
+    with pytest.raises(InvalidCurrencyError):
+        money.quantize(rounding="nearest")
     with pytest.raises(InvalidCurrencyError):
         money.minor_units(rounding=ROUND_DOWN)
 
