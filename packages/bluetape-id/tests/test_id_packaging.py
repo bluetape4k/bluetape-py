@@ -25,4 +25,17 @@ def test_distribution_metadata_is_stdlib_only() -> None:
     assert metadata["tool"]["uv"]["build-backend"]["module-name"] == "bluetape.id"
     assert not (PACKAGE / "src/bluetape/__init__.py").exists()
     module = importlib.import_module("bluetape.id")
-    assert module.__all__ == []
+    assert module.__all__ == [
+        "IDError",
+        "InvalidIDError",
+        "IDOverflowError",
+        "UUID7Generator",
+        "ULIDGenerator",
+        "MonotonicULIDGenerator",
+        "uuid4",
+        "uuid7",
+        "uuid7_timestamp_ms",
+        "ulid",
+        "parse_ulid",
+        "ulid_timestamp_ms",
+    ]
