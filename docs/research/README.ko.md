@@ -8,6 +8,7 @@ Python package scope, dependency candidate, GitHub issue와 연결합니다.
 | Milestone | Research |
 |---|---|
 | `0.2.0` | [Issue #10 직렬화 전략](2026-07-10-issue-10-serialization-strategy.md) |
+| `0.2.0` | [Issue #13 ID, measure, money 경계](2026-07-15-issue-13-value-packages.md) |
 | `0.2.0` | Issue #14 SQL, repository, and audit outbox strategy research - pending |
 | `0.2.0` | Issue #16 AWS, graph, text, and image adapter boundary research - pending |
 | `0.2.0` | [Issue #23 observability 및 OpenTelemetry 경계](2026-07-15-issue-23-observability-opentelemetry-boundaries.md) |
