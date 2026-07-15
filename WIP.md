@@ -70,11 +70,11 @@ focused distribution model:
   Apache Fory is implemented and locally verified with Python, Go, Rust, and
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
   on HOLD.
-- Issue #11 remains the cache/Redis parent umbrella. Issue #50 local caches are
-  complete, and issue #51 is complete through the merged #57 Testcontainers
-  prerequisite, #54 Redis provider, and #55 sync/async load coordination.
-  Issue #56 near-cache invalidation is an independent upstream-blocked track,
-  not a requirement for #51 completion. Issue #59 provides the compressor
+- Issue #11 cache/Redis delivery is complete through #50 local caches and the
+  #51 Redis coordination umbrella, including merged #57 Testcontainers, #54
+  Redis provider, and #55 sync/async load coordination. Issue #56 near-cache
+  invalidation remains an independent upstream-blocked track and is not a
+  requirement for #11 or #51 completion. Issue #59 provides the compressor
   contracts used to reduce Redis payloads.
 - Issue #12 resilience policies are implemented and locally verified on the
   feature branch. PR review and merge remain pending; PyPI publication stays
@@ -161,7 +161,10 @@ Historical release scope; all items are closed.
 - #46 - Apache Fory adapter and Python/Go/Rust/Kotlin conformance. Separate
   trusted-internal CPython 3.13 extra implemented and locally verified in the
   source workspace; PyPI publication remains on HOLD.
-- #11 - Cache and Redis coordination umbrella.
+- #11 - Cache and Redis coordination umbrella. Required delivery is complete
+  through #50 local caches and #51 Redis provider/load coordination; the
+  explicitly independent #56 near-cache invalidation track remains
+  upstream-blocked and does not block #11 closeout.
 - #50 - Bounded sync and async local TTL loading caches. Implemented and merged
   as `bluetape-cache`.
 - #51 - Redis cache coordination and provider boundary. Required delivery is
