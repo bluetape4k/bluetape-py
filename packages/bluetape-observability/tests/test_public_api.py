@@ -4,7 +4,7 @@ import importlib
 import inspect
 
 import pytest
-from _support import RecordingMeter
+from _observability_support import RecordingMeter
 
 
 def assert_keyword_only_meter(public_class: type[object]) -> None:

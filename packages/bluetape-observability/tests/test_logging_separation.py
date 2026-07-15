@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from _support import RecordingMeter, coordination_event, policy_event, redis_event
+from _observability_support import RecordingMeter, coordination_event, policy_event, redis_event
 from opentelemetry import baggage, context, trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 

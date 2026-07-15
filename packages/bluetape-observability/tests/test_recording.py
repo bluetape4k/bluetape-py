@@ -7,7 +7,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-from _support import EnumValue, RecordingCounter, RecordingHistogram, RecordingSpan
+from _observability_support import EnumValue, RecordingCounter, RecordingHistogram, RecordingSpan
 
 
 def recording_module():

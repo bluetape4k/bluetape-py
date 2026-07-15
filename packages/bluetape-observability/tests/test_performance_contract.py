@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from _support import coordination_event, policy_event, redis_event
+from _observability_support import coordination_event, policy_event, redis_event
 
 PACKAGE_ROOT = Path(__file__).parents[1]
 SOURCE_ROOT = PACKAGE_ROOT / "src/bluetape/observability"
@@ -132,7 +132,10 @@ def test_package_owns_no_runtime_resource() -> None:
         assert tasks_before == set()
 
 
-@pytest.mark.parametrize("mode", ["api", "sdk"])
+@pytest.mark.parametrize(
+    "mode",
+    ["api", pytest.param("sdk", marks=pytest.mark.observability_sdk)],
+)
 def test_benchmark_modes_repeat_without_resource_leak(mode: str) -> None:
     outputs = []
     for _ in range(2):
