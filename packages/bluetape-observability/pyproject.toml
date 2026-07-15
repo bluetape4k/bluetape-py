@@ -1,0 +1,23 @@
+[project]
+name = "bluetape-observability"
+version = "0.1.0"
+description = "OpenTelemetry adapters for Bluetape resilience and Redis observer events."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = ["opentelemetry-api>=1.43,<2"]
+
+[dependency-groups]
+test = [
+    "bluetape-cache-redis==0.1.0",
+    "bluetape-resilience==0.1.0",
+    "opentelemetry-sdk>=1.43,<2",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.28,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "bluetape.observability"
