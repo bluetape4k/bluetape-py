@@ -54,8 +54,9 @@ Focused packages own focused import paths such as `bluetape.asyncio`,
 
 The `cache` extra installs the stdlib-only bounded sync and async local TTL
 loading caches. The separate `cache-redis` extra installs byte-only sync/async
-Redis providers and bounded result envelopes; Redis coordination remains issue
-#55 work.
+Redis providers, bounded result envelopes, and bounded cross-process load
+coordination. It does not provide durable Redis L2 caching or the separate
+upstream-blocked near-cache invalidation tracked by issue #56.
 
 The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited

@@ -24,7 +24,7 @@ workspace에서 사용할 수 있으며, registry 설치 명령은 PyPI 배포�
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
 Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compressor
-계약 #59, Redis provider #54, coordination 후속 #55를 추적합니다. 자세한 계획은
+계약 #59, Redis provider #54, coordination #55를 추적합니다. 자세한 계획은
 [`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
 
@@ -150,7 +150,7 @@ uv run pytest -m testcontainers packages/bluetape-testcontainers -q
 #54 Redis provider 테스트는 생태계 래퍼의 `RedisServer`를 사용해 Redis 8 command,
 TTL, NX, Lua compare-and-delete, lifecycle, ACL, redaction 동작을 검증합니다. Value는
 명시적인 `serialize -> compress -> store` 조합을 사용합니다. Issue #55는 opt-in
-패키지 경계를 유지하면서 bounded sync/async Redis lease coordination을 추가합니다.
+패키지 경계를 유지하면서 bounded sync/async Redis lease coordination을 제공합니다.
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
 실행할 수 있습니다.
@@ -329,8 +329,9 @@ mutation supersession, immutable statistics 의미를 공유합니다. Key에는
 authorization context를 포함하고, `KeyError(key)`와 loader exception은 logging 전에
 redact해야 합니다. Cancellation-resistant loader는 terminal 상태가 될 때까지
 `max_inflight` slot을 유지하므로 async caller가 deadline을 소유해야 합니다.
-Redis-backed storage는 아래 opt-in provider로 제공하며 load coordination은 issue
-#55 범위입니다.
+Redis-backed storage와 bounded cross-process load coordination은 아래 opt-in
+provider로 제공합니다. RESP3 near-cache invalidation은 upstream에 막힌 별도 트랙
+issue #56으로 남아 있습니다.
 
 ### Redis byte provider
 
