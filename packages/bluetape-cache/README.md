@@ -4,8 +4,9 @@
 synchronous and `asyncio` applications. Entries expire lazily, live entries are
 bounded by LRU eviction, and concurrent same-key misses share one loader.
 
-Redis coordination is deliberately outside this package and remains tracked by
-issue #51.
+Redis provider and load coordination remain deliberately outside this package
+and are delivered by the opt-in `bluetape-cache-redis` distribution. RESP3
+near-cache invalidation remains the independent upstream-blocked issue #56.
 
 ## Install
 
@@ -162,8 +163,9 @@ shared with current same-key waiters and are not cached.
 
 ## Deliberate limits
 
-This release does not provide Redis or distributed coordination, background
+This package does not provide Redis or distributed coordination, background
 expiry workers, byte-based sizing, callbacks/listeners, value copying, or
 process-wide cache management. Capacity is entry-count based. This is a new
-public API, so there is no migration alias or compatibility shim. Redis support
-is separated into issue #51.
+public API, so there is no migration alias or compatibility shim. Applications
+that need bounded cross-process load coordination can compose the separate
+opt-in `bluetape-cache-redis` package without changing this stdlib-only boundary.

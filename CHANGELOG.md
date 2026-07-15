@@ -72,7 +72,9 @@ and this project uses semantic versioning once the first tag is published.
   synchronous and async local TTL loading caches under `bluetape.cache`,
   including LRU capacity, same-key load coalescing, mutation supersession,
   in-flight load limits, and immutable statistics. This is a new API and needs
-  no migration alias or compatibility shim; Redis remains tracked by issue #51.
+  no migration alias or compatibility shim. Opt-in Redis provider and load
+  coordination are delivered separately by `bluetape-cache-redis`; near-cache
+  invalidation remains the independent upstream-blocked issue #56.
 - `bluetape-serde` source workspace package with immutable payload contracts,
   caller-owned trust policy, fixed typed errors, and strict bounded JSON v1
   serialization under `bluetape.serde`, including bounded `bytearray` output
