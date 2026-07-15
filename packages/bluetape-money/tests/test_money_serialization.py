@@ -1,3 +1,5 @@
+"""Serialization contract tests for bluetape-money."""
+
 import pytest
 from bluetape.money import USD, InvalidAmountError, Money
 
