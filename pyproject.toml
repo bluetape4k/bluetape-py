@@ -12,7 +12,10 @@ dependencies = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-core==0.1.0",
+    "bluetape-id==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-measure==0.1.0",
+    "bluetape-money==0.1.0",
     "bluetape-observability==0.1.0",
     "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
@@ -39,7 +42,10 @@ bluetape-codec = { workspace = true }
 bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
+bluetape-id = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-measure = { workspace = true }
+bluetape-money = { workspace = true }
 bluetape-observability = { workspace = true }
 bluetape-resilience = { workspace = true }
 bluetape-serde = { workspace = true }
@@ -57,7 +63,10 @@ members = [
     "packages/bluetape-collections",
     "packages/bluetape-compression",
     "packages/bluetape-core",
+    "packages/bluetape-id",
     "packages/bluetape-logging",
+    "packages/bluetape-measure",
+    "packages/bluetape-money",
     "packages/bluetape-observability",
     "packages/bluetape-resilience",
     "packages/bluetape-serde",
