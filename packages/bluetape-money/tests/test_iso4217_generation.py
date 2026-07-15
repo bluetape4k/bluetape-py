@@ -12,6 +12,10 @@ ROOT = Path(__file__).parents[3]
 SCRIPT = ROOT / "scripts/update-iso4217.py"
 SAMPLE = Path(__file__).parent / "fixtures/iso4217-list-one-sample.xml"
 SOURCE_URL = "https://example.test/list-one.xml"
+CANONICAL_SOURCE_URL = (
+    "https://www.six-group.com/dam/download/financial-information/"
+    "data-center/iso-currrency/lists/list-one.xml"
+)
 
 
 def load_updater():
@@ -23,7 +27,12 @@ def load_updater():
     return module
 
 
-def run_updater(input_path: Path, output_path: Path) -> subprocess.CompletedProcess[str]:
+def run_updater(
+    input_path: Path,
+    output_path: Path,
+    *,
+    source_url: str = SOURCE_URL,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             sys.executable,
@@ -33,7 +42,7 @@ def run_updater(input_path: Path, output_path: Path) -> subprocess.CompletedProc
             "--output",
             str(output_path),
             "--source-url",
-            SOURCE_URL,
+            source_url,
             "--retrieved-date",
             "2026-07-15",
         ],
@@ -81,6 +90,47 @@ def test_iso4217_conflicts_and_schema_drift_fail_closed(tmp_path: Path) -> None:
         assert completed.returncode != 0
         assert f"iso4217:{category}:" in completed.stderr
         assert output.read_text() == "sentinel"
+
+
+def test_iso4217_incomplete_or_nested_schema_fails_closed(tmp_path: Path) -> None:
+    output = tmp_path / "output.py"
+    output.write_text("sentinel")
+    payloads = {
+        "empty": '<ISO_4217 Pblshd="2026-01-01"><CcyTbl/></ISO_4217>',
+        "missing-country": SAMPLE.read_text().replace(
+            "<CtryNm>UNITED STATES OF AMERICA</CtryNm>", "", 1
+        ),
+        "nested-name": SAMPLE.read_text().replace(
+            "<CcyNm>US Dollar</CcyNm>",
+            "<CcyNm>US<Unexpected/> Dollar</CcyNm>",
+            1,
+        ),
+        "field-attribute": SAMPLE.read_text().replace(
+            "<Ccy>USD</Ccy>", '<Ccy status="active">USD</Ccy>', 1
+        ),
+    }
+    for name, payload in payloads.items():
+        invalid = tmp_path / f"{name}.xml"
+        invalid.write_text(payload)
+        completed = run_updater(invalid, output)
+        assert completed.returncode != 0
+        assert "iso4217:schema:" in completed.stderr
+        assert output.read_text() == "sentinel"
+
+
+def test_canonical_iso4217_snapshot_rejects_truncation(tmp_path: Path) -> None:
+    output = tmp_path / "output.py"
+    output.write_text("sentinel")
+    truncated = tmp_path / "truncated.xml"
+    truncated.write_text(SAMPLE.read_text())
+    completed = run_updater(
+        truncated,
+        output,
+        source_url=CANONICAL_SOURCE_URL,
+    )
+    assert completed.returncode != 0
+    assert "iso4217:bounds:" in completed.stderr
+    assert output.read_text() == "sentinel"
 
 
 def test_iso4217_row_currency_and_alias_bounds_fail_closed(tmp_path: Path) -> None:
