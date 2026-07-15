@@ -31,6 +31,13 @@ focused distribution model:
   plus structural compressor contracts and opt-in LZ4, Snappy, and Zstandard
   providers from #59. PyPI publication remains on HOLD.
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
+- `bluetape-id`: stdlib-only UUIDv4/v7 and random/monotonic ULID values,
+  implemented for issue #13 with process-local generator state.
+- `bluetape-measure`: immutable runtime dimension-checked linear measurements,
+  implemented for issue #13 with caller-owned custom unit definitions.
+- `bluetape-money`: exact Decimal money and current ISO 4217 currencies,
+  implemented for issue #13 with caller-owned exchange rates and historical
+  policy. PyPI publication remains on HOLD.
 - `bluetape-observability`: API-only OpenTelemetry adapters for resilience and
   Redis observer events, implemented for issue #24 with caller-owned SDK and
   exporter lifecycle. PyPI publication remains on HOLD.
@@ -79,6 +86,9 @@ focused distribution model:
 - Issue #12 resilience policies are implemented and locally verified on the
   feature branch. PR review and merge remain pending; PyPI publication stays
   on HOLD.
+- Issue #13 ID, measure, and money value packages are implemented and locally
+  verified on the feature branch. The default meta install remains core-only;
+  PyPI publication stays on HOLD.
 
 ## `0.1.0` Scope
 
@@ -184,7 +194,11 @@ Historical release scope; all items are closed.
   breaker, bulkhead, cooperative async timeout, typed events, immutable state
   snapshots, and fluent decorator pipelines. PR review and merge are pending;
   PyPI publication remains on HOLD.
-- #13 - ID, measure, and money value packages.
+- #13 - ID, measure, and money value packages. Implemented as three independent
+  stdlib-only focused distributions with `id`, `measure`, `money`, and `values`
+  extras. KSUID requires a compatibility consumer; Snowflake needs machine/epoch
+  ownership; compound/affine measure, locale money, and provider FX remain
+  separate trigger-gated issues.
 - #14 - SQL, repository, and audit outbox strategy research.
 - #15 - Testcontainers fixture packages.
 - #16 - AWS, graph, text, and image adapter boundary research.

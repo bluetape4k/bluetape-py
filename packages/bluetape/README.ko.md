@@ -22,7 +22,11 @@ pip install "bluetape[compression-lz4]"
 pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
+pip install "bluetape[id]"
 pip install "bluetape[logging]"
+pip install "bluetape[measure]"
+pip install "bluetape[money]"
+pip install "bluetape[values]"
 pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"
@@ -42,7 +46,11 @@ pip install "bluetape[all]"
 | `compression-snappy` | `bluetape-compression[snappy]` | `bluetape.compression.native` | no |
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
+| `id` | `bluetape-id` | `bluetape.id` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
+| `measure` | `bluetape-measure` | `bluetape.measure` | no |
+| `money` | `bluetape-money` | `bluetape.money` | no |
+| `values` | ID + measure + money | 세 focused import | no |
 | `resilience` | `bluetape-resilience` | `bluetape.resilience` | no |
 | `serde` | `bluetape-serde` | `bluetape.serde` | no |
 | `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
@@ -56,6 +64,12 @@ invalidation issue #56은 제공하지 않습니다.
 
 `asyncio` extra는 호출 범위가 정해진 bounded structured-concurrency 헬퍼를
 설치합니다. 기본 설치는 계속 `bluetape-core`로 제한합니다.
+
+`id`, `measure`, `money` extra는 서로 독립된 stdlib-only value package를
+설치하며 `values`는 세 패키지를 모두 설치합니다. Root `bluetape` module은
+추가하지 않고 core-only default에도 들어가지 않습니다. Distributed ID policy,
+custom unit definition, historical currency data, exchange-rate source는 application이
+소유합니다.
 
 `resilience` extra는 stdlib-only sync/async retry, circuit breaker, bulkhead,
 cooperative async timeout, immutable fluent pipeline을 설치합니다. Sync timeout,

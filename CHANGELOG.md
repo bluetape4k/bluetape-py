@@ -22,6 +22,13 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the independent stdlib-only `bluetape-id`, `bluetape-measure`, and
+  `bluetape-money` value distributions with opt-in `id`, `measure`, `money`,
+  and aggregate `values` meta extras. The packages provide UUIDv4/v7 and
+  random/monotonic ULID values, runtime dimension-checked linear measures, and
+  exact Decimal money over a reproducible current ISO 4217 snapshot. The
+  default install stays core-only; applications own distributed ID policy,
+  custom units, historical currencies, and exchange-rate providers.
 - Add the opt-in `bluetape-observability` package with fail-safe OpenTelemetry
   API adapters for resilience policy, Redis provider, and Redis coordination
   events. The package uses fixed low-cardinality signals, leaves SDK/exporter

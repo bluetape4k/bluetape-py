@@ -20,7 +20,11 @@ pip install "bluetape[compression-lz4]"
 pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
+pip install "bluetape[id]"
 pip install "bluetape[logging]"
+pip install "bluetape[measure]"
+pip install "bluetape[money]"
+pip install "bluetape[values]"
 pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"
@@ -46,7 +50,11 @@ Focused packages own focused import paths such as `bluetape.asyncio`,
 | `compression-snappy` | `bluetape-compression[snappy]` | `bluetape.compression.native` | no |
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
+| `id` | `bluetape-id` | `bluetape.id` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
+| `measure` | `bluetape-measure` | `bluetape.measure` | no |
+| `money` | `bluetape-money` | `bluetape.money` | no |
+| `values` | ID + measure + money | three focused imports | no |
 | `resilience` | `bluetape-resilience` | `bluetape.resilience` | no |
 | `serde` | `bluetape-serde` | `bluetape.serde` | no |
 | `fory` | `bluetape-serde[fory]` | `bluetape.serde.fory` | no |
@@ -61,6 +69,11 @@ upstream-blocked near-cache invalidation tracked by issue #56.
 The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited
 to `bluetape-core`.
+
+The `id`, `measure`, and `money` extras install independent stdlib-only value
+packages; `values` installs all three. They add no root `bluetape` module and
+remain outside the core-only default. Applications own distributed ID policy,
+custom unit definitions, historical currency data, and exchange-rate sources.
 
 The `resilience` extra installs stdlib-only sync/async retry, circuit breaker,
 and bulkhead policies plus cooperative async timeout and immutable fluent

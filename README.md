@@ -18,7 +18,7 @@ heavier capabilities into explicit PyPI distributions and extras.
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
 are confirmed. The collections, codec, compression, cache, Redis provider,
-serde, and testcontainers packages are available from the source workspace; registry
+serde, ID, measure, money, and testcontainers packages are available from the source workspace; registry
 install commands describe the intended post-publication shape only.
 
 The current planning track is milestone
@@ -32,7 +32,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem work, including serde #45/#46, cache/Redis #50/#54/#55, observability #24, and compressor contracts #59. |
+| `0.2.0` | Active ecosystem work, including value packages #13, serde #45/#46, cache/Redis #50/#54/#55, observability #24, and compressor contracts #59. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -47,6 +47,9 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 |---|---|---:|---|---|
 | `bluetape` | none | yes | active | Thin meta distribution that depends on `bluetape-core`. |
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
+| `bluetape-id` | `bluetape.id` | no | active, source workspace | Stdlib-only UUIDv4/v7 and random/monotonic ULID values. |
+| `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Immutable runtime dimension-checked linear measurements. |
+| `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currencies and exact Decimal money with caller-owned FX rates. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | Stdlib-only bounded structured-concurrency helpers. |
 | `bluetape-codec` | `bluetape.codec` | no | active, source workspace | Strict URL-safe Base64 and hexadecimal helpers. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
@@ -69,6 +72,9 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 - `bluetape-core` stays stdlib-only.
 - `bluetape-logging` stays stdlib-first and builds on `logging` plus
   `contextvars`.
+- `bluetape-id`, `bluetape-measure`, and `bluetape-money` stay independent,
+  stdlib-only value distributions. Callers own stronger ID coordination,
+  custom unit registries, historical currency policy, and FX providers.
 - `bluetape-resilience` stays stdlib-only, separates sync and async policy
   families, and provides no synchronous timeout or hidden workers.
 - `bluetape-observability` is installed directly, depends only on the
@@ -100,7 +106,11 @@ pip install "bluetape[compression-lz4]"
 pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
+pip install "bluetape[id]"
 pip install "bluetape[logging]"
+pip install "bluetape[measure]"
+pip install "bluetape[money]"
+pip install "bluetape[values]"
 pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 only
@@ -114,6 +124,9 @@ Focused distributions can also be installed directly:
 
 ```bash
 pip install bluetape-core
+pip install bluetape-id
+pip install bluetape-measure
+pip install bluetape-money
 pip install bluetape-async
 pip install bluetape-cache
 pip install bluetape-cache-redis
@@ -419,6 +432,34 @@ may include only operation, stable error code, envelope size, success/failure,
 latency, and a fixed route ID. Do not record payloads, decoded values, provider
 exception text, tracebacks, or caller-controlled high-cardinality names.
 
+### ID, measure, and money values
+
+![value package boundaries](docs/images/readme-diagrams/value-packages-boundary.png)
+
+[Open the SVG source](docs/images/readme-diagrams/value-packages-boundary.svg).
+
+The three value packages are independent opt-ins. `bluetape-id` provides
+canonical UUID/ULID values without distributed-order or secrecy claims;
+`bluetape-measure` provides linear runtime dimensions with caller-owned custom
+units; `bluetape-money` provides exact Decimal arithmetic over the committed
+current ISO snapshot while callers own rates and historical policy.
+
+```python
+from decimal import ROUND_HALF_UP
+
+from bluetape.id import uuid7
+from bluetape.measure import KILOMETER, METER, Measure
+from bluetape.money import USD, Money
+
+identifier = uuid7()
+distance = Measure(1.25, KILOMETER).to(METER)
+price = Money.of("12.345", USD).quantize(rounding=ROUND_HALF_UP)
+
+assert identifier.version == 7
+assert distance == Measure(1250, METER)
+assert price == Money.of("12.35", USD)
+```
+
 ## Package Documentation
 
 | Package | Documentation |
@@ -432,6 +473,9 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
+| `bluetape-id` | [packages/bluetape-id/README.md](packages/bluetape-id/README.md) / [한국어](packages/bluetape-id/README.ko.md) |
+| `bluetape-measure` | [packages/bluetape-measure/README.md](packages/bluetape-measure/README.md) / [한국어](packages/bluetape-measure/README.ko.md) |
+| `bluetape-money` | [packages/bluetape-money/README.md](packages/bluetape-money/README.md) / [한국어](packages/bluetape-money/README.ko.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-observability` | [packages/bluetape-observability/README.md](packages/bluetape-observability/README.md) / [한국어](packages/bluetape-observability/README.ko.md) |
 | `bluetape-resilience` | [packages/bluetape-resilience/README.md](packages/bluetape-resilience/README.md) / [한국어](packages/bluetape-resilience/README.ko.md) |
@@ -444,7 +488,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem issues #7-#34, including observability #24, plus cache/Redis #50/#54/#55, compressor contracts #59, and serialization #45/#46. |
+| `0.2.0` | Track ecosystem issues #7-#34, including value packages #13 and observability #24, plus cache/Redis #50/#54/#55, compressor contracts #59, and serialization #45/#46. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

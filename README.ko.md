@@ -17,7 +17,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, cache, Redis provider, serde, testcontainers 패키지는 source
+collections, codec, compression, cache, Redis provider, serde, ID, measure,
+money, testcontainers 패키지는 source
 workspace에서 사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의
 목표 형태를 설명합니다.
 
@@ -31,7 +32,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | 트랙 | 범위 |
 |---|---|
 | `v0.1.0` | 릴리스 완료: workspace, core, logging, testing, docs, release preflight. |
-| `0.2.0` | Serde #45/#46, local cache #50, compressor 계약 #59, Redis provider #54, coordination #55를 포함한 생태계 작업. |
+| `0.2.0` | Value package #13, Serde #45/#46, local cache #50, compressor 계약 #59, Redis provider #54, coordination #55를 포함한 생태계 작업. |
 | PyPI publish | project ownership과 trusted publishing 확인 전까지 보류. |
 
 ## 워크스페이스 구조
@@ -46,6 +47,9 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 |---|---|---:|---|---|
 | `bluetape` | 없음 | yes | active | `bluetape-core`에만 의존하는 얇은 메타 배포 패키지. |
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
+| `bluetape-id` | `bluetape.id` | no | active, source workspace | 표준 라이브러리 기반 UUIDv4/v7과 random/monotonic ULID 값. |
+| `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Runtime dimension을 검사하는 불변 선형 측정값. |
+| `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currency와 caller-owned FX rate를 사용하는 exact Decimal money. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded structured-concurrency 헬퍼. |
 | `bluetape-codec` | `bluetape.codec` | no | active, source workspace | 엄격한 URL-safe Base64와 hexadecimal 헬퍼. |
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | 표준 라이브러리만 사용하는 eager iterable/list/dict 헬퍼. |
@@ -68,6 +72,9 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 - `bluetape-core`는 표준 라이브러리만 사용합니다.
 - `bluetape-logging`은 `logging`과 `contextvars` 기반의 stdlib-first 모듈로
   유지합니다.
+- `bluetape-id`, `bluetape-measure`, `bluetape-money`는 독립된 stdlib-only value
+  배포 패키지입니다. 더 강한 ID coordination, custom unit registry, historical
+  currency policy, FX provider는 caller가 소유합니다.
 - `bluetape-resilience`는 stdlib-only로 유지하고 sync/async policy family를
   분리하며 sync timeout이나 hidden worker를 제공하지 않습니다.
 - `bluetape-observability`는 직접 설치하며 runtime에는 OpenTelemetry API만
@@ -99,7 +106,11 @@ pip install "bluetape[compression-lz4]"
 pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
+pip install "bluetape[id]"
 pip install "bluetape[logging]"
+pip install "bluetape[measure]"
+pip install "bluetape[money]"
+pip install "bluetape[values]"
 pip install "bluetape[resilience]"
 pip install "bluetape[serde]"
 pip install "bluetape[fory]"  # CPython 3.13 전용
@@ -113,6 +124,9 @@ pip install "bluetape[all]"
 
 ```bash
 pip install bluetape-core
+pip install bluetape-id
+pip install bluetape-measure
+pip install bluetape-money
 pip install bluetape-async
 pip install bluetape-cache
 pip install bluetape-cache-redis
@@ -414,6 +428,34 @@ envelope size, success/failure, latency, fixed route ID만 허용합니다. Payl
 value, provider exception text, traceback, caller-controlled high-cardinality name은
 기록하지 않습니다.
 
+### ID, measure, money 값
+
+![value package boundaries](docs/images/readme-diagrams/value-packages-boundary.png)
+
+[SVG source 열기](docs/images/readme-diagrams/value-packages-boundary.svg).
+
+세 value package는 서로 독립된 opt-in입니다. `bluetape-id`는 distributed-order나
+secrecy를 약속하지 않는 canonical UUID/ULID 값을, `bluetape-measure`는 caller-owned
+custom unit을 사용하는 linear runtime dimension을, `bluetape-money`는 commit한
+current ISO snapshot 기반 exact Decimal 산술을 제공합니다. Rate와 historical policy는
+caller가 소유합니다.
+
+```python
+from decimal import ROUND_HALF_UP
+
+from bluetape.id import uuid7
+from bluetape.measure import KILOMETER, METER, Measure
+from bluetape.money import USD, Money
+
+identifier = uuid7()
+distance = Measure(1.25, KILOMETER).to(METER)
+price = Money.of("12.345", USD).quantize(rounding=ROUND_HALF_UP)
+
+assert identifier.version == 7
+assert distance == Measure(1250, METER)
+assert price == Money.of("12.35", USD)
+```
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
@@ -427,6 +469,9 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |
 | `bluetape-compression` | [한국어](packages/bluetape-compression/README.ko.md) / [English](packages/bluetape-compression/README.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
+| `bluetape-id` | [한국어](packages/bluetape-id/README.ko.md) / [English](packages/bluetape-id/README.md) |
+| `bluetape-measure` | [한국어](packages/bluetape-measure/README.ko.md) / [English](packages/bluetape-measure/README.md) |
+| `bluetape-money` | [한국어](packages/bluetape-money/README.ko.md) / [English](packages/bluetape-money/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
 | `bluetape-observability` | [한국어](packages/bluetape-observability/README.ko.md) / [English](packages/bluetape-observability/README.md) |
 | `bluetape-resilience` | [한국어](packages/bluetape-resilience/README.ko.md) / [English](packages/bluetape-resilience/README.md) |
@@ -439,7 +484,7 @@ value, provider exception text, traceback, caller-controlled high-cardinality na
 | 트랙 | 계획 |
 |---|---|
 | `v0.1.0` | 초기 core, logging, testing, 문서, release preflight foundation을 릴리스했습니다. |
-| `0.2.0` | Observability #24를 포함한 ecosystem 이슈 #7-#34와 cache/Redis #50/#54/#55, compressor #59, serialization #45/#46을 추적합니다. |
+| `0.2.0` | Value package #13과 observability #24를 포함한 ecosystem 이슈 #7-#34, cache/Redis #50/#54/#55, compressor #59, serialization #45/#46을 추적합니다. |
 | 이후 | 기본 패키지가 안정화된 뒤 FastAPI 헬퍼와 workshop 예제를 추가합니다. |
 
 프로젝트 관리와 릴리스 정책은 다음 문서에서 관리합니다.
