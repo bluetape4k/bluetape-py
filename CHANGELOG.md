@@ -22,6 +22,11 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in `bluetape-observability` package with fail-safe OpenTelemetry
+  API adapters for resilience policy, Redis provider, and Redis coordination
+  events. The package uses fixed low-cardinality signals, leaves SDK/exporter
+  lifecycle application-owned, and remains outside every meta extra while PyPI
+  publication is on hold.
 - Add the opt-in, stdlib-only `bluetape-resilience` package with separate
   sync/async retry, circuit breaker, and bulkhead policies, cooperative async
   timeout, deterministic backoff, typed low-cardinality events, immutable state

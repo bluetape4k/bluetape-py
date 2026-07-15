@@ -24,6 +24,7 @@ Current public distributions:
 - `bluetape-compression`
 - `bluetape-core`
 - `bluetape-logging`
+- `bluetape-observability`
 - `bluetape-resilience`
 - `bluetape-serde`
 - `bluetape-testing`
@@ -112,6 +113,12 @@ add a synchronous timeout, hidden worker, detached task, reset scheduler,
 global registry, or package-owned logger. Policy instances retain their own
 state or capacity, and pipelines share that state only by retaining the caller's
 explicit instance.
+
+`bluetape-observability` owns `bluetape.observability` and is available only
+through its directly installed focused distribution. It depends on
+`opentelemetry-api` at runtime and keeps resilience, Redis, the OpenTelemetry
+SDK, providers, exporters, and shutdown lifecycle caller-owned. It is not part
+of the default meta install or any meta extra.
 
 Applications own Fory route identity as a fixed
 `(schema_id, schema_version, type_id)` tuple mapped to one exact registered root

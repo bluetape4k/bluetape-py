@@ -32,7 +32,7 @@ Detailed planning lives in
 | Track | Scope |
 |---|---|
 | `v0.1.0` | Released foundation: workspace, core, logging, testing, docs, and release preflight. |
-| `0.2.0` | Active ecosystem work, including serde #45/#46, local cache #50, compressor contracts #59, Redis provider #54, and coordination #55. |
+| `0.2.0` | Active ecosystem work, including serde #45/#46, cache/Redis #50/#54/#55, observability #24, and compressor contracts #59. |
 | PyPI publish | On hold until project ownership and trusted publishing are confirmed. |
 
 ## Workspace Shape
@@ -52,6 +52,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-collections` | `bluetape.collections` | no | active, source workspace | Stdlib-only eager iterable/list/dict helpers. |
 | `bluetape-compression` | `bluetape.compression` | no | active, source workspace | Structural compressor contracts for bounded gzip, zlib, raw-DEFLATE, LZ4, Snappy, and Zstandard payloads. |
 | `bluetape-logging` | `bluetape.logging` | no | active | Stdlib `logging`, `contextvars`, and redaction helpers. |
+| `bluetape-observability` | `bluetape.observability` | no | active, source workspace | API-only OpenTelemetry adapters for resilience and Redis observer events. |
 | `bluetape-resilience` | `bluetape.resilience` | no | active, source workspace | Stdlib-only sync/async retry, circuit breaker, bulkhead, and cooperative async timeout policies. |
 | `bluetape-testing` | `bluetape.testing` | no | active, internal-first | Pytest helpers used first by this workspace, with a small stable public subset. |
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
@@ -70,12 +71,14 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
   `contextvars`.
 - `bluetape-resilience` stays stdlib-only, separates sync and async policy
   families, and provides no synchronous timeout or hidden workers.
+- `bluetape-observability` is installed directly, depends only on the
+  OpenTelemetry API at runtime, and leaves SDK/exporter lifecycle to applications.
 - `bluetape-testing` may depend on `pytest`, but starts as an internal support
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
 - The default meta install remains core-only. Cache, Redis, compression providers,
-  resilience, serde, and Testcontainers are opt-in; Apache Fory is
+  resilience, observability, serde, and Testcontainers are opt-in; Apache Fory is
   trusted-internal only and available solely through the explicit `fory` extra.
 
 ## Install
@@ -122,6 +125,7 @@ pip install "bluetape-compression[snappy]"
 pip install "bluetape-compression[zstd]"
 pip install "bluetape-compression[native]"
 pip install bluetape-logging
+pip install bluetape-observability
 pip install bluetape-resilience
 pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 only
@@ -136,6 +140,7 @@ uv sync --all-packages --locked
 uv sync --package bluetape-compression --extra native --locked
 uv run --package bluetape-cache python -c "from bluetape.cache import AsyncTTLCache, TTLCache; assert TTLCache and AsyncTTLCache"
 uv run --package bluetape-cache-redis python -c "from bluetape.cache.redis import BinaryEnvelopeFormat, SyncRedisProvider; assert BinaryEnvelopeFormat().format_id == 'binary-v1' and SyncRedisProvider"
+uv run --package bluetape-observability python -c "from bluetape.observability.redis import OpenTelemetryRedisObserver; from bluetape.observability.resilience import OpenTelemetryPolicyObserver; assert OpenTelemetryPolicyObserver and OpenTelemetryRedisObserver"
 uv run --package bluetape-resilience python -c "from bluetape.resilience import AsyncResiliencePipeline, ResiliencePipeline; assert ResiliencePipeline and AsyncResiliencePipeline"
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
@@ -427,6 +432,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | `bluetape-compression` | [packages/bluetape-compression/README.md](packages/bluetape-compression/README.md) / [한국어](packages/bluetape-compression/README.ko.md) |
 | `bluetape-core` | [packages/bluetape-core/README.md](packages/bluetape-core/README.md) |
 | `bluetape-logging` | [packages/bluetape-logging/README.md](packages/bluetape-logging/README.md) |
+| `bluetape-observability` | [packages/bluetape-observability/README.md](packages/bluetape-observability/README.md) / [한국어](packages/bluetape-observability/README.ko.md) |
 | `bluetape-resilience` | [packages/bluetape-resilience/README.md](packages/bluetape-resilience/README.md) / [한국어](packages/bluetape-resilience/README.ko.md) |
 | `bluetape-serde` | [packages/bluetape-serde/README.md](packages/bluetape-serde/README.md) |
 | `bluetape-testcontainers` | [packages/bluetape-testcontainers/README.md](packages/bluetape-testcontainers/README.md) |
@@ -437,7 +443,7 @@ exception text, tracebacks, or caller-controlled high-cardinality names.
 | Track | Plan |
 |---|---|
 | `v0.1.0` | Released the initial core, logging, testing, documentation, and release preflight foundation. |
-| `0.2.0` | Track ecosystem issues #7-#34, local cache #50, compressor contracts #59, Redis provider #54, coordination #55, and serialization #45/#46. |
+| `0.2.0` | Track ecosystem issues #7-#34, including observability #24, plus cache/Redis #50/#54/#55, compressor contracts #59, and serialization #45/#46. |
 | Later | Add FastAPI helpers and workshop examples only after the base packages are stable. |
 
 Project planning and release policy:

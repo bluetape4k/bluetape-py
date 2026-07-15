@@ -36,6 +36,7 @@ jobs:
           assert importlib.util.find_spec("lz4") is None
           assert importlib.util.find_spec("cramjam") is None
           assert importlib.util.find_spec("zstandard") is None
+          assert importlib.util.find_spec("opentelemetry.sdk") is None
           '
 
       - name: Enable explicit Fory fixture checks
@@ -63,7 +64,8 @@ jobs:
       - name: Test
         run: >-
           uv run --package bluetape-serde --extra fory --python 3.13.14 pytest
-          -m "not testcontainers and not native_compression"
+          --strict-markers
+          -m "not testcontainers and not native_compression and not observability_sdk"
 
       - name: Build distributions
         run: uv build --all-packages
@@ -81,11 +83,57 @@ jobs:
           assert importlib.util.find_spec("testcontainers") is None
           assert importlib.util.find_spec("docker") is None
           assert importlib.util.find_spec("redis") is None
+          assert importlib.util.find_spec("opentelemetry") is None
           try:
               provider = importlib.util.find_spec("bluetape.cache.redis")
           except ModuleNotFoundError:
               provider = None
-          assert provider is None'
+          assert provider is None
+          try:
+              observability = importlib.util.find_spec("bluetape.observability")
+          except ModuleNotFoundError:
+              observability = None
+          assert observability is None'
+
+  observability:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13.14"
+
+      - name: Sync observability test dependencies
+        run: >-
+          uv sync --package bluetape-observability --group test
+          --python 3.13.14 --locked
+
+      - name: Prove focused SDK and domain dependencies
+        run: >-
+          uv run --package bluetape-observability --group test --python 3.13.14
+          python -c "import opentelemetry.sdk, bluetape.resilience, bluetape.cache.redis"
+
+      - name: Test observability contracts
+        run: >-
+          uv run --package bluetape-observability --group test --python 3.13.14 pytest
+          --strict-markers -m "not observability_sdk and not observability_workspace"
+          packages/bluetape-observability/tests -rs -q
+
+      - name: Test observability SDK contracts without skips
+        run: |
+          uv run --package bluetape-observability --group test --python 3.13.14 pytest \
+            --strict-markers -m observability_sdk packages/bluetape-observability/tests \
+            --junitxml="$RUNNER_TEMP/observability-sdk.xml" -rs -q
+          uv run python -c 'import os, xml.etree.ElementTree as E; r=E.parse(os.environ["RUNNER_TEMP"] + "/observability-sdk.xml").getroot(); s=[r] if r.tag.endswith("testsuite") else list(r.findall("testsuite")); assert sum(int(x.attrib.get("tests", 0)) for x in s) > 0 and all(sum(int(x.attrib.get(k, 0)) for x in s) == 0 for k in ("failures", "errors", "skipped"))'
+
+      - name: Verify focused and default wheel isolation
+        run: scripts/verify-observability-wheels.sh
 
   redis-provider:
     runs-on: ubuntu-latest
