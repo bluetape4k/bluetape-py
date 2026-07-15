@@ -1,6 +1,6 @@
 # WIP
 
-Snapshot: 2026-07-14 KST
+Snapshot: 2026-07-15 KST
 Scope: `v0.1.0` released foundation and `0.2.0` ecosystem package planning.
 
 ## Current Target
@@ -59,8 +59,9 @@ focused distribution model:
 - Milestone `0.2.0` tracks ecosystem issues #7 through #34, serialization
   follow-ups #45/#46, local cache #50, and Redis follow-up #51; issues #35
   through #44 and #47 through #49 are not implied by these explicit ranges.
-- Research-first issues #10, #14, #16, #21, #23, #31, and #34 must produce
-  source-backed package boundary decisions before implementation starts.
+- Research-first issues #10 and #23 have source-backed decisions. Issues #14,
+  #16, #21, #31, and #34 must produce package boundary decisions before
+  implementation starts.
 - Issue #45 strict JSON serde is available in the source workspace. Issue #46
   Apache Fory is implemented and locally verified with Python, Go, Rust, and
   Kotlin fixtures; PR review and merge remain pending. PyPI publication stays
@@ -119,7 +120,7 @@ Branch policy:
 |---|---|---|
 | `v0.1.0` | Released core helpers, logging, testing, docs, and release preflight | Kept the default install thin and the APIs Python-native. |
 | `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34 plus serialization follow-ups #45/#46; research-first work gates broad adapters. |
-| `0.3.0` | First implementation wave after research gates | Candidate scope depends on accepted research decisions from #10, #14, #16, #21, #23, #31, and #34. |
+| `0.3.0` | First implementation wave after research gates | Candidate scope depends on pending decisions from #14, #16, #21, #31, and #34; #10 and #23 now constrain their implementation follow-ups. |
 
 ## Task Queue
 
@@ -183,7 +184,10 @@ Historical release scope; all items are closed.
 - #20 - Probabilistic data structure helpers.
 - #21 - Python web API adapter boundary research.
 - #22 - Web API helpers and ASGI/FastAPI adapters.
-- #23 - Observability and OpenTelemetry boundary research.
+- #23 - Observability and OpenTelemetry boundary research. Decision recorded in
+  `docs/research/2026-07-15-issue-23-observability-opentelemetry-boundaries.md`:
+  keep domain packages OTel-free and use a separate API-only opt-in bridge if
+  #24 proceeds; applications retain SDK/exporter/global lifecycle ownership.
 - #24 - Observability hooks and telemetry helpers.
 - #25 - Audit event and outbox publisher packages.
 - #26 - AWS integration provider packages.
@@ -210,8 +214,9 @@ Research notes belong under `docs/research/` and should be linked from
   packages, optional adapters, or examples only.
 - #21 must decide ASGI/FastAPI/framework adapter boundaries, request-context
   ownership, RFC 7807 scope, and middleware conformance expectations.
-- #23 must decide stdlib logging hook boundaries, OpenTelemetry extras, and
-  async context propagation expectations.
+- #23 decided stdlib logging hook boundaries, a separate API-only optional
+  bridge direction, application-owned SDK/exporter lifecycle, and explicit
+  Python 3.13 context propagation expectations.
 - #31 must decide whether geo, spatial, statistics, histogram, and geocoding
   helpers are owned APIs, light wrappers, examples only, or rejected.
 - #34 must decide configuration, secrets, credentials, KMS/envelope encryption,
