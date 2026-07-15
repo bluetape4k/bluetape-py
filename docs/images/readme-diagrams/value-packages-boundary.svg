@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="800" viewBox="0 0 1300 800" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">bluetape value package ownership boundaries</title>
+  <desc id="diagram-desc">Three independent opt-in value distributions receive caller-owned policy and use only Python standard-library primitives or a committed ISO snapshot.</desc>
+
+  <defs>
+    <linearGradient id="canvas-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F6FAFF"/>
+      <stop offset="55%" stop-color="#F2F9F7"/>
+      <stop offset="100%" stop-color="#FFF8EE"/>
+    </linearGradient>
+    <marker id="arrow-install" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#D97706"/>
+    </marker>
+    <marker id="arrow-source" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#16856B"/>
+    </marker>
+    <marker id="arrow-caller" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#4C6FA8"/>
+    </marker>
+    <style>
+      .heading { font-family: "Architects Daughter", ui-rounded, system-ui, sans-serif; fill: #172033; }
+      .mono { font-family: "Comic Mono", ui-monospace, SFMono-Regular, Menlo, monospace; fill: #42526A; }
+      .lane { fill: #FFFFFF; fill-opacity: 0.76; stroke: #CBD7E6; stroke-width: 2; }
+      .card { fill: #FFFFFF; stroke-width: 2; }
+      .pill { fill: #FFF8EB; stroke: #E7B65D; stroke-width: 1.5; }
+      .connector { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .install { stroke: #D97706; marker-end: url(#arrow-install); }
+      .source { stroke: #16856B; marker-end: url(#arrow-source); }
+      .caller { stroke: #4C6FA8; marker-end: url(#arrow-caller); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="800" fill="url(#canvas-bg)"/>
+  <text id="diagram-title-text" class="heading" x="650" y="38" font-size="34" font-weight="700" text-anchor="middle">Independent value packages, explicit caller policy</text>
+  <text class="mono" x="650" y="66" font-size="15" text-anchor="middle">three focused wheels / stdlib-only runtime / core-only default install</text>
+
+  <rect class="lane" x="60" y="90" width="1180" height="95" rx="22"/>
+  <text class="heading" x="92" y="119" font-size="22" font-weight="700">bluetape meta extras</text>
+  <text class="mono" x="650" y="117" font-size="14" text-anchor="middle">values = id + measure + money / default = bluetape-core only</text>
+  <rect class="pill" x="150" y="135" width="180" height="35" rx="12"/>
+  <text class="mono" x="240" y="158" font-size="14" font-weight="700" text-anchor="middle">bluetape[id]</text>
+  <rect class="pill" x="560" y="135" width="180" height="35" rx="12"/>
+  <text class="mono" x="650" y="158" font-size="14" font-weight="700" text-anchor="middle">bluetape[measure]</text>
+  <rect class="pill" x="970" y="135" width="180" height="35" rx="12"/>
+  <text class="mono" x="1060" y="158" font-size="14" font-weight="700" text-anchor="middle">bluetape[money]</text>
+
+  <path id="connector-extra-id" class="connector install" d="M 240 170 V 250"/>
+  <path id="connector-extra-measure" class="connector install" d="M 650 170 V 250"/>
+  <path id="connector-extra-money" class="connector install" d="M 1060 170 V 250"/>
+
+  <g id="package-id">
+    <rect class="card" x="60" y="250" width="360" height="215" rx="20" fill="#F5F9FF" stroke="#8EB7ED"/>
+    <text class="heading" x="240" y="288" font-size="27" font-weight="700" text-anchor="middle">bluetape-id</text>
+    <text class="mono" x="240" y="316" font-size="14" text-anchor="middle">bluetape.id / no runtime dependencies</text>
+    <line x1="95" y1="338" x2="385" y2="338" stroke="#C9DDF6" stroke-width="2"/>
+    <text class="mono" x="240" y="370" font-size="15" text-anchor="middle">UUIDv4 / monotonic UUIDv7</text>
+    <text class="mono" x="240" y="399" font-size="15" text-anchor="middle">random + monotonic ULID</text>
+    <text class="mono" x="240" y="428" font-size="14" text-anchor="middle">persist canonical strings</text>
+    <text class="mono" x="240" y="450" font-size="12" text-anchor="middle">process-local ordering, never a secret</text>
+  </g>
+
+  <g id="package-measure">
+    <rect class="card" x="470" y="250" width="360" height="215" rx="20" fill="#F3FBF8" stroke="#82CFBC"/>
+    <text class="heading" x="650" y="288" font-size="27" font-weight="700" text-anchor="middle">bluetape-measure</text>
+    <text class="mono" x="650" y="316" font-size="14" text-anchor="middle">bluetape.measure / no runtime dependencies</text>
+    <line x1="505" y1="338" x2="795" y2="338" stroke="#BFE7DD" stroke-width="2"/>
+    <text class="mono" x="650" y="370" font-size="15" text-anchor="middle">immutable Unit + Measure</text>
+    <text class="mono" x="650" y="399" font-size="15" text-anchor="middle">runtime dimension checks</text>
+    <text class="mono" x="650" y="428" font-size="14" text-anchor="middle">schema: amount + unit</text>
+    <text class="mono" x="650" y="450" font-size="12" text-anchor="middle">linear ratios, explicit custom units</text>
+  </g>
+
+  <g id="package-money">
+    <rect class="card" x="880" y="250" width="360" height="215" rx="20" fill="#FFF9EF" stroke="#E8BA69"/>
+    <text class="heading" x="1060" y="288" font-size="27" font-weight="700" text-anchor="middle">bluetape-money</text>
+    <text class="mono" x="1060" y="316" font-size="14" text-anchor="middle">bluetape.money / no runtime dependencies</text>
+    <line x1="915" y1="338" x2="1205" y2="338" stroke="#F0D7AA" stroke-width="2"/>
+    <text class="mono" x="1060" y="370" font-size="15" text-anchor="middle">Currency / Money / ExchangeRate</text>
+    <text class="mono" x="1060" y="399" font-size="15" text-anchor="middle">exact Decimal / explicit rounding</text>
+    <text class="mono" x="1060" y="428" font-size="14" text-anchor="middle">schema: amount + currency</text>
+    <text class="mono" x="1060" y="450" font-size="12" text-anchor="middle">current ISO snapshot, no FX provider</text>
+  </g>
+
+  <path id="connector-source-id" class="connector source" d="M 150 555 V 465"/>
+  <path id="connector-caller-id" class="connector caller" d="M 330 555 V 465"/>
+  <path id="connector-source-measure" class="connector source" d="M 560 555 V 465"/>
+  <path id="connector-caller-measure" class="connector caller" d="M 740 555 V 465"/>
+  <path id="connector-source-money" class="connector source" d="M 970 555 V 465"/>
+  <path id="connector-caller-money" class="connector caller" d="M 1150 555 V 465"/>
+
+  <g id="source-id">
+    <rect class="card" x="70" y="555" width="160" height="100" rx="16" fill="#EFFAF6" stroke="#82CFBC"/>
+    <text class="heading" x="150" y="587" font-size="18" font-weight="700" text-anchor="middle">stdlib source</text>
+    <text class="mono" x="150" y="616" font-size="13" text-anchor="middle">uuid / secrets / time</text>
+    <text class="mono" x="150" y="639" font-size="12" text-anchor="middle">locks are process-local</text>
+  </g>
+  <g id="caller-id">
+    <rect class="card" x="250" y="555" width="170" height="100" rx="16" fill="#F1F6FD" stroke="#8EB7ED"/>
+    <text class="heading" x="335" y="587" font-size="18" font-weight="700" text-anchor="middle">caller-owned</text>
+    <text class="mono" x="335" y="616" font-size="13" text-anchor="middle">clock + entropy callbacks</text>
+    <text class="mono" x="335" y="639" font-size="12" text-anchor="middle">distributed ID policy</text>
+  </g>
+
+  <g id="source-measure">
+    <rect class="card" x="480" y="555" width="160" height="100" rx="16" fill="#EFFAF6" stroke="#82CFBC"/>
+    <text class="heading" x="560" y="587" font-size="18" font-weight="700" text-anchor="middle">stdlib source</text>
+    <text class="mono" x="560" y="616" font-size="13" text-anchor="middle">math / dataclasses</text>
+    <text class="mono" x="560" y="639" font-size="12" text-anchor="middle">10 built-in linear units</text>
+  </g>
+  <g id="caller-measure">
+    <rect class="card" x="660" y="555" width="170" height="100" rx="16" fill="#F1F6FD" stroke="#8EB7ED"/>
+    <text class="heading" x="745" y="587" font-size="18" font-weight="700" text-anchor="middle">caller-owned</text>
+    <text class="mono" x="745" y="616" font-size="13" text-anchor="middle">custom unit definitions</text>
+    <text class="mono" x="745" y="639" font-size="12" text-anchor="middle">deserialization registry</text>
+  </g>
+
+  <g id="source-money">
+    <rect class="card" x="890" y="555" width="160" height="100" rx="16" fill="#EFFAF6" stroke="#82CFBC"/>
+    <text class="heading" x="970" y="587" font-size="18" font-weight="700" text-anchor="middle">stdlib + data</text>
+    <text class="mono" x="970" y="616" font-size="13" text-anchor="middle">decimal / dataclasses</text>
+    <text class="mono" x="970" y="639" font-size="12" text-anchor="middle">committed SIX snapshot</text>
+  </g>
+  <g id="caller-money">
+    <rect class="card" x="1070" y="555" width="170" height="100" rx="16" fill="#F1F6FD" stroke="#8EB7ED"/>
+    <text class="heading" x="1155" y="587" font-size="18" font-weight="700" text-anchor="middle">caller-owned</text>
+    <text class="mono" x="1155" y="616" font-size="13" text-anchor="middle">FX rates + freshness</text>
+    <text class="mono" x="1155" y="639" font-size="12" text-anchor="middle">historical currency policy</text>
+  </g>
+
+  <rect x="270" y="695" width="760" height="52" rx="16" fill="#FFFFFF" stroke="#D5DFEC" stroke-width="2"/>
+  <path d="M 300 721 H 340" fill="none" stroke="#D97706" stroke-width="3" marker-end="url(#arrow-install)"/>
+  <text class="mono" x="352" y="726" font-size="13">opt-in install</text>
+  <path d="M 495 721 H 535" fill="none" stroke="#16856B" stroke-width="3" marker-end="url(#arrow-source)"/>
+  <text class="mono" x="547" y="726" font-size="13">stdlib / committed data</text>
+  <path d="M 790 721 H 830" fill="none" stroke="#4C6FA8" stroke-width="3" marker-end="url(#arrow-caller)"/>
+  <text class="mono" x="842" y="726" font-size="13">caller policy / input</text>
+
+  <text class="heading" x="650" y="780" font-size="20" font-weight="700" text-anchor="middle">No package owns a network client, provider lifecycle, or background worker.</text>
+</svg>

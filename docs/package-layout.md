@@ -23,7 +23,10 @@ Current public distributions:
 - `bluetape-collections`
 - `bluetape-compression`
 - `bluetape-core`
+- `bluetape-id`
 - `bluetape-logging`
+- `bluetape-measure`
+- `bluetape-money`
 - `bluetape-observability`
 - `bluetape-resilience`
 - `bluetape-serde`
@@ -126,6 +129,21 @@ type. Schema changes require a new tuple and versioned route, reader-first
 deployment, explicit compatibility review, and drain evidence before retiring
 the old reader. Fory is trusted-internal only; hard CPU/RSS containment belongs
 to a separate constrained process rather than byte limits alone.
+
+`bluetape-id`, `bluetape-measure`, and `bluetape-money` are independent
+stdlib-only value distributions and explicit `id`, `measure`, `money`, or
+aggregate `values` meta extras. None enters the core-only default install.
+Identifiers persist as canonical strings while monotonic generator state is
+process-local and resets across restart, fork, upgrade, or rollback. Measures
+persist as the exact versionless `amount`/`unit` primitive schema; applications
+own custom immutable unit definitions and supply them during deserialization.
+Money persists as the exact versionless `amount`/`currency` schema and uses a
+committed current ISO 4217 snapshot; applications own historical currency
+policy and every exchange-rate source, freshness rule, cache, and lifecycle.
+
+KSUID waits for a concrete compatibility consumer. Snowflake IDs, compound or
+affine measurements, locale money, and provider-backed FX each require a
+separate source-backed design issue before implementation.
 
 ## Future Packages
 
