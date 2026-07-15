@@ -101,6 +101,31 @@ def test_policy_rejects_invalid_consumed_fields_before_emission(
     assert span.events == []
 
 
+def test_policy_propagates_process_control_from_consumed_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ProcessControlEvent:
+        kind = EventKind.SUCCEEDED
+        outcome = PolicyOutcome.SUCCESS
+        failure_category = FailureCategory.NONE
+        attempt = 1
+        delay = timeout = state = previous_state = in_flight = waiters = None
+
+        def __init__(self, failure: BaseException) -> None:
+            self.failure = failure
+
+        @property
+        def policy_type(self) -> PolicyType:
+            raise self.failure
+
+    for failure in (KeyboardInterrupt(), SystemExit(), GeneratorExit()):
+        observer, meter, span = observer_with_span(monkeypatch)
+        with pytest.raises(type(failure)):
+            observer(ProcessControlEvent(failure))
+        assert meter.instruments[0].calls == []
+        assert span.events == []
+
+
 def test_policy_never_reads_forbidden_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     observer, meter, span = observer_with_span(monkeypatch)
 

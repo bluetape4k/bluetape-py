@@ -145,8 +145,8 @@ finally:
 
 ## Caller-owned 조합
 
-각 producer는 observer 하나를 받습니다. OTel adapter만 지정하면 replaces the previous observer
-상태가 됩니다. 순서와 실패 정책은 caller-owned composite에서 명시합니다.
+각 producer는 observer 하나를 받습니다. OTel adapter만 지정하면 기존 observer를 대체합니다
+(`replaces the previous observer`). 순서와 실패 정책은 caller-owned composite에서 명시합니다.
 
 Resilience 예제는 `fail-stop`입니다. 앞 callback이 실패하면 뒤 callback을 호출하지 않습니다.
 
@@ -204,7 +204,8 @@ Composite(Recorder("audit"), Recorder("otel")).on_event(object())
 
 생성은 fail-fast입니다. Meter 조회나 instrument 생성 실패는 application wiring 실패입니다. Event별
 일반 OpenTelemetry 오류는 독립적으로 격리해 domain 결과를 보존하고, process-control
-`BaseException`은 전파합니다. no mutable health 상태와 diagnostic callback은 제공하지 않습니다.
+`BaseException`은 전파합니다. 변경 가능한 health 상태(`no mutable health`)와 diagnostic callback은
+제공하지 않습니다.
 SDK/exporter 전송 상태는 application-owned OpenTelemetry 설정으로 진단합니다.
 
 현재 span은 일반 sync와 coroutine `contextvars` 범위에서만 찾습니다. raw threads,
@@ -214,5 +215,6 @@ span ID를 자동으로 추가하지 않습니다.
 
 ## rollback
 
-Rollback은 producer에서 adapter를 제거하고 restores the prior observer 또는 caller-owned
-composite를 복원하는 작업입니다. Data/schema migration은 필요하지 않습니다.
+Rollback은 producer에서 adapter를 제거하고 기존 observer를 복원하거나
+(`restores the prior observer`) caller-owned composite를 복원하는 작업입니다. Data/schema
+migration은 필요하지 않습니다.
