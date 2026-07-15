@@ -13,6 +13,7 @@ dependencies = [
     "bluetape-compression==0.1.0",
     "bluetape-core==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-observability==0.1.0",
     "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
     "bluetape-testcontainers==0.1.0",
@@ -39,6 +40,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-observability = { workspace = true }
 bluetape-resilience = { workspace = true }
 bluetape-serde = { workspace = true }
 bluetape-testcontainers = { workspace = true }
@@ -56,6 +58,7 @@ members = [
     "packages/bluetape-compression",
     "packages/bluetape-core",
     "packages/bluetape-logging",
+    "packages/bluetape-observability",
     "packages/bluetape-resilience",
     "packages/bluetape-serde",
     "packages/bluetape-testcontainers",

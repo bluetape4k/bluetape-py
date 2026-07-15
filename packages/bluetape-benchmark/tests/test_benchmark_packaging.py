@@ -13,6 +13,7 @@ PUBLISHABLE = {
     "bluetape-compression",
     "bluetape-core",
     "bluetape-logging",
+    "bluetape-observability",
     "bluetape-resilience",
     "bluetape-serde",
     "bluetape-testcontainers",
