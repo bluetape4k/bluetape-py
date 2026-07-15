@@ -38,7 +38,10 @@ release approval):
 - `bluetape-collections`
 - `bluetape-compression`
 - `bluetape-core`
+- `bluetape-id`
 - `bluetape-logging`
+- `bluetape-measure`
+- `bluetape-money`
 - `bluetape-observability`
 - `bluetape-resilience`
 - `bluetape-serde`

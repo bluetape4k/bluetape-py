@@ -12,7 +12,7 @@ Final findings: P0=0, P1=0
 - Spec SHA-256:
   `0988eef8463eca44f485b91a472fe2958d3dbdf419a783a0c24a53de9f48923e`
 - Plan SHA-256:
-  `778e39025a1b5fd7e873108e71fe9000fcf3f15962dd9fcca8d5491ae7fc30a4`
+  `81ededc7b59a0d21c2ad9da5727288012fb8a18df60c99e86a1c4bad7c2da812`
 
 ## Independent Perspectives
 
@@ -24,6 +24,12 @@ Final findings: P0=0, P1=0
 
 The three final independent reviews used the same spec and plan hashes recorded
 above. No reviewer modified the artifacts.
+
+During Task 1, the three initially identical top-level `test_packaging.py`
+basenames reproduced pytest's default import collision. The package tests and
+all plan node/command paths were renamed uniquely. All three independent
+perspectives re-reviewed the corrected plan hash above at P0=0, P1=0; the 36
+registry entries and 36 exact commands remain one-to-one.
 
 ## Main-Session Perspectives
 

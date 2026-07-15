@@ -10,7 +10,7 @@ Final findings: P0=0, P1=0
 - Spec SHA-256:
   `0988eef8463eca44f485b91a472fe2958d3dbdf419a783a0c24a53de9f48923e`
 - Plan SHA-256:
-  `778e39025a1b5fd7e873108e71fe9000fcf3f15962dd9fcca8d5491ae7fc30a4`
+  `81ededc7b59a0d21c2ad9da5727288012fb8a18df60c99e86a1c4bad7c2da812`
 
 ## Convergence Record
 
@@ -31,6 +31,13 @@ Three independent read-only perspectives reviewed the same final hashes:
 The main session independently reviewed performance, stability, and security;
 each finished at P0=0, P1=0. The detailed rationale is recorded in the sibling
 spec review.
+
+Task 1 reproduced a default pytest import mismatch when three package-local
+files shared the basename `test_packaging.py`. The files became
+`test_id_packaging.py`, `test_measure_packaging.py`, and
+`test_money_packaging.py`; every owning-file, stable-node, and exact-command
+path was updated. Three independent read-only re-reviews of the corrected plan
+hash found P0=0, P1=0, with 36 unique registry entries and 36 unique commands.
 
 ## Execution Readiness
 

@@ -17,7 +17,10 @@ compression-lz4 = ["bluetape-compression[lz4]==0.1.0"]
 compression-native = ["bluetape-compression[native]==0.1.0"]
 compression-snappy = ["bluetape-compression[snappy]==0.1.0"]
 compression-zstd = ["bluetape-compression[zstd]==0.1.0"]
+id = ["bluetape-id==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
+measure = ["bluetape-measure==0.1.0"]
+money = ["bluetape-money==0.1.0"]
 resilience = ["bluetape-resilience==0.1.0"]
 serde = ["bluetape-serde==0.1.0"]
 fory = ["bluetape-serde[fory]==0.1.0"]
@@ -29,7 +32,10 @@ dev = [
     "bluetape-codec==0.1.0",
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
+    "bluetape-id==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-measure==0.1.0",
+    "bluetape-money==0.1.0",
     "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
     "bluetape-testcontainers==0.1.0",
@@ -41,11 +47,19 @@ all = [
     "bluetape-codec==0.1.0",
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
+    "bluetape-id==0.1.0",
     "bluetape-logging==0.1.0",
+    "bluetape-measure==0.1.0",
+    "bluetape-money==0.1.0",
     "bluetape-resilience==0.1.0",
     "bluetape-serde==0.1.0",
     "bluetape-testcontainers==0.1.0",
     "bluetape-testing==0.1.0",
+]
+values = [
+    "bluetape-id==0.1.0",
+    "bluetape-measure==0.1.0",
+    "bluetape-money==0.1.0",
 ]
 
 [tool.uv.sources]
@@ -56,7 +70,10 @@ bluetape-codec = { workspace = true }
 bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
+bluetape-id = { workspace = true }
 bluetape-logging = { workspace = true }
+bluetape-measure = { workspace = true }
+bluetape-money = { workspace = true }
 bluetape-resilience = { workspace = true }
 bluetape-serde = { workspace = true }
 bluetape-testcontainers = { workspace = true }

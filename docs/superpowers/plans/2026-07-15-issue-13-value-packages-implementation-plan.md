@@ -65,7 +65,10 @@ distribution exposes opt-in extras without changing its core-only default.
 
 - Create package directories, minimal English/Korean build-valid READMEs, and
   exact `pyproject.toml` files for all three.
-- Create package test directories and package-local `test_packaging.py` files.
+- Create package test directories and uniquely named package-local
+  `test_id_packaging.py`, `test_measure_packaging.py`, and
+  `test_money_packaging.py` files so default pytest collection cannot collide
+  on a shared top-level `test_packaging` module name.
 - Modify root `pyproject.toml`, `packages/bluetape/pyproject.toml`, `uv.lock`,
   `docs/release/pypi-preflight.md`, and
   `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`.
@@ -556,9 +559,9 @@ records node ID, intended RED message, fixture/input, GREEN count, owning-file
 count, wheel path, temp environment, and module origin.
 
 ```bash
-uv run pytest packages/bluetape-id/tests/test_packaging.py -q
-uv run pytest packages/bluetape-measure/tests/test_packaging.py -q
-uv run pytest packages/bluetape-money/tests/test_packaging.py -q
+uv run pytest packages/bluetape-id/tests/test_id_packaging.py -q
+uv run pytest packages/bluetape-measure/tests/test_measure_packaging.py -q
+uv run pytest packages/bluetape-money/tests/test_money_packaging.py -q
 uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py::test_every_workspace_distribution_is_publishable_or_private -q
 
 uv run --package bluetape-id --python 3.13.14 pytest packages/bluetape-id/tests/test_uuid.py -q
@@ -603,9 +606,9 @@ then pass with no skips.
 
 | Full node ID | Concrete fixture/input | Intended initial RED | Required GREEN assertion |
 |---|---|---|---|
-| `packages/bluetape-id/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only` | literal ID TOML/import | package absent | exact metadata, empty deps, implicit namespace |
-| `packages/bluetape-measure/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only` | literal Measure TOML/import | package absent | exact metadata, empty deps, implicit namespace |
-| `packages/bluetape-money/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only` | literal Money TOML/import | package absent | exact metadata, empty deps, implicit namespace |
+| `packages/bluetape-id/tests/test_id_packaging.py::test_distribution_metadata_is_stdlib_only` | literal ID TOML/import | package absent | exact metadata, empty deps, implicit namespace |
+| `packages/bluetape-measure/tests/test_measure_packaging.py::test_distribution_metadata_is_stdlib_only` | literal Measure TOML/import | package absent | exact metadata, empty deps, implicit namespace |
+| `packages/bluetape-money/tests/test_money_packaging.py::test_distribution_metadata_is_stdlib_only` | literal Money TOML/import | package absent | exact metadata, empty deps, implicit namespace |
 | `packages/bluetape/tests/test_value_packaging.py::test_meta_value_extras_are_exact_and_default_stays_core_only` | parsed root/meta TOML | extras absent | exact singleton/values/dev/all ordering and core-only default |
 | `packages/bluetape-benchmark/tests/test_benchmark_packaging.py::test_every_workspace_distribution_is_publishable_or_private` | workspace metadata | new packages unclassified | exact publishable/private partition and preflight rows |
 | `packages/bluetape-id/tests/test_uuid.py::test_uuid4_delegates_to_stdlib_contract` | patched stdlib UUID factory plus 128-call sample | wrapper absent | stdlib UUID values, v4/RFC variant, delegated call, uniqueness |
@@ -643,9 +646,9 @@ then pass with no skips.
 Exact per-node invocations:
 
 ```bash
-uv run pytest packages/bluetape-id/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only -q
-uv run pytest packages/bluetape-measure/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only -q
-uv run pytest packages/bluetape-money/tests/test_packaging.py::test_distribution_metadata_is_stdlib_only -q
+uv run pytest packages/bluetape-id/tests/test_id_packaging.py::test_distribution_metadata_is_stdlib_only -q
+uv run pytest packages/bluetape-measure/tests/test_measure_packaging.py::test_distribution_metadata_is_stdlib_only -q
+uv run pytest packages/bluetape-money/tests/test_money_packaging.py::test_distribution_metadata_is_stdlib_only -q
 uv run pytest packages/bluetape/tests/test_value_packaging.py::test_meta_value_extras_are_exact_and_default_stays_core_only -q
 uv run pytest packages/bluetape-benchmark/tests/test_benchmark_packaging.py::test_every_workspace_distribution_is_publishable_or_private -q
 
