@@ -22,7 +22,7 @@ Verified implementation head before evidence commit:
 | Gate | Evidence | Result |
 |---|---|---|
 | Package targets | ID 15; measure 18; money 85; meta/docs 6 | Pass |
-| CI-shaped workspace | `1710 passed, 139 deselected` | Pass |
+| CI-shaped workspace | `1711 passed, 139 deselected` after Linux provenance portability repair | Pass |
 | Focused optional SDK control | `8 passed, 58 deselected` after dedicated sync | Pass |
 | Static quality | Ruff lint; Ruff format 165 files; actionlint; `git diff --check` | Pass |
 | Packaging | All 18 workspace distributions built as sdist and wheel | Pass |
@@ -41,6 +41,11 @@ Verified implementation head before evidence commit:
 - Tag, release, publication, and workflow dispatch: N/A; not requested.
 - PR CI and merge: pending until the evidence commit is rebased and the approved
   PR is created. Merge still requires fresh explicit approval.
+
+The first PR run found and repaired a platform checkout difference for the raw
+CRLF ISO source. Git now treats the provenance XML as binary, the index and
+worktree bytes match, and both digest and byte-identical regeneration are
+portable to Linux CI.
 
 Local implementation verdict: **PASS**. The evidence commit is intentionally
 not self-referential; exact-head replay and PR checks remain delivery evidence.
