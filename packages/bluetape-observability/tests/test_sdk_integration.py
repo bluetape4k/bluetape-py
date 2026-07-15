@@ -10,7 +10,7 @@ from importlib.metadata import version
 from types import SimpleNamespace
 
 import pytest
-from _support import RecordingMeter
+from _observability_support import RecordingMeter
 from bluetape.cache.redis import (
     RedisCoordinationEvent,
     RedisCoordinationOperation,

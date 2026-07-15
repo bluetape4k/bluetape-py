@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import pytest
-from _support import EnumValue, RecordingCounter, RecordingMeter, RecordingSpan, policy_event
+from _observability_support import (
+    EnumValue,
+    RecordingCounter,
+    RecordingMeter,
+    RecordingSpan,
+    policy_event,
+)
 from bluetape.resilience import (
     CircuitState,
     EventKind,

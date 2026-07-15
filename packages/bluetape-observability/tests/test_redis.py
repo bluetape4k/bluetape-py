@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-from _support import (
+from _observability_support import (
     EnumValue,
     RecordingCounter,
     RecordingHistogram,
