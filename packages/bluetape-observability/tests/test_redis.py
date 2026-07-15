@@ -1,0 +1,230 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+from _support import (
+    EnumValue,
+    RecordingCounter,
+    RecordingHistogram,
+    RecordingMeter,
+    RecordingSpan,
+    coordination_event,
+    redis_event,
+)
+from bluetape.cache.redis import (
+    RedisCoordinationErrorCode,
+    RedisCoordinationOperation,
+    RedisCoordinationOutcome,
+    RedisErrorCode,
+    RedisMode,
+    RedisOperation,
+    RedisOutcome,
+)
+
+
+def observer_with_span(
+    monkeypatch: pytest.MonkeyPatch, observer_name: str
+) -> tuple[object, RecordingMeter, RecordingSpan]:
+    from bluetape.observability import _recording
+    from bluetape.observability import redis as module
+
+    span = RecordingSpan()
+    monkeypatch.setattr(_recording.trace, "get_current_span", lambda: span)
+    meter = RecordingMeter()
+    observer = getattr(module, observer_name)(meter=meter)
+    return observer, meter, span
+
+
+def test_provider_maps_exact_metric_and_span_attributes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bluetape.observability import _recording
+
+    assert _recording.REDIS_MODES == frozenset(item.value for item in RedisMode)
+    assert _recording.REDIS_OPERATIONS == frozenset(item.value for item in RedisOperation)
+    assert _recording.REDIS_OUTCOMES == frozenset(item.value for item in RedisOutcome)
+    assert _recording.REDIS_ERROR_CODES == frozenset(item.value for item in RedisErrorCode)
+
+    observer, meter, span = observer_with_span(monkeypatch, "OpenTelemetryRedisObserver")
+    observer.on_event(redis_event(error_code=EnumValue("timeout")))
+    metric = {
+        "bluetape.redis.mode": "sync",
+        "bluetape.redis.operation": "get",
+        "bluetape.redis.outcome": "success",
+        "bluetape.redis.error.code": "timeout",
+    }
+    assert meter.instruments[0].calls == [(1, metric)]
+    assert meter.instruments[1].calls == [(0.125, metric)]
+    assert span.events == [
+        ("bluetape.redis.operation", metric | {"bluetape.redis.elapsed_ns": 125_000_000})
+    ]
+
+
+def test_coordination_maps_exact_metric_and_span_attributes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from bluetape.observability import _recording
+
+    assert _recording.COORDINATION_OPERATIONS == frozenset(
+        item.value for item in RedisCoordinationOperation
+    )
+    assert _recording.COORDINATION_OUTCOMES == frozenset(
+        item.value for item in RedisCoordinationOutcome
+    )
+    assert _recording.COORDINATION_ERROR_CODES == frozenset(
+        item.value for item in RedisCoordinationErrorCode
+    )
+
+    observer, meter, span = observer_with_span(
+        monkeypatch, "OpenTelemetryRedisCoordinationObserver"
+    )
+    observer.on_event(coordination_event(error_code=EnumValue("loader-failure")))
+    metric = {
+        "bluetape.redis.mode": "async",
+        "bluetape.redis.operation": "get-or-load",
+        "bluetape.redis.outcome": "loaded",
+        "bluetape.redis.error.code": "loader-failure",
+        "bluetape.redis.coordination.cleanup_failed": False,
+    }
+    assert meter.instruments[0].calls == [(1, metric)]
+    assert meter.instruments[1].calls == [(0.25, metric)]
+    assert span.events == [
+        (
+            "bluetape.redis.coordination",
+            metric
+            | {
+                "bluetape.redis.coordination.attempts": 1,
+                "bluetape.redis.coordination.polls": 0,
+                "bluetape.redis.elapsed_ns": 250_000_000,
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("factory", "field", "value"),
+    [
+        (redis_event, "mode", EnumValue("unknown")),
+        (redis_event, "operation", EnumValue("unknown")),
+        (redis_event, "outcome", EnumValue("unknown")),
+        (redis_event, "error_code", EnumValue("unknown")),
+        (redis_event, "elapsed_ns", -1),
+        (coordination_event, "attempts", True),
+        (coordination_event, "polls", 2**63),
+        (coordination_event, "cleanup_failed", 0),
+        (coordination_event, "elapsed_ns", -1),
+    ],
+)
+def test_redis_rejects_invalid_consumed_fields_before_emission(
+    monkeypatch: pytest.MonkeyPatch, factory, field: str, value: object
+) -> None:
+    name = (
+        "OpenTelemetryRedisObserver"
+        if factory is redis_event
+        else "OpenTelemetryRedisCoordinationObserver"
+    )
+    observer, meter, span = observer_with_span(monkeypatch, name)
+    assert observer.on_event(factory(**{field: value})) is None
+    assert all(instrument.calls == [] for instrument in meter.instruments)
+    assert span.events == []
+
+
+def test_redis_never_reads_forbidden_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    observer, meter, span = observer_with_span(monkeypatch, "OpenTelemetryRedisObserver")
+
+    class PrivateEvent:
+        mode = EnumValue("sync")
+        operation = EnumValue("get")
+        outcome = EnumValue("success")
+        error_code = None
+        elapsed_ns = 1
+
+        @property
+        def key(self) -> bytes:
+            raise AssertionError("key was read")
+
+        @property
+        def value(self) -> bytes:
+            raise AssertionError("value was read")
+
+        def __repr__(self) -> str:
+            raise AssertionError("repr was read")
+
+    observer.on_event(PrivateEvent())
+    assert [len(instrument.calls) for instrument in meter.instruments] == [1, 1]
+    assert len(span.events) == 1
+
+
+def test_redis_runtime_channels_are_independent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from bluetape.observability import _recording
+    from bluetape.observability.redis import OpenTelemetryRedisObserver
+
+    meter = RecordingMeter()
+    observer = OpenTelemetryRedisObserver(meter=meter)
+    counter, histogram = meter.instruments
+    assert isinstance(counter, RecordingCounter)
+    assert isinstance(histogram, RecordingHistogram)
+
+    monkeypatch.setattr(
+        _recording.trace,
+        "get_current_span",
+        lambda: RecordingSpan(add_failure=RuntimeError("span")),
+    )
+    counter.failure = RuntimeError("counter")
+    observer.on_event(redis_event())
+    assert histogram.calls == [
+        (
+            0.125,
+            {
+                "bluetape.redis.mode": "sync",
+                "bluetape.redis.operation": "get",
+                "bluetape.redis.outcome": "success",
+            },
+        )
+    ]
+    counter.failure = None
+    observer.on_event(redis_event())
+    assert len(counter.calls) == 1
+    assert len(histogram.calls) == 2
+
+    for instrument in (counter, histogram):
+        for failure in (KeyboardInterrupt(), SystemExit(), GeneratorExit()):
+            instrument.failure = failure
+            with pytest.raises(type(failure)):
+                observer.on_event(redis_event())
+        instrument.failure = None
+
+
+def test_actual_sync_and_async_provider_behavior_is_preserved() -> None:
+    from bluetape.observability.redis import (
+        OpenTelemetryRedisCoordinationObserver,
+        OpenTelemetryRedisObserver,
+    )
+
+    provider_meter = RecordingMeter()
+    coordination_meter = RecordingMeter()
+    provider = OpenTelemetryRedisObserver(meter=provider_meter)
+    coordination = OpenTelemetryRedisCoordinationObserver(meter=coordination_meter)
+
+    provider.on_event(
+        SimpleNamespace(
+            mode=RedisMode.SYNC,
+            operation=RedisOperation.GET,
+            outcome=RedisOutcome.SUCCESS,
+            error_code=None,
+            elapsed_ns=1,
+        )
+    )
+    coordination.on_event(
+        SimpleNamespace(
+            mode=RedisMode.ASYNC,
+            operation=RedisCoordinationOperation.GET_OR_LOAD,
+            outcome=RedisCoordinationOutcome.CANCELLED,
+            error_code=None,
+            attempts=1,
+            polls=2,
+            cleanup_failed=False,
+            elapsed_ns=3,
+        )
+    )
+    assert len(provider_meter.instruments[0].calls) == 1
+    assert len(coordination_meter.instruments[0].calls) == 1
