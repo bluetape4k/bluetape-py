@@ -176,13 +176,20 @@ The exact public exports are:
   "OpenTelemetryRedisCoordinationObserver"]`
 
 All constructors are keyword-only. Supplying `meter=None` obtains a versioned instrumentation
-scope with `opentelemetry.metrics.get_meter("bluetape.observability", "0.1.0")`. Supplying a
-`Meter` uses that exact instance and never changes the global provider. There is no tracer or
-provider setter: trace recording uses `opentelemetry.trace.get_current_span()` because the
-adapter adds an event to caller-owned current work rather than starting a new span.
+scope with `opentelemetry.metrics.get_meter("bluetape.observability", package_version)`, where
+`package_version` is read once from `importlib.metadata.version("bluetape-observability")`.
+Supplying a `Meter` uses that exact instance and never changes the global provider. There is no
+tracer or provider setter: trace recording uses `opentelemetry.trace.get_current_span()` because
+the adapter adds an event to caller-owned current work rather than starting a new span.
 
 The first version has no feature flags, custom instrument names, custom attributes, callback,
 or subclassing contract. Installing and passing an adapter is the explicit opt-in.
+
+Every public module uses `from __future__ import annotations`, and domain event names are imported
+only under `TYPE_CHECKING`. `inspect.signature()` therefore exposes postponed string annotations
+without importing domain packages. Runtime `typing.get_type_hints()` without a caller-supplied
+`globalns` mapping is not a supported introspection contract for these methods; tests pin both
+the postponed signatures and API-only import behavior.
 
 ## Telemetry Data Flow
 
@@ -227,6 +234,36 @@ No active or recording span is a valid trace no-op. Metric recording is still at
 | `bluetape.redis.coordination.operations` | Counter | `{operation}` | every `RedisCoordinationEvent` |
 | `bluetape.redis.coordination.duration` | Histogram | `s` | every `RedisCoordinationEvent` |
 
+Instrument construction is exact and occurs once during adapter construction:
+
+```python
+meter.create_counter(
+    "bluetape.resilience.policy.events",
+    unit="{event}",
+    description="Number of observed Bluetape resilience policy events.",
+)
+meter.create_counter(
+    "bluetape.redis.operations",
+    unit="{operation}",
+    description="Number of observed Bluetape Redis operations.",
+)
+meter.create_histogram(
+    "bluetape.redis.operation.duration",
+    unit="s",
+    description="Duration of observed Bluetape Redis operations.",
+)
+meter.create_counter(
+    "bluetape.redis.coordination.operations",
+    unit="{operation}",
+    description="Number of observed Bluetape Redis coordination operations.",
+)
+meter.create_histogram(
+    "bluetape.redis.coordination.duration",
+    unit="s",
+    description="Duration of observed Bluetape Redis coordination operations.",
+)
+```
+
 Redis duration is `elapsed_ns / 1_000_000_000`. Resilience events do not contain elapsed
 execution time, so the bridge does not fabricate a duration metric. Retry delay, configured
 timeout, attempts, in-flight count, and waiters may be span-event detail but are not metric
@@ -262,6 +299,23 @@ event contract. Integer count attributes preserve their existing event values.
 `PolicyEvent.policy_name` is deliberately excluded from both signals. It is caller-controlled
 and cannot be proven bounded or non-sensitive by the bridge.
 
+Exact resilience mapping:
+
+| Source field | Span event | Counter attributes | Transformation |
+|---|---|---|---|
+| `policy_name` | omitted | omitted | never read into telemetry |
+| `policy_type` | `bluetape.resilience.policy.type` | same | closed `.value` string |
+| `kind` | `bluetape.resilience.event.kind` | same | closed `.value` string |
+| `outcome` | `bluetape.resilience.outcome` | same | closed `.value` or omit when `None` |
+| `failure_category` | `bluetape.resilience.failure.category` | same | closed `.value` string |
+| `attempt` | `bluetape.resilience.attempt` | omitted | positive exact `int`, or omit |
+| `delay` | `bluetape.resilience.delay` | omitted | finite non-negative seconds `float`, or omit |
+| `timeout` | `bluetape.resilience.timeout` | omitted | finite non-negative seconds `float`, or omit |
+| `state` | `bluetape.resilience.state` | omitted | closed `.value` or omit |
+| `previous_state` | `bluetape.resilience.previous_state` | omitted | closed `.value` or omit |
+| `in_flight` | `bluetape.resilience.in_flight` | omitted | non-negative exact `int`, or omit |
+| `waiters` | `bluetape.resilience.waiters` | omitted | non-negative exact `int`, or omit |
+
 ### Redis attributes
 
 Provider metric and span-event allowlist:
@@ -283,6 +337,30 @@ Span-event-only numeric detail:
 
 `bluetape.redis.elapsed_ns` remains an exact integer nanosecond value on the span event while
 the histogram receives the converted floating-point seconds value.
+
+Exact Redis provider mapping:
+
+| Source field | Span event | Counter/histogram attributes | Histogram value |
+|---|---|---|---|
+| `mode` | `bluetape.redis.mode` | same | N/A; closed `.value` string |
+| `operation` | `bluetape.redis.operation` | same | N/A; closed `.value` string |
+| `outcome` | `bluetape.redis.outcome` | same | N/A; closed `.value` string |
+| `error_code` | `bluetape.redis.error.code` | same | N/A; closed `.value` or omit |
+| `elapsed_ns` | `bluetape.redis.elapsed_ns` | omitted | `elapsed_ns / 1_000_000_000` seconds |
+
+Exact Redis coordination mapping uses the same mode/operation/outcome/error attribute keys and
+the coordination-specific instrument names:
+
+| Source field | Span event | Counter/histogram attributes | Histogram value |
+|---|---|---|---|
+| `mode` | `bluetape.redis.mode` | same | N/A; closed `.value` string |
+| `operation` | `bluetape.redis.operation` | same | N/A; closed `.value` string |
+| `outcome` | `bluetape.redis.outcome` | same | N/A; closed `.value` string |
+| `error_code` | `bluetape.redis.error.code` | same | N/A; closed `.value` or omit |
+| `attempts` | `bluetape.redis.coordination.attempts` | omitted | N/A; non-negative exact `int` |
+| `polls` | `bluetape.redis.coordination.polls` | omitted | N/A; non-negative exact `int` |
+| `cleanup_failed` | `bluetape.redis.coordination.cleanup_failed` | same | N/A; exact `bool` |
+| `elapsed_ns` | `bluetape.redis.elapsed_ns` | omitted | `elapsed_ns / 1_000_000_000` seconds |
 
 Numeric measurements never become metric attributes. Absent optional values are omitted,
 not encoded as empty strings. The bridge never adds Redis keys, values, result payloads,
@@ -316,21 +394,25 @@ change a protected domain call through an adapter exception.
 - For a valid domain event, each OTel interaction catches `Exception` locally and returns
   `None`; `BaseException` subclasses such as `KeyboardInterrupt`, `SystemExit`, and
   `GeneratorExit` are not swallowed.
-- Default meter acquisition and instrument creation are attempted once in the constructor.
-  If meter acquisition raises `Exception`, metrics are disabled for that adapter instance. If
-  one metric instrument cannot be created because an injected/custom `Meter` raises an
-  `Exception`, only that instrument is disabled while the other instruments and trace path
-  remain usable.
+- Default meter acquisition and every required instrument creation occur in the constructor.
+  Any setup `Exception` propagates immediately and no usable adapter is returned. This is an
+  application-wiring failure, not an inline domain-event failure, and is therefore observable
+  without package logging, mutable health state, or a diagnostic callback.
 - Current-span lookup, `is_recording`, `add_event`, counter `add`, and histogram `record` are
   isolated independently. A trace failure does not suppress metrics, and one metric failure
-  does not suppress another metric call.
+  does not suppress another metric call. Runtime calls retry naturally on the next domain event;
+  a transient runtime failure does not disable an instrument.
 - The package intentionally does not log telemetry failures. Logging here risks recursion and
   would make the bridge own application diagnostics. Applications observe SDK/exporter health
   through their OTel configuration.
-- Recovery from meter acquisition or instrument-construction failure requires constructing a
-  new adapter. Existing instances do not retry, mutate, or schedule recovery.
 - Adapter construction and calls create no owned resource and require no close, flush, or
   shutdown method. Application-owned providers/exporters retain lifecycle ownership.
+
+Each domain API has one observer slot. V1 does not provide a fan-out/composite observer. Passing
+an OTel adapter where another observer was installed replaces that observer. A caller that needs
+both must own the composite function/object, call order, and failure policy; the OTel adapter
+guarantees isolation only for its own runtime telemetry operations. Migration documentation must
+warn against silently replacing an existing observer.
 
 ## Sync and Async Context Semantics
 
@@ -394,7 +476,10 @@ the published `bluetape` meta distribution.
 - Verify counters, duration histograms, units, nanosecond-to-second conversion, and the absence
   of forbidden dimensions.
 - Verify the meter instrumentation scope name and version are `bluetape.observability` and
-  `0.1.0`.
+  the installed `bluetape-observability` distribution version.
+- Verify `inspect.signature()` exposes postponed domain annotations without runtime domain
+  imports and document that raw `get_type_hints()` without explicit globals is unsupported.
+- Verify every exact instrument name, type, unit, description, and construction call.
 - Exercise the observer in an ordinary sync scope and inside an async coroutine; both must
   attach to the correct current span without separate adapter types.
 - Construct actual `PolicyEvent`, `RedisEvent`, and `RedisCoordinationEvent` instances from the
@@ -406,8 +491,8 @@ the published `bluetape` meta distribution.
   controlled fakes; verify independent channels are still attempted and valid domain calls do
   not receive those `Exception` values.
 - Throw `KeyboardInterrupt` from a controlled telemetry fake and verify it propagates.
-- Simulate transient instrument-construction failure, construct a fresh adapter with a healthy
-  meter, and verify recording recovers only through reconstruction.
+- Make meter acquisition and each instrument-construction call raise; verify adapter construction
+  fails immediately without setting globals or returning a partial instance.
 - Verify no exception logging or background work appears.
 
 ### Performance acceptance
@@ -448,6 +533,22 @@ remain deterministic test/inspection gates.
   show direct installation without adding it to the default meta install.
 - Examples show resilience and Redis observer wiring and show `log_context` coexisting with an
   active span without automatic value promotion.
+- README examples are explicitly split into an API-only safe-no-op path and a runnable local
+  SDK-backed recording path. The latter installs `opentelemetry-sdk`, creates an
+  application-owned provider/reader/exporter and injected meter, wires both Redis adapter types,
+  and warns that production exporter selection and shutdown remain application-owned.
+- Failure guidance distinguishes fail-fast constructor wiring errors from isolated per-event
+  recording errors, states that the bridge exposes no mutable health/callback surface, and points
+  operators to application-owned SDK/exporter diagnostics for delivery health.
+- Migration guidance states that v1 has no observer fan-out helper, warns that assigning the
+  adapter replaces an existing observer, and leaves caller-owned composition order/failure
+  policy explicit.
+- Package and root README locale pairs place an `English | 한국어` switch directly below the
+  title and keep installation commands, examples, non-goals, logging coexistence, migration,
+  rollback, and failure behavior source-equivalent.
+- The logging coexistence example proves both directions are separate: logging context is not
+  promoted to telemetry attributes, and active trace/span IDs do not enter stdlib log records
+  without separate application logging configuration.
 - `docs/package-layout.md` records the new focused distribution and dependency boundary.
 - `CHANGELOG.md` records completed user-facing behavior; `WIP.md` reconciles issue #24 and the
   milestone roadmap.
@@ -462,8 +563,7 @@ remain deterministic test/inspection gates.
 | No SDK/provider is configured | API calls remain safe no-ops; domain call behavior is unchanged. |
 | No current recording span exists | Span event is skipped; metric recording is still attempted. |
 | Current span or custom SDK raises `Exception` | The failing signal call is isolated; remaining metric calls are still attempted. |
-| Metric instrument construction fails | Disable only that instrument for the adapter instance; preserve trace and other instruments. |
-| Metric setup later becomes healthy | Existing adapter remains unchanged; constructing a new adapter performs a fresh setup attempt. |
+| Meter acquisition or metric instrument construction fails | Adapter construction fails immediately; application wiring handles retry or fallback before installing the observer. |
 | Exporter/provider work is slow | The bridge adds no worker, timeout, retry, or queue; application owns SDK performance and configuration. |
 | Caller uses sensitive/high-cardinality policy names or logging context | Those values are never promoted by the fixed mapper. |
 | Adapter is invoked from async code | Current coroutine context is read inline; no task is spawned or retained. |
@@ -511,14 +611,18 @@ logging context separate. Documentation covers coexistence without creating a si
 
 This is an additive distribution. Existing packages, constructors, event fields, observer
 protocols, error ordering, and runtime dependencies do not change. Applications migrate by
-installing the focused package and passing one adapter where they already pass an observer.
+installing the focused package and passing one adapter into an otherwise empty observer slot.
+Applications with an existing observer must retain it through caller-owned explicit composition
+or defer adoption; replacing the observer is not presented as a behavior-preserving migration.
 Removing the adapter restores the exact prior behavior; there is no stored data, schema,
 background state, or rollback migration.
 
 Future adapters may be added only after the source package exposes a stable typed Python event
 or hook and the new attributes pass privacy/cardinality review. Existing instrument and
-attribute names are public compatibility contracts for the `0.2.x` line; incompatible changes
-require an explicit design and changelog entry.
+attribute names are public compatibility contracts for the installed distribution's `0.1.x`
+line. The repository milestone `0.2.0` groups issue delivery and is not the instrumentation-scope
+version authority. The installed distribution metadata is authoritative for dashboards; a later
+repository release may bump that version only through release-controlled metadata changes.
 
 ## Acceptance Criteria
 
@@ -529,8 +633,9 @@ require an explicit design and changelog entry.
    attributes defined here.
 4. No synthetic span, global provider mutation, SDK/exporter configuration, background work,
    logging bridge, or automatic context/baggage promotion is introduced.
-5. Telemetry `Exception` failures are isolated per signal call; `BaseException` propagates.
-6. API-only, local-SDK, sync, async, privacy/cardinality, hostile-input, failure/reconstruction,
+5. Telemetry setup failures fail adapter construction, runtime `Exception` failures are isolated
+   per signal call and retried on the next event, and `BaseException` propagates.
+6. API-only, local-SDK, sync, async, privacy/cardinality, hostile-input, setup/runtime failure,
    wheel-isolation, metadata, and performance checks pass with fresh evidence.
 7. Existing domain packages retain their public API and behavior, and the default `bluetape`
    wheel remains core-only without observability or OTel dependencies.
