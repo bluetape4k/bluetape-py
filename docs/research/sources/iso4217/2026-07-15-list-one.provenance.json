@@ -1,0 +1,16 @@
+{
+  "canonical_url": "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml",
+  "effective_url": "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml",
+  "retrieved_at_utc": "2026-07-15T14:43:23Z",
+  "published_date": "2026-01-01",
+  "byte_count": 47463,
+  "sha256": "838dfb991648cf36df939edd5fe3811737962b75a32252847d239cedd1e291c9",
+  "source_row_count": 280,
+  "unique_currency_count": 178,
+  "excluded_code_count": 2,
+  "excluded_codes": [
+    "XTS",
+    "XXX"
+  ],
+  "generated_output": "packages/bluetape-money/src/bluetape/money/_iso4217.py"
+}
