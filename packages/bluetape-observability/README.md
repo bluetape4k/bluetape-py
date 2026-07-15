@@ -4,6 +4,15 @@ English | [한국어](README.ko.md)
 
 Opt-in OpenTelemetry API adapters for Bluetape resilience and Redis observer events.
 
+## Responsibility map
+
+The bridge keeps bounded signal recording separate from the application-owned
+OpenTelemetry runtime and exporter lifecycle.
+
+![bluetape-observability responsibility map](../../docs/images/readme-diagrams/bluetape-observability-architecture.png)
+
+[Open the editable SVG](../../docs/images/readme-diagrams/bluetape-observability-architecture.svg)
+
 ## Install and prerequisites
 
 ```bash

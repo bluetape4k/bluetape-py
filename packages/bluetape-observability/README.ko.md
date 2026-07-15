@@ -4,6 +4,15 @@
 
 Bluetape resilience와 Redis observer event를 OpenTelemetry API에 연결하는 opt-in 패키지입니다.
 
+## 책임 경계
+
+Bridge의 제한된 signal 기록과 application-owned OpenTelemetry runtime 및 exporter lifecycle의
+책임을 분리합니다.
+
+![bluetape-observability 책임 경계](../../docs/images/readme-diagrams/bluetape-observability-architecture.png)
+
+[편집 가능한 SVG 열기](../../docs/images/readme-diagrams/bluetape-observability-architecture.svg)
+
 ## 설치와 선행 패키지
 
 ```bash

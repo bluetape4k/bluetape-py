@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="920" viewBox="0 0 1600 920" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">bluetape-observability responsibility map</title>
+  <desc id="diagram-desc">Bluetape domain events enter three opt-in adapters, cross a bounded recording core, and produce fixed span events and metrics through application-owned OpenTelemetry components.</desc>
+
+  <defs>
+    <linearGradient id="canvas-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F6FAFF"/>
+      <stop offset="50%" stop-color="#EDF7F5"/>
+      <stop offset="100%" stop-color="#FFF7ED"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-16%" y="-16%" width="132%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#60728A" flood-opacity="0.13"/>
+    </filter>
+    <marker id="arrow-primary" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#57708F"/>
+    </marker>
+    <style>
+      .heading { font-family: "Architects Daughter", ui-rounded, system-ui, sans-serif; fill: #172033; }
+      .mono { font-family: "Comic Mono", ui-monospace, SFMono-Regular, Menlo, monospace; fill: #42526A; }
+      .lane { fill: #FFFFFF; fill-opacity: 0.72; stroke: #CBD7E6; stroke-width: 2; }
+      .card { fill: #FFFFFF; stroke-width: 2; }
+      .connector { fill: none; stroke: #57708F; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow-primary); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="920" fill="url(#canvas-bg)"/>
+  <text id="diagram-title-text" class="heading" x="800" y="62" font-size="40" font-weight="700" text-anchor="middle" dominant-baseline="middle">bluetape-observability responsibility map</text>
+  <text class="mono" x="800" y="104" font-size="18" text-anchor="middle" dominant-baseline="middle">bounded domain signals / API-only bridge / application-owned telemetry runtime</text>
+
+  <rect class="lane" x="52" y="154" width="360" height="612" rx="26"/>
+  <rect class="lane" x="476" y="154" width="644" height="612" rx="26"/>
+  <rect class="lane" x="1184" y="154" width="364" height="612" rx="26"/>
+
+  <text class="heading" x="232" y="198" font-size="27" font-weight="700" text-anchor="middle" dominant-baseline="middle">Bluetape domain producers</text>
+  <text class="mono" x="232" y="228" font-size="14" text-anchor="middle" dominant-baseline="middle">caller selects one observer or composite</text>
+
+  <text class="heading" x="798" y="198" font-size="27" font-weight="700" text-anchor="middle" dominant-baseline="middle">bluetape-observability</text>
+  <text class="mono" x="798" y="228" font-size="14" text-anchor="middle" dominant-baseline="middle">opentelemetry-api only</text>
+
+  <text class="heading" x="1366" y="198" font-size="27" font-weight="700" text-anchor="middle" dominant-baseline="middle">Application-owned OTel</text>
+  <text class="mono" x="1366" y="228" font-size="14" text-anchor="middle" dominant-baseline="middle">provider and exporter lifecycle stays outside</text>
+
+  <text class="mono" x="444" y="262" font-size="13" text-anchor="middle">observer event</text>
+  <text class="mono" x="832" y="262" font-size="13" text-anchor="middle">closed scalar values</text>
+  <text class="mono" x="1152" y="262" font-size="13" text-anchor="middle">fixed signals</text>
+
+  <path id="connector-policy-event" class="connector" d="M 372 335 H 512"/>
+  <path id="connector-policy-normalize" class="connector" d="M 790 335 H 848"/>
+  <path id="connector-redis-event" class="connector" d="M 372 505 H 512"/>
+  <path id="connector-redis-normalize" class="connector" d="M 790 505 H 848"/>
+  <path id="connector-coordination-event" class="connector" d="M 372 675 H 512"/>
+  <path id="connector-coordination-normalize" class="connector" d="M 790 675 H 848"/>
+  <path id="connector-span-event" class="connector" d="M 1080 350 H 1218"/>
+  <path id="connector-metrics" class="connector" d="M 1080 520 H 1218"/>
+
+  <g id="domain-policy-card" filter="url(#soft-shadow)">
+    <rect class="card" x="92" y="280" width="280" height="110" rx="16" fill="#F7FAFE" stroke="#9BC4FF"/>
+    <text class="heading" x="232" y="318" font-size="22" font-weight="700" text-anchor="middle" dominant-baseline="middle">PolicyEvent</text>
+    <text class="mono" x="232" y="350" font-size="14" text-anchor="middle" dominant-baseline="middle">retry / timeout / circuit / bulkhead</text>
+    <text class="mono" x="232" y="372" font-size="13" text-anchor="middle" dominant-baseline="middle">bluetape-resilience</text>
+  </g>
+
+  <g id="domain-redis-card" filter="url(#soft-shadow)">
+    <rect class="card" x="92" y="450" width="280" height="110" rx="16" fill="#F9FEFC" stroke="#8EDCC7"/>
+    <text class="heading" x="232" y="488" font-size="22" font-weight="700" text-anchor="middle" dominant-baseline="middle">RedisEvent</text>
+    <text class="mono" x="232" y="520" font-size="14" text-anchor="middle" dominant-baseline="middle">sync / async provider operations</text>
+    <text class="mono" x="232" y="542" font-size="13" text-anchor="middle" dominant-baseline="middle">bluetape-cache-redis</text>
+  </g>
+
+  <g id="domain-coordination-card" filter="url(#soft-shadow)">
+    <rect class="card" x="92" y="620" width="280" height="110" rx="16" fill="#FFFDF7" stroke="#F2C879"/>
+    <text class="heading" x="232" y="658" font-size="22" font-weight="700" text-anchor="middle" dominant-baseline="middle">RedisCoordinationEvent</text>
+    <text class="mono" x="232" y="690" font-size="14" text-anchor="middle" dominant-baseline="middle">get-or-load coordination result</text>
+    <text class="mono" x="232" y="712" font-size="13" text-anchor="middle" dominant-baseline="middle">bluetape-cache-redis</text>
+  </g>
+
+  <g id="adapter-policy-card" filter="url(#soft-shadow)">
+    <rect class="card" x="512" y="280" width="278" height="110" rx="16" fill="#F7FAFE" stroke="#9BC4FF"/>
+    <text class="heading" x="651" y="306" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">OpenTelemetry</text>
+    <text class="heading" x="651" y="330" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">PolicyObserver</text>
+    <text class="mono" x="651" y="356" font-size="13" text-anchor="middle" dominant-baseline="middle">policy event + counter</text>
+    <text class="mono" x="651" y="376" font-size="12" text-anchor="middle" dominant-baseline="middle">ordinary OTel errors isolated</text>
+  </g>
+
+  <g id="adapter-redis-card" filter="url(#soft-shadow)">
+    <rect class="card" x="512" y="450" width="278" height="110" rx="16" fill="#F9FEFC" stroke="#8EDCC7"/>
+    <text class="heading" x="651" y="476" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">OpenTelemetry</text>
+    <text class="heading" x="651" y="500" font-size="19" font-weight="700" text-anchor="middle" dominant-baseline="middle">RedisObserver</text>
+    <text class="mono" x="651" y="526" font-size="13" text-anchor="middle" dominant-baseline="middle">operation event + counter</text>
+    <text class="mono" x="651" y="546" font-size="13" text-anchor="middle" dominant-baseline="middle">duration histogram</text>
+  </g>
+
+  <g id="adapter-coordination-card" filter="url(#soft-shadow)">
+    <rect class="card" x="512" y="620" width="278" height="110" rx="16" fill="#FFFDF7" stroke="#F2C879"/>
+    <text class="heading" x="651" y="652" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="middle">OpenTelemetryRedis</text>
+    <text class="heading" x="651" y="676" font-size="18" font-weight="700" text-anchor="middle" dominant-baseline="middle">CoordinationObserver</text>
+    <text class="mono" x="651" y="704" font-size="13" text-anchor="middle" dominant-baseline="middle">event + counter + duration</text>
+  </g>
+
+  <g id="bounded-core-card" filter="url(#soft-shadow)">
+    <rect class="card" x="848" y="280" width="232" height="450" rx="20" fill="#F5F1FF" stroke="#B8A7E8"/>
+    <text class="heading" x="964" y="326" font-size="23" font-weight="700" text-anchor="middle" dominant-baseline="middle">Bounded core</text>
+    <line x1="884" y1="356" x2="1044" y2="356" stroke="#CFC3EC" stroke-width="2"/>
+    <text class="mono" x="964" y="390" font-size="14" text-anchor="middle" dominant-baseline="middle">closed enum allowlists</text>
+    <text class="mono" x="964" y="420" font-size="14" text-anchor="middle" dominant-baseline="middle">bounded counts</text>
+    <text class="mono" x="964" y="450" font-size="14" text-anchor="middle" dominant-baseline="middle">finite durations</text>
+    <text class="mono" x="964" y="480" font-size="14" text-anchor="middle" dominant-baseline="middle">exact booleans</text>
+    <line x1="884" y1="510" x2="1044" y2="510" stroke="#CFC3EC" stroke-width="2"/>
+    <text class="mono" x="964" y="548" font-size="14" text-anchor="middle" dominant-baseline="middle">current recording span</text>
+    <text class="mono" x="964" y="578" font-size="14" text-anchor="middle" dominant-baseline="middle">constructor-cached meter</text>
+    <text class="mono" x="964" y="608" font-size="14" text-anchor="middle" dominant-baseline="middle">fixed signal names</text>
+    <line x1="884" y1="638" x2="1044" y2="638" stroke="#CFC3EC" stroke-width="2"/>
+    <text class="mono" x="964" y="674" font-size="13" text-anchor="middle" dominant-baseline="middle">no names / keys / values</text>
+    <text class="mono" x="964" y="700" font-size="13" text-anchor="middle" dominant-baseline="middle">no messages / baggage / IDs</text>
+  </g>
+
+  <g id="otel-span-card" filter="url(#soft-shadow)">
+    <rect class="card" x="1218" y="290" width="296" height="120" rx="16" fill="#F7FAFE" stroke="#9BC4FF"/>
+    <text class="heading" x="1366" y="330" font-size="23" font-weight="700" text-anchor="middle" dominant-baseline="middle">Current recording Span</text>
+    <text class="mono" x="1366" y="364" font-size="14" text-anchor="middle" dominant-baseline="middle">fixed event names</text>
+    <text class="mono" x="1366" y="388" font-size="13" text-anchor="middle" dominant-baseline="middle">normal contextvars scope only</text>
+  </g>
+
+  <g id="otel-meter-card" filter="url(#soft-shadow)">
+    <rect class="card" x="1218" y="460" width="296" height="120" rx="16" fill="#F9FEFC" stroke="#8EDCC7"/>
+    <text class="heading" x="1366" y="500" font-size="23" font-weight="700" text-anchor="middle" dominant-baseline="middle">Caller-supplied Meter</text>
+    <text class="mono" x="1366" y="534" font-size="14" text-anchor="middle" dominant-baseline="middle">fixed counters + histograms</text>
+    <text class="mono" x="1366" y="558" font-size="13" text-anchor="middle" dominant-baseline="middle">API no-op works without SDK</text>
+  </g>
+
+  <g id="otel-lifecycle-card" filter="url(#soft-shadow)">
+    <rect class="card" x="1218" y="620" width="296" height="110" rx="16" fill="#FFFDF7" stroke="#F2C879"/>
+    <text class="heading" x="1366" y="656" font-size="22" font-weight="700" text-anchor="middle" dominant-baseline="middle">SDK + exporters</text>
+    <text class="mono" x="1366" y="688" font-size="14" text-anchor="middle" dominant-baseline="middle">configure / flush / shutdown</text>
+    <text class="mono" x="1366" y="712" font-size="13" text-anchor="middle" dominant-baseline="middle">application responsibility</text>
+  </g>
+
+  <rect x="104" y="808" width="1392" height="72" rx="18" fill="#FFFFFF" stroke="#D5DFEC" stroke-width="2"/>
+  <text class="heading" x="800" y="835" font-size="22" font-weight="700" text-anchor="middle" dominant-baseline="middle">Ownership stays explicit</text>
+  <text class="mono" x="800" y="860" font-size="15" text-anchor="middle" dominant-baseline="middle">No provider, exporter, worker, queue, propagation, logging bridge, flush, or shutdown is owned by this package.</text>
+</svg>
