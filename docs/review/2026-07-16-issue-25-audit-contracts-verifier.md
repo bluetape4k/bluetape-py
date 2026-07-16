@@ -1,7 +1,7 @@
 # Issue #25 audit contracts verifier map
 
 Date: 2026-07-16 KST
-Pre-evidence implementation head: `71bf9b1a65c3abac4d9df4e3b805c16fa617dc58`
+Pre-evidence implementation head: `4c28d60487f87f8623c836fedb2cf9d209cf54bd`
 
 Status: **READY FOR EXACT-HEAD VERIFICATION**. This file maps every approved
 criterion to source and executable evidence. It intentionally does not claim a
@@ -19,7 +19,7 @@ evidence commit at an unchanged candidate SHA.
 | Failures and representations do not disclose caller values | `_errors.py` fixed messages/reductions and constant repr methods | hostile-marker matrices across errors, values, events, validation, and helpers | Mapped |
 | Deterministic helpers compare every field and retain no history | `testing.py` local literals and closed comparator | exact exports/signatures/defaults, all mismatch categories, no retained collections | Mapped |
 | No forbidden repository/storage/global surfaces | package source exports only values, errors, validator, and two testing helpers | packaging and helper tests reject repository/history/buffer/outbox surfaces; root exports exact eleven names | Mapped |
-| Focused/meta install works and default remains core-only | root/meta `pyproject.toml`, `uv.lock` | offline wheelhouse environments, network-denied `-I` imports, default absence, removal rollback, `uv pip check` | Mapped |
+| Focused/meta install works and default remains core-only | root/meta `pyproject.toml`, `uv.lock` | offline wheelhouse environments, network-denied `-I` imports, distribution metadata presence/absence, removal rollback, `uv pip check` | Mapped |
 | Every workspace distribution is fail-closed classified | benchmark and resilience packaging `PUBLISHABLE`/`PRIVATE` sets, release preflight | both exhaustive equality tests cover the complete workspace distribution set | Mapped |
 | English/Korean ownership, serialization/versioning, policy, and adapter separation | package/root READMEs | identical installed-wheel marked example, locale headings/semantic assertions, exact install/removal and link tests | Mapped |
 | Current installation guidance matches the publication hold | package EN/KO Install sections and root status authority | README contracts require hold wording, workspace sync, focused local build, and post-publication registry shape | Mapped |

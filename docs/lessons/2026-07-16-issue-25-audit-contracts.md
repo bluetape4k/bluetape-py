@@ -75,7 +75,8 @@ script 결과와 다르면 PNG를 우선하고 다시 렌더해야 한다.
 Focused wheel과 `bluetape[audit]`는 audit를 제공하고 기본 `bluetape`는 core-only여야 한다.
 Built wheel을 offline/no-index 환경에 설치하고 `python -I`, module origin, socket denial,
 METADATA, root initializer 부재를 확인해야 sibling checkout 누출을 막을 수 있다. Meta-extra
-환경에서 audit만 제거한 뒤 namespace와 core가 남고 audit가 사라지는 smoke는 설치
+환경에서 audit만 제거한 뒤 namespace와 core import뿐 아니라 `bluetape`/`bluetape-core`
+distribution metadata가 남고 `bluetape-audit` metadata가 사라지는지 확인해야 한다. 이 smoke는 설치
 rollback을 증명하지만 data migration을 약속하지 않는다.
 
 ### 새 distribution은 모든 fail-closed 분류 정본에 등록한다
@@ -117,6 +118,8 @@ no-scan, one-copy, fixed-entry, fixed-key 계약을 source와 test로 직접 증
   classification suite의 bounded repair 검증은 `11 passed`.
 - 첫 exact-head review의 stability/Ops P2 두 건을 닫은 README 및 전체 ordered-validation
   보강 검증은 `102 passed`.
+- 다음 review의 rollback false-positive와 datetime 비용 과장을 닫았고, distribution-aware
+  isolated wheel suite는 `4 passed`.
 
 최종 exact-head canonical replay와 독립 six-lens/verifier 결과는 이 파일을 포함한 evidence
 commit 이후 변경 없는 SHA에서 workflow receipt와 PR body에 기록한다.

@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Issue: #25, milestone `0.2.0`
-Pre-evidence implementation head: `71bf9b1a65c3abac4d9df4e3b805c16fa617dc58`
+Pre-evidence implementation head: `4c28d60487f87f8623c836fedb2cf9d209cf54bd`
 
 This ledger records observed task evidence before the final evidence commit.
 The candidate exact head and fresh canonical replay belong to the workflow
@@ -35,6 +35,7 @@ the later exact-head gate has passed.
 | Fail-closed workspace publication classification | The first candidate replay of `uv run pytest -m 'not observability_sdk and not observability_workspace'` produced `1 failed, 2281 passed, 9 deselected`; the resilience-owned exhaustive publication set omitted `bluetape-audit` while the benchmark-owned set and release preflight already included it | The existing failing test and its benchmark counterpart passed together as `11 passed`; Ruff and diff checks passed before the repair commit | Repair `64b0bee` |
 | Publication-hold install guidance | A fresh package README contract asserted the English/Korean publication hold plus workspace sync and focused build commands; it failed because both package READMEs presented registry commands without the current hold | Both locales now distinguish current workspace/build commands from post-publication registry shape; the README contract plus event/validation review repairs passed `102` tests | Repair `71bf9b1` |
 | Total validation-order evidence | Review found that one all-invalid validator case proved only the first category and constructor adjacency stopped after three transitions | Parameterized validator cases now relax every preceding category and prove all 14 outcomes; constructor cases prove all eight adjacent declaration-order pairs | Repair `71bf9b1` |
+| Distribution-level rollback evidence | Review found that namespace imports after audit removal could still pass if only `bluetape-core` remained | The default/removal probe now requires `bluetape` and `bluetape-core` version `0.1.0` metadata and requires `bluetape-audit` metadata to be absent; the isolated wheel suite passed `4` tests | Repair `4c28d60` |
 
 Only observed missing-surface or wrong-behavior failures are called RED.
 Task 6 finalized an already-owned Task 1 installation contract and is not
@@ -47,7 +48,7 @@ relabeled as a new production RED cycle.
 | Payload construction | `AuditPayload.__init__` performs an exact `bytes` type check, truth/`len()` bounds, then retains the original object; `test_payload_accepts_exact_hard_ceiling_without_copy` proves the 1,048,576-byte object is retained by identity | No byte scan or copy; constant Python-level checks plus label validation |
 | Policy payload validation | `validate_audit_event` reads only `len(event.payload.data)` and returns the same event; boundary/limit+1 and same-object tests cover the path | No byte iteration, parsing, serialization, or retention |
 | Metadata snapshot | `AuditEvent.__init__` prechecks length, performs exactly one built-in shallow `dict.copy`, rechecks the private length, validates only the private mapping, and publishes last; seam tests prove copy-only validation and failed-construction atomicity | One shallow copy and one validation pass over at most 64 entries |
-| Datetime equality | `_datetime_key` builds a fixed tuple of seven wall-time scalars, offset, and fold; equality tests cover offset/fold distinctions and every stored event field | Fixed-size scalar key; no timezone conversion or history lookup |
+| Datetime equality | `_datetime_key` builds a fixed tuple of seven wall-time scalars, offset, and fold; equality tests cover offset/fold distinctions and every stored event field | Fixed-size scalar key with no UTC normalization or external I/O; offset calculation is delegated to the accepted stdlib timezone object |
 | Packaging cost | `uv build --package bluetape-audit` built focused sdist/wheel; `uv build --all-packages` built all 19 workspace distributions | Build-time evidence only; no runtime I/O introduced |
 
 Wall-clock microbenchmarks are deliberately rejected. These operations are
@@ -62,6 +63,9 @@ the no-scan, one-copy, 64-entry, or fixed-key contracts.
   omission; the bounded repair rerun passed `11` packaging tests at `64b0bee`.
 - The next exact-head review found two non-blocking P2 evidence/documentation
   gaps; their RED/GREEN and ordered-test repair passed `102` tests at `71bf9b1`.
+- The following review removed a timezone-cost overclaim and strengthened the
+  rollback probe to distribution metadata; the wheel suite passed `4` tests at
+  `4c28d60`.
 - Static checks: targeted Ruff lint and format passed; `git diff --check`
   passed after the final documentation repair.
 - Packaging: all 19 workspace distributions built; `uv lock --check` passed.
