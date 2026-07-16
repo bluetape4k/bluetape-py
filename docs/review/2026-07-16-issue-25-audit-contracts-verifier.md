@@ -1,7 +1,7 @@
 # Issue #25 audit contracts verifier map
 
 Date: 2026-07-16 KST
-Pre-evidence implementation head: `be292647cfb243e464ba636cf727369048dd3c18`
+Pre-evidence implementation head: `64b0bee26de59d0b0133e8d6dc17e07ffb311606`
 
 Status: **READY FOR EXACT-HEAD VERIFICATION**. This file maps every approved
 criterion to source and executable evidence. It intentionally does not claim a
@@ -20,6 +20,7 @@ evidence commit at an unchanged candidate SHA.
 | Deterministic helpers compare every field and retain no history | `testing.py` local literals and closed comparator | exact exports/signatures/defaults, all mismatch categories, no retained collections | Mapped |
 | No forbidden repository/storage/global surfaces | package source exports only values, errors, validator, and two testing helpers | packaging and helper tests reject repository/history/buffer/outbox surfaces; root exports exact eleven names | Mapped |
 | Focused/meta install works and default remains core-only | root/meta `pyproject.toml`, `uv.lock` | offline wheelhouse environments, network-denied `-I` imports, default absence, removal rollback, `uv pip check` | Mapped |
+| Every workspace distribution is fail-closed classified | benchmark and resilience packaging `PUBLISHABLE`/`PRIVATE` sets, release preflight | both exhaustive equality tests cover the complete workspace distribution set | Mapped |
 | English/Korean ownership, serialization/versioning, policy, and adapter separation | package/root READMEs | identical installed-wheel marked example, locale headings/semantic assertions, exact install/removal and link tests | Mapped |
 | SVG+PNG passes source and visual gates | canonical pair and diagram review ledger | XML, 2600x1600 IHDR, source IDs, 4 primary arrows, connector/geometry/endpoint/corner audits, original-pixel inspection | Mapped |
 | Canonical quality and independent review gates | Task 8 plan and this mapping | Commands and six fresh review lenses are defined but must run after candidate freeze | Pending exact-head replay |
