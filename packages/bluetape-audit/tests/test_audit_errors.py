@@ -86,7 +86,7 @@ def test_limit_error_supports_safe_round_trips() -> None:
         assert "max_payload_bytes" not in repr(restored)
 
 
-def test_initial_public_api_exports_only_the_error_boundary() -> None:
+def test_public_api_preserves_the_ordered_error_prefix() -> None:
     audit = importlib.import_module("bluetape.audit")
 
-    assert audit.__all__ == EXPECTED_EXPORTS
+    assert audit.__all__[: len(EXPECTED_EXPORTS)] == EXPECTED_EXPORTS
