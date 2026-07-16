@@ -312,6 +312,25 @@ class TestAuditEvent:
         assert first == same
         assert first != object()
 
+    @pytest.mark.parametrize(
+        ("field", "different"),
+        [
+            ("event_id", "evt-test-0002"),
+            ("action", "test.other-action"),
+            ("occurred_at", datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC)),
+            ("subject", audit.AuditIdentity("test-subject", "subject-0002")),
+            ("payload", audit.AuditPayload(b'{"different":true}', "application/json", "1")),
+            ("actor", None),
+            ("correlation_id", "corr-test-0002"),
+            ("causation_id", "cause-test-0002"),
+            ("metadata", {"source": "different"}),
+        ],
+    )
+    def test_structural_equality_compares_every_stored_field(
+        self, field: str, different: object
+    ) -> None:
+        assert make_event() != make_event(**{field: different})
+
     def test_metadata_is_a_private_read_only_snapshot(self) -> None:
         source = {"source": "orders-api"}
         event = make_event(metadata=source)
