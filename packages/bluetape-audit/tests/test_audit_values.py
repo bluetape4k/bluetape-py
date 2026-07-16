@@ -242,7 +242,7 @@ def test_identity_accepts_hard_limit_and_rejects_one_over(field_name: str, limit
     identity = audit.AuditIdentity(**arguments)
     assert getattr(identity, field_name) is at_limit
 
-    over_limit = "HOSTILE-IDENTITY-MARKER" + "x" * limit
+    over_limit = "x" * (limit + 1)
     arguments[field_name] = over_limit
     _assert_fixed_error(
         lambda: audit.AuditIdentity(**arguments),
@@ -280,13 +280,18 @@ def test_payload_accepts_exact_hard_ceiling_without_copy() -> None:
 
 
 def test_payload_rejects_one_byte_over_without_disclosure() -> None:
-    marker = b"HOSTILE-PAYLOAD-MARKER" + b"x" * 1_048_576
-    _assert_fixed_error(
-        lambda: audit.AuditPayload(marker, "application/octet-stream", "1"),
-        InvalidAuditPayloadError,
-        "audit payload is invalid",
-        marker,
-    )
+    over_limit = b"x" * (1_048_576 + 1)
+    with pytest.raises(InvalidAuditPayloadError) as captured:
+        audit.AuditPayload(over_limit, "application/octet-stream", "1")
+    assert captured.value.args == ("audit payload is invalid",)
+
+
+def test_payload_type_error_does_not_disclose_short_hostile_marker() -> None:
+    marker = bytearray(b"HOSTILE-PAYLOAD-MARKER")
+    with pytest.raises(TypeError, match=r"^payload data must be bytes$") as captured:
+        audit.AuditPayload(marker, "application/octet-stream", "1")  # type: ignore[arg-type]
+    assert marker.decode() not in str(captured.value)
+    assert marker.decode() not in repr(captured.value)
 
 
 @pytest.mark.parametrize(
@@ -379,7 +384,7 @@ def test_payload_labels_accept_hard_limit_and_reject_one_over(field_name: str, l
     payload = audit.AuditPayload(**arguments)
     assert getattr(payload, field_name) is at_limit
 
-    over_limit = "HOSTILE-LABEL-MARKER" + "x" * limit
+    over_limit = "x" * (limit + 1)
     arguments[field_name] = over_limit
     _assert_fixed_error(
         lambda: audit.AuditPayload(**arguments),
