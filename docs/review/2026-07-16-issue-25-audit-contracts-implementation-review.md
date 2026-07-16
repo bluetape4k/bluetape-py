@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Reviewed pre-evidence range:
-`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..71bf9b1a65c3abac4d9df4e3b805c16fa617dc58`
+`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..4c28d60487f87f8623c836fedb2cf9d209cf54bd`
 
 ## Method and boundary
 
@@ -29,6 +29,8 @@ fresh lenses or independent verifier have passed.
 | P1 | Release safety/integration | The first full workspace replay found that the resilience-owned exhaustive publication set did not classify the new distribution, although the benchmark-owned set and release preflight did | Add `bluetape-audit` to the second fail-closed set and rerun both classification suites | Closed in `64b0bee` |
 | P2 | Stability/testing | A test named total validator order proved only that `event_id` won when everything failed, and constructor adjacency stopped after three transitions | Parameterize all 14 validator outcomes by relaxing preceding categories and all eight constructor adjacency pairs | Closed in `71bf9b1` |
 | P2 | Operator/docs | Package READMEs showed registry install commands without the root README's current PyPI publication hold | Add bilingual hold guidance, current workspace sync/focused build commands, and a README contract RED/GREEN | Closed in `71bf9b1` |
+| P2 | Performance/evidence | The TDD ledger described the fixed datetime equality key as having no history lookup, although accepted `ZoneInfo.utcoffset()` owns internal transition lookup cost | Narrow the claim to no UTC normalization or external I/O and explicitly delegate offset calculation to the stdlib timezone object | Closed in the final evidence commit |
+| P2 | Stability/testing | The rollback probe proved namespace/core importability but not that the meta distribution remained installed or audit metadata was absent | Assert installed `bluetape`/`bluetape-core` versions and `PackageNotFoundError` for `bluetape-audit` | Closed in `4c28d60` |
 
 ## Per-task convergence
 
@@ -43,6 +45,7 @@ fresh lenses or independent verifier have passed.
 | Docs and diagram | `441 passed`; diagram PASS 19/N/A 2, all audit failures zero | 0 | 0 | 0 | 0 |
 | Workspace publication classification repair | First candidate replay `1 failed, 2281 passed, 9 deselected`; focused repair `11 passed` | 0 | 0 | 0 | 0 |
 | First exact-head review repairs | Stability P2 and Ops P2 repaired; focused README/event/validation set `102 passed` | 0 | 0 | 0 | 0 |
+| Second exact-head review repairs | Performance wording corrected; distribution-aware rollback suite `4 passed` | 0 | 0 | 0 | 0 |
 
 ## Pre-head six-lens readiness
 
