@@ -186,6 +186,16 @@ class TestAuditTesting:
         with pytest.raises(AssertionError, match="occurred_at"):
             _testing_module().assert_audit_event_preserved(different_fold, expected)
 
+        same_instant_different_wall = expected_event(
+            occurred_at=expected.occurred_at.astimezone(UTC)
+        )
+        with pytest.raises(AssertionError, match="occurred_at"):
+            _testing_module().assert_audit_event_preserved(same_instant_different_wall, expected)
+
+        utc_expected = expected_event(occurred_at=datetime(2026, 1, 1, tzinfo=UTC))
+        zoneinfo_actual = expected_event(occurred_at=datetime(2026, 1, 1, tzinfo=ZoneInfo("UTC")))
+        _testing_module().assert_audit_event_preserved(zoneinfo_actual, utc_expected)
+
     def test_metadata_comparison_is_order_insensitive(self) -> None:
         actual = expected_event(metadata={"b": "2", "a": "1"})
         expected = expected_event(metadata={"a": "1", "b": "2"})
@@ -204,3 +214,16 @@ class TestAuditTesting:
         assert "assert_audit_event_preserved" not in audit.__all__
         assert not hasattr(audit, "make_audit_event")
         assert not hasattr(audit, "assert_audit_event_preserved")
+        assert audit.__all__ == [
+            "AuditError",
+            "InvalidAuditIdentityError",
+            "InvalidAuditPayloadError",
+            "InvalidAuditEventError",
+            "InvalidAuditLimitsError",
+            "AuditLimitExceededError",
+            "AuditIdentity",
+            "AuditPayload",
+            "AuditEvent",
+            "AuditLimits",
+            "validate_audit_event",
+        ]
