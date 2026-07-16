@@ -170,6 +170,7 @@ assert Path(testing.__file__).resolve().is_relative_to(prefix)
 _DEFAULT_IMPORT_PROBE = """
 import importlib
 import importlib.util
+from importlib import metadata
 from pathlib import Path
 import socket
 import sys
@@ -197,6 +198,14 @@ core = importlib.import_module("bluetape.core")
 assert core.__file__ is not None
 assert Path(core.__file__).resolve().is_relative_to(prefix)
 assert importlib.util.find_spec("bluetape.audit") is None
+assert metadata.version("bluetape") == "0.1.0"
+assert metadata.version("bluetape-core") == "0.1.0"
+try:
+    metadata.version("bluetape-audit")
+except metadata.PackageNotFoundError:
+    pass
+else:
+    raise AssertionError("bluetape-audit distribution remains installed")
 """
 
 
