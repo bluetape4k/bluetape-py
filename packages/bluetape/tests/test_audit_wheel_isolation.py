@@ -11,13 +11,18 @@ import pytest
 
 ROOT = Path(__file__).parents[3]
 PYTHON_VERSION = "3.13.14"
-AUDIT_ERROR_EXPORT_PREFIX = (
+AUDIT_EXPORTS = (
     "AuditError",
     "InvalidAuditIdentityError",
     "InvalidAuditPayloadError",
     "InvalidAuditEventError",
     "InvalidAuditLimitsError",
     "AuditLimitExceededError",
+    "AuditIdentity",
+    "AuditPayload",
+    "AuditEvent",
+    "AuditLimits",
+    "validate_audit_event",
 )
 
 
@@ -144,9 +149,21 @@ module = importlib.import_module("bluetape.audit")
 assert module.__file__ is not None
 assert Path(module.__file__).resolve().is_relative_to(prefix)
 exports = tuple(module.__all__)
-assert exports[:6] == {AUDIT_ERROR_EXPORT_PREFIX!r}
+assert exports == {AUDIT_EXPORTS!r}
 missing = object()
 assert all(getattr(module, name, missing) is not missing for name in exports)
+assert getattr(module, "make_audit_event", missing) is missing
+assert getattr(module, "assert_audit_event_preserved", missing) is missing
+testing_spec = importlib.util.find_spec("bluetape.audit.testing")
+assert testing_spec is not None
+assert testing_spec.origin is not None
+assert Path(testing_spec.origin).resolve().is_relative_to(prefix)
+testing = importlib.import_module("bluetape.audit.testing")
+assert tuple(testing.__all__) == (
+    "make_audit_event",
+    "assert_audit_event_preserved",
+)
+assert Path(testing.__file__).resolve().is_relative_to(prefix)
 """
 
 
