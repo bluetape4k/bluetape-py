@@ -253,8 +253,7 @@ def test_default_meta_install_stays_core_only(
     audit_wheels: Wheels,
     tmp_path: Path,
 ) -> None:
-    audit_wheel = require_audit_wheel(audit_wheels)
-    wheelhouse = audit_wheel.parent
+    wheelhouse = audit_wheels.meta.parent
     python = new_venv(tmp_path / "meta-default")
     run(
         "uv",
