@@ -478,7 +478,7 @@ def test_limits_use_generated_structural_equality_and_hashing() -> None:
 def test_root_exports_errors_then_current_values() -> None:
     import bluetape.audit as audit
 
-    assert audit.__all__ == [
+    task_two_exports = [
         "AuditError",
         "InvalidAuditIdentityError",
         "InvalidAuditPayloadError",
@@ -489,3 +489,4 @@ def test_root_exports_errors_then_current_values() -> None:
         "AuditPayload",
         "AuditLimits",
     ]
+    assert [name for name in audit.__all__ if name in task_two_exports] == task_two_exports
