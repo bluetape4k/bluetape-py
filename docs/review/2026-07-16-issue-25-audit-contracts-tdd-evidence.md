@@ -1,0 +1,66 @@
+# Issue #25 audit contracts TDD evidence
+
+Date: 2026-07-16 KST
+Issue: #25, milestone `0.2.0`
+Pre-evidence implementation head: `be292647cfb243e464ba636cf727369048dd3c18`
+
+This ledger records observed task evidence before the final evidence commit.
+The candidate exact head and fresh canonical replay belong to the workflow
+receipt and PR body after this file is committed; this file does not claim that
+the later exact-head gate has passed.
+
+## Approved inputs
+
+- Spec SHA-256:
+  `31e175cebeb6954d096c9af56930fd9c9542d35a2761cbd73d53d8cd4e46119d`
+- Spec review SHA-256:
+  `aec6deb0d2a1bee697db78e22f5cf37394e3c4ed6a7cac8d0a8198f42469cb98`
+- Plan SHA-256:
+  `07803a1bc61d84a68a27e56d86f24a49af15cce87917b25036de0566a2e8f300`
+- Plan review SHA-256:
+  `5762753ce4aeaa983325b243be329cf389949d658104d1b860701e0fd627c16d`
+
+## Captured RED to GREEN transitions
+
+| Behavior family | Exact RED command and observed reason | GREEN and refactor rerun | Production/evidence commits |
+|---|---|---|---|
+| Package registration and initial error surface | `uv run pytest packages/bluetape-audit/tests/test_audit_packaging.py packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape/tests/test_audit_wheel_isolation.py -v`; reconstructed at approved plan base with `4 failed` in test bodies because the audit project, wheel, and import did not exist | Registration/error scaffold passed `12` targeted tests after locked all-package/all-extra sync; Task 1 converged with `25 passed` across audit, isolation, and benchmark packaging | `4e46ea2`, final Task 1 `83cbb4d` |
+| Fixed-message errors | `uv run pytest packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape-audit/tests/test_audit_packaging.py -v`; `4 failed` because invalid errors had empty/default messages | `11 passed`; the pickle/copy RED then produced `5` reconstruction failures and the explicit-reduction rerun passed `16` | `6d742c4`, `c445d5a` |
+| Focused/meta/default wheel isolation | The Task 1 RED command above intentionally failed in test bodies on the missing focused wheel. Fixture-level build assertions were rejected because they produced setup errors rather than missing-feature failures | Final package/isolation set passed `10`; focused and meta-extra imports came from offline wheels, default audit stayed absent, removal preserved namespace/core, and `uv pip check` passed | `1d96591`, `9ffe2ba`, `83cbb4d`, exact final exports `9371eb6` |
+| Identity, payload, and limits | `uv run pytest packages/bluetape-audit/tests/test_audit_values.py -v`; failed on missing `AuditIdentity` (the first required value), with payload and limits still absent | `300` value tests and `311` error+value tests passed; the staged installed-wheel rerun passed `320` audit/isolation tests | `e45b6e0`; boundary repair `3b880b2`; staged wheel repair `c17eb12` |
+| Immutable event snapshot | `uv run pytest packages/bluetape-audit/tests/test_audit_event.py -v`; `1 failed, 48 skipped` because `AuditEvent` was missing | Initial `49` event tests, `360` owning tests, and `369` audit/isolation tests passed; field-by-field equality refactor reran `58` event and `369` owning tests; integration reached `378` | RED `dbed8f7`; GREEN `562f5e8`; equality coverage `349fc61` |
+| Equal-or-stricter adapter validation | `uv run pytest packages/bluetape-audit/tests/test_audit_validation.py -v`; `1 failed, 22 skipped` because `validate_audit_event` was missing | `23` validator tests, `397` package tests, and `401` audit/isolation tests passed | RED `d56cc3b`; GREEN `c15197f` |
+| Deterministic testing helpers | `uv run pytest packages/bluetape-audit/tests/test_audit_testing.py -v`; `1 failed, 33 skipped` because `bluetape.audit.testing` was missing | `34` helper tests, `432` package tests, and `436` audit/isolation tests passed; focused sdist and wheel built | RED `cc9e483`; GREEN `8466202` |
+| Bilingual docs and SVG+PNG | `uv run pytest packages/bluetape/tests/test_audit_readmes.py -v`; `4 failed` because the marked example, final sections, security/rollout guidance, embeds, and assets were missing | Final README/source-model suite passed `5`; integrated audit/isolation/docs set passed `441`; all SVG audits reported zero failures and the PNG rendered at `2600x1600` | RED `165db5a`; GREEN/assets/ledger `be29264` |
+
+Only observed missing-surface or wrong-behavior failures are called RED.
+Task 6 finalized an already-owned Task 1 installation contract and is not
+relabeled as a new production RED cycle.
+
+## Bounded-operation and performance proof
+
+| Operation | Source and executable proof | Bound |
+|---|---|---|
+| Payload construction | `AuditPayload.__init__` performs an exact `bytes` type check, truth/`len()` bounds, then retains the original object; `test_payload_accepts_exact_hard_ceiling_without_copy` proves the 1,048,576-byte object is retained by identity | No byte scan or copy; constant Python-level checks plus label validation |
+| Policy payload validation | `validate_audit_event` reads only `len(event.payload.data)` and returns the same event; boundary/limit+1 and same-object tests cover the path | No byte iteration, parsing, serialization, or retention |
+| Metadata snapshot | `AuditEvent.__init__` prechecks length, performs exactly one built-in shallow `dict.copy`, rechecks the private length, validates only the private mapping, and publishes last; seam tests prove copy-only validation and failed-construction atomicity | One shallow copy and one validation pass over at most 64 entries |
+| Datetime equality | `_datetime_key` builds a fixed tuple of seven wall-time scalars, offset, and fold; equality tests cover offset/fold distinctions and every stored event field | Fixed-size scalar key; no timezone conversion or history lookup |
+| Packaging cost | `uv build --package bluetape-audit` built focused sdist/wheel; `uv build --all-packages` built all 19 workspace distributions | Build-time evidence only; no runtime I/O introduced |
+
+Wall-clock microbenchmarks are deliberately rejected. These operations are
+stdlib-only, non-I/O, and source/test-proven by hard ceilings; timing small
+Python constructors would add noisy machine-dependent numbers without proving
+the no-scan, one-copy, 64-entry, or fixed-key contracts.
+
+## Pre-head validation convergence
+
+- Task 7 final focused set: `441 passed`.
+- Static checks: targeted Ruff lint and format passed; `git diff --check`
+  passed after the final documentation repair.
+- Packaging: all 19 workspace distributions built; `uv lock --check` passed.
+- Diagram: `markers=4 connectors=5 cards=6 intrusions=0 crossings=0`,
+  `geometry_failures=0`, endpoint PASS, and mixed-corner
+  `paths=5 q_bends=2 failures=0`.
+
+Fresh full canonical validation at the committed candidate head remains the
+next gate.
