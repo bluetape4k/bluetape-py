@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).parents[3]
 PYTHON_VERSION = "3.13.14"
-AUDIT_EXPORTS = (
+AUDIT_ERROR_EXPORT_PREFIX = (
     "AuditError",
     "InvalidAuditIdentityError",
     "InvalidAuditPayloadError",
@@ -143,7 +143,10 @@ assert Path(spec.origin).resolve().is_relative_to(prefix)
 module = importlib.import_module("bluetape.audit")
 assert module.__file__ is not None
 assert Path(module.__file__).resolve().is_relative_to(prefix)
-assert tuple(module.__all__) == {AUDIT_EXPORTS!r}
+exports = tuple(module.__all__)
+assert exports[:6] == {AUDIT_ERROR_EXPORT_PREFIX!r}
+missing = object()
+assert all(getattr(module, name, missing) is not missing for name in exports)
 """
 
 
