@@ -17,6 +17,7 @@ Current public distributions:
 
 - `bluetape`
 - `bluetape-async`
+- `bluetape-audit`
 - `bluetape-cache`
 - `bluetape-cache-redis`
 - `bluetape-codec`

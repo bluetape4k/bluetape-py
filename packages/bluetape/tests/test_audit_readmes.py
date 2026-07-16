@@ -178,6 +178,28 @@ def test_audit_readmes_pin_security_rollout_and_ownership_boundaries() -> None:
             assert literal.casefold() in text, f"{literal!r} missing from {path}"
 
 
+def test_root_docs_register_the_audit_distribution_and_extra() -> None:
+    english = ROOT_READMES[0].read_text()
+    korean = ROOT_READMES[1].read_text()
+    english_workspace = english.split("## Workspace Shape", 1)[1].split("## Design Position", 1)[0]
+    korean_workspace = korean.split("## 워크스페이스 구조", 1)[1].split("## 설계 방향", 1)[0]
+    for workspace in (english_workspace, korean_workspace):
+        assert "| `bluetape-audit` | `bluetape.audit` |" in workspace
+
+    for text in (english, korean):
+        assert 'pip install "bluetape[audit]"' in text
+        assert "pip install bluetape-audit" in text
+
+    layout = (ROOT / "docs/package-layout.md").read_text()
+    public_distributions = layout.split("Current public distributions:", 1)[1].split(
+        "Private workspace distributions:", 1
+    )[0]
+    assert "- `bluetape-audit`" in public_distributions
+
+    current_target = (ROOT / "WIP.md").read_text().split("## Current State", 1)[0]
+    assert "- `bluetape-audit`:" in current_target
+
+
 def test_audit_readmes_reference_the_same_svg_and_png_assets() -> None:
     package_svg = "../../docs/images/readme-diagrams/audit-contract-boundary.svg"
     package_png = "../../docs/images/readme-diagrams/audit-contract-boundary.png"

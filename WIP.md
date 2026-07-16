@@ -19,6 +19,9 @@ focused distribution model:
   for issue #7 in the source workspace while PyPI publication remains on HOLD.
 - `bluetape-async`: stdlib-only bounded `asyncio` helpers, added for issue #8
   in the source workspace while PyPI publication remains on HOLD.
+- `bluetape-audit`: stdlib-only immutable audit values, explicit bounded
+  validation, and preservation helpers, implemented for issue #25 while PyPI
+  publication remains on HOLD.
 - `bluetape-cache`: stdlib-only bounded synchronous and async local TTL loading
   caches, implemented and merged for issue #50 while PyPI publication remains
   on HOLD.

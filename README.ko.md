@@ -18,9 +18,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
 collections, codec, compression, cache, Redis provider, serde, ID, measure,
-money, testcontainers 패키지는 source
-workspace에서 사용할 수 있으며, registry 설치 명령은 PyPI 배포가 활성화된 뒤의
-목표 형태를 설명합니다.
+money, testcontainers, audit 패키지는 source workspace에서 사용할 수 있으며,
+registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
@@ -47,6 +46,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 |---|---|---:|---|---|
 | `bluetape` | 없음 | yes | active | `bluetape-core`에만 의존하는 얇은 메타 배포 패키지. |
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
+| `bluetape-audit` | `bluetape.audit` | no | active, source workspace | 표준 라이브러리만 사용하는 불변 감사 값, 명시적 제한, 보존 헬퍼. |
 | `bluetape-id` | `bluetape.id` | no | active, source workspace | 표준 라이브러리 기반 UUIDv4/v7과 random/monotonic ULID 값. |
 | `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Runtime dimension을 검사하는 불변 선형 측정값. |
 | `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currency와 caller-owned FX rate를 사용하는 exact Decimal money. |
@@ -96,6 +96,7 @@ PyPI 배포는 아직 보류 중입니다. 배포가 활성화되기 전에는 r
 
 ```bash
 pip install bluetape
+pip install "bluetape[audit]"
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
@@ -124,6 +125,7 @@ pip install "bluetape[all]"
 
 ```bash
 pip install bluetape-core
+pip install bluetape-audit
 pip install bluetape-id
 pip install bluetape-measure
 pip install bluetape-money
