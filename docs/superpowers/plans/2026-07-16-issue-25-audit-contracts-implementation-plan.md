@@ -59,7 +59,7 @@
 | Public API | `packages/bluetape-audit/src/bluetape/audit/__init__.py` |
 | Test helpers | `packages/bluetape-audit/src/bluetape/audit/testing.py` |
 | Package tests | `packages/bluetape-audit/tests/test_audit_*.py` |
-| Meta/wheel tests | `packages/bluetape/tests/test_audit_packaging.py`, `packages/bluetape/tests/test_audit_readmes.py` |
+| Meta/wheel tests | `packages/bluetape/tests/test_audit_wheel_isolation.py`, `packages/bluetape/tests/test_audit_readmes.py` |
 | Publish classifier | `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`, `docs/release/pypi-preflight.md` |
 | User documentation | package/root EN/KO README pairs, `WIP.md`, `CHANGELOG.md`, `docs/package-layout.md` |
 | Diagram | `docs/images/readme-diagrams/audit-contract-boundary.svg` and `.png` |
@@ -177,7 +177,7 @@ LIMIT_CHECKS = (
 - Create `packages/bluetape-audit/src/bluetape/audit/__init__.py`
 - Create `packages/bluetape-audit/tests/test_audit_packaging.py`
 - Create `packages/bluetape-audit/tests/test_audit_errors.py`
-- Create `packages/bluetape/tests/test_audit_packaging.py`
+- Create `packages/bluetape/tests/test_audit_wheel_isolation.py`
 - Modify root `pyproject.toml`
 - Modify `packages/bluetape/pyproject.toml`
 - Modify `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`
@@ -211,7 +211,7 @@ def test_audit_error_hierarchy_is_value_safe() -> None:
 - [ ] **Step 2: Run RED and confirm the missing package/error surface.**
 
 ```bash
-uv run pytest packages/bluetape-audit/tests/test_audit_packaging.py packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape/tests/test_audit_packaging.py -v
+uv run pytest packages/bluetape-audit/tests/test_audit_packaging.py packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape/tests/test_audit_wheel_isolation.py -v
 ```
 
 Expected: FAIL because `packages/bluetape-audit/pyproject.toml`, its wheel, and
@@ -259,7 +259,7 @@ the complete public contract is green.
 ```bash
 uv lock
 uv sync --all-packages --all-extras --python 3.13.14 --locked
-uv run pytest packages/bluetape-audit/tests/test_audit_packaging.py packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape/tests/test_audit_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
+uv run pytest packages/bluetape-audit/tests/test_audit_packaging.py packages/bluetape-audit/tests/test_audit_errors.py packages/bluetape/tests/test_audit_wheel_isolation.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
 uv run ruff check packages/bluetape-audit packages/bluetape-benchmark/tests/test_benchmark_packaging.py
 uv run ruff format --check packages/bluetape-audit packages/bluetape-benchmark/tests/test_benchmark_packaging.py
 ```
@@ -632,7 +632,7 @@ Rollback: revert Task 5; production values and validator remain intact.
 
 **Files:**
 
-- Re-run `packages/bluetape/tests/test_audit_packaging.py`
+- Re-run `packages/bluetape/tests/test_audit_wheel_isolation.py`
 - Re-run `packages/bluetape-audit/tests/test_audit_packaging.py`
 - Modify metadata or `uv.lock` only by returning to the owning earlier task if
   final isolation exposes drift
@@ -722,7 +722,7 @@ three subprocess exit codes to be zero.
 - [ ] **Step 4: Run final isolation, build all packages, and verify lock consistency.**
 
 ```bash
-uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
+uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_wheel_isolation.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
 uv build --all-packages
 uv lock --check
 ```
@@ -858,7 +858,7 @@ four primary arrowheads, and the legend.
 
 ```bash
 uv run pytest packages/bluetape/tests/test_audit_readmes.py -v
-uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_packaging.py packages/bluetape/tests/test_audit_readmes.py -v
+uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_wheel_isolation.py packages/bluetape/tests/test_audit_readmes.py -v
 git diff --check
 ```
 
@@ -915,7 +915,7 @@ a new head and restarts Step 4.
 
 ```bash
 uv sync --all-packages --all-extras --python 3.13.14 --locked
-uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_packaging.py packages/bluetape/tests/test_audit_readmes.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py
+uv run pytest packages/bluetape-audit packages/bluetape/tests/test_audit_wheel_isolation.py packages/bluetape/tests/test_audit_readmes.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest -m 'not observability_sdk and not observability_workspace'
