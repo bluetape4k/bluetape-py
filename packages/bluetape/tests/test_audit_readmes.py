@@ -105,6 +105,8 @@ def test_audit_readme_sections_and_install_contracts_match() -> None:
         assert "(content_type, schema_version)" in text
         assert "validate_audit_event" in text
         assert "field_category" in text
+        assert "payload.data" in text
+        assert "metadata.key" in text
         assert "limit_name" in text
         assert "make_audit_event" in text
         assert "assert_audit_event_preserved" in text

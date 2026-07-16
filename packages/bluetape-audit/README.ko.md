@@ -110,7 +110,7 @@ metadata 또는 거부 값을 로그로 남기지 마십시오. 제한된 reject
 
 | 속성 | 안전한 사용 |
 |---|---|
-| `field_category` | `payload`, `metadata` 같은 제한된 필드 범주 |
+| `field_category` | `payload.data`, `metadata.key`, `metadata` 같은 제한된 필드 범주 |
 | `limit_name` | 제한된 설정 이름 |
 
 ```python
