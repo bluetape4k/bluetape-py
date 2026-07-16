@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Reviewed pre-evidence range:
-`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..be292647cfb243e464ba636cf727369048dd3c18`
+`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..64b0bee26de59d0b0133e8d6dc17e07ffb311606`
 
 ## Method and boundary
 
@@ -26,6 +26,7 @@ fresh lenses or independent verifier have passed.
 | P1 | Security/operations | Documentation needed to distinguish caller assertions from trusted codec routes and configurable limits from package ceilings | Require adapter allowlisting before parser/header use, reject unsupported pairs before parsing, version adapter-owned limits, and forbid rejected-value logs or metadata policy injection | Closed in `be29264` |
 | P2 | Visual quality | Comic Mono rendered middle-dot separators as tofu glyphs in the first PNG | Replace detail-line separators with ASCII slashes, rerender, rerun all audits, and inspect original pixels | Closed in `be29264` |
 | P2 | User/caller | The first Korean contract test encouraged repeated parenthetical English literals | Split security assertions by locale and keep the identical executable Python example while using natural Korean semantic wording | Closed in `be29264` |
+| P1 | Release safety/integration | The first full workspace replay found that the resilience-owned exhaustive publication set did not classify the new distribution, although the benchmark-owned set and release preflight did | Add `bluetape-audit` to the second fail-closed set and rerun both classification suites | Closed in `64b0bee` |
 
 ## Per-task convergence
 
@@ -38,6 +39,7 @@ fresh lenses or independent verifier have passed.
 | Testing helpers | `436 passed`; main-session quality fallback after a stalled lane | 0 | 0 | 0 | 0 |
 | Final wheel isolation | `441 passed`, 19 distribution builds, lock current | 0 | 0 | 0 | 0 |
 | Docs and diagram | `441 passed`; diagram PASS 19/N/A 2, all audit failures zero | 0 | 0 | 0 | 0 |
+| Workspace publication classification repair | First candidate replay `1 failed, 2281 passed, 9 deselected`; focused repair `11 passed` | 0 | 0 | 0 | 0 |
 
 ## Pre-head six-lens readiness
 

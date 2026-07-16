@@ -78,6 +78,14 @@ METADATA, root initializer 부재를 확인해야 sibling checkout 누출을 막
 환경에서 audit만 제거한 뒤 namespace와 core가 남고 audit가 사라지는 smoke는 설치
 rollback을 증명하지만 data migration을 약속하지 않는다.
 
+### 새 distribution은 모든 fail-closed 분류 정본에 등록한다
+
+Focused package 테스트와 build가 통과해도 workspace 전체를 열거하는 publishable/private
+분류가 여러 package test에 존재할 수 있다. 첫 canonical workspace replay가 resilience 쪽
+중복 집합의 `bluetape-audit` 누락을 잡았다. 새 distribution을 추가할 때는 `rg`로 exhaustive
+classification 집합을 모두 찾아 동일하게 갱신하고, equality assertion을 느슨하게 만들지
+않는다. 중복 자체를 정리하는 작업은 별도 범위로 두되 현재 fail-closed 보호는 유지한다.
+
 ## 향후 가드
 
 후속 audit adapter는 이 package에 repository/history/JSON/global context를 추가하지 않는다.
@@ -97,6 +105,8 @@ no-scan, one-copy, fixed-entry, fixed-key 계약을 source와 test로 직접 증
 - 19개 workspace distribution build와 lock check 통과.
 - SVG/PNG connector, crossing, intrusion, geometry, endpoint, corner failure 모두 0.
 - 각 Task spec/quality review는 P0=0, P1=0으로 수렴.
+- 첫 candidate workspace replay가 publication 분류 누락을 재현했고, 두 exhaustive
+  classification suite의 bounded repair 검증은 `11 passed`.
 
 최종 exact-head canonical replay와 독립 six-lens/verifier 결과는 이 파일을 포함한 evidence
 commit 이후 변경 없는 SHA에서 workflow receipt와 PR body에 기록한다.
