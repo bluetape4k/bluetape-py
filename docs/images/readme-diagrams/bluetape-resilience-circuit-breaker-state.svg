@@ -27,7 +27,8 @@
     .initial-transition { stroke: #41545D; marker-end: url(#arrow-neutral); }
     .state-card { stroke-width: 4; }
     .label-box { fill: #F8FCFE; stroke-width: 2; }
-  </style>
+
+    .syntax-keyword{fill:#7E22CE}.syntax-type{fill:#0F766E}.syntax-function{fill:#1D4ED8}.syntax-string{fill:#B45309}.syntax-number{fill:#C2410C}.syntax-comment{fill:#64748B}.syntax-operator{fill:#BE123C}</style>
 
   <rect width="1900" height="1100" fill="#FFFFFF"/>
   <rect x="38" y="30" width="1824" height="1040" rx="34" fill="#F1F8FC" stroke="#C9DFEA" stroke-width="3"/>
@@ -78,7 +79,7 @@
     <g class="technical" font-size="21" fill="#4E4043">
       <text x="1158" y="333">• reject before open_until</text>
       <text x="1158" y="367">• entering sets</text>
-      <text x="1186" y="399">open_until = now + open_duration</text>
+      <text data-code-snippet="python" x="1186" y="399">open_until <tspan class="syntax-operator">=</tspan> now <tspan class="syntax-operator">+</tspan> open_duration</text>
       <text x="1158" y="431">• no timer/worker; checked on admission</text>
     </g>
   </g>
