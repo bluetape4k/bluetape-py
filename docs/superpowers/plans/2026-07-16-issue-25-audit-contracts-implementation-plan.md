@@ -193,7 +193,11 @@ LIMIT_CHECKS = (
   `dev`/`all` inclusion, unchanged default dependency, and publish classifier.
   The same RED cycle adds the three isolated focused/meta/default wheel shapes
   described in Task 6; the initial error-only package is sufficient for a real
-  installed import and keeps every committed scaffold buildable.
+  installed import and keeps every committed scaffold buildable. Until Task 6,
+  the shared installed-wheel probe pins the six error exports as an ordered
+  prefix and requires every current `__all__` name to resolve as a module
+  attribute, so later task-owned exports can be added without weakening the
+  initial error contract.
 
 ```python
 def test_audit_error_hierarchy_is_value_safe() -> None:
@@ -339,7 +343,9 @@ uv run ruff format --check packages/bluetape-audit
 ```
 
 Expected: all selected tests pass and `__all__` contains errors followed by the
-three implemented values in final relative order.
+three implemented values in final relative order. The shared installed-wheel
+probe remains interim prefix-plus-accessibility evidence; Task 6 replaces that
+interim expectation with the exact final eleven-name tuple.
 
 - [ ] **Step 5: Commit.**
 
