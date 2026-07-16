@@ -12,11 +12,17 @@ class InvalidAuditIdentityError(AuditError):
 
     __slots__ = ()
 
+    def __init__(self) -> None:
+        super().__init__("audit identity is invalid")
+
 
 class InvalidAuditPayloadError(AuditError):
     """Raised when an audit payload violates its contract."""
 
     __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__("audit payload is invalid")
 
 
 class InvalidAuditEventError(AuditError):
@@ -24,11 +30,17 @@ class InvalidAuditEventError(AuditError):
 
     __slots__ = ()
 
+    def __init__(self) -> None:
+        super().__init__("audit event is invalid")
+
 
 class InvalidAuditLimitsError(AuditError):
     """Raised when audit limits are invalid or exceed hard ceilings."""
 
     __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__("audit limits are invalid")
 
 
 class AuditLimitExceededError(AuditError):
