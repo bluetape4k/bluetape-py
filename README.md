@@ -460,12 +460,28 @@ assert distance == Measure(1250, METER)
 assert price == Money.of("12.35", USD)
 ```
 
+### Storage-neutral audit contracts
+
+![audit contract boundary](docs/images/readme-diagrams/audit-contract-boundary.png)
+
+[Open the audit boundary SVG source](docs/images/readme-diagrams/audit-contract-boundary.svg).
+
+`bluetape-audit` is an independent stdlib-only opt-in for immutable audit
+event values, explicit limits, safe failures, and adapter preservation tests.
+Applications serialize payload bytes; caller-owned adapters invoke
+`validate_audit_event` immediately before their first side effect; caller-owned
+storage, outboxes, relays, and transports establish durability and delivery.
+The default `bluetape` install remains core-only. See the
+[English package guide](packages/bluetape-audit/README.md) or
+[Korean package guide](packages/bluetape-audit/README.ko.md).
+
 ## Package Documentation
 
 | Package | Documentation |
 |---|---|
 | `bluetape` | [packages/bluetape/README.md](packages/bluetape/README.md) / [한국어](packages/bluetape/README.ko.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-audit` | [packages/bluetape-audit/README.md](packages/bluetape-audit/README.md) / [한국어](packages/bluetape-audit/README.ko.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.md](packages/bluetape-cache-redis/README.md) / [한국어](packages/bluetape-cache-redis/README.ko.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.md](packages/bluetape-benchmark/README.md) / [한국어](packages/bluetape-benchmark/README.ko.md) |

@@ -456,12 +456,27 @@ assert distance == Measure(1250, METER)
 assert price == Money.of("12.35", USD)
 ```
 
+### 저장소 독립적 감사 계약
+
+![감사 계약 경계](docs/images/readme-diagrams/audit-contract-boundary.png)
+
+[감사 경계 SVG 원본 열기](docs/images/readme-diagrams/audit-contract-boundary.svg).
+
+`bluetape-audit`는 불변 감사 이벤트 값, 명시적 제한, 안전한 실패, adapter 보존
+테스트를 제공하는 독립적이고 표준 라이브러리만 사용하는 opt-in 패키지입니다.
+애플리케이션이 payload bytes를 직렬화하고, 호출자 소유 adapter가 첫 부작용 직전에
+`validate_audit_event`를 호출하며, 호출자 소유 storage, outbox, relay, transport가
+영속성과 전달을 성립시킵니다. 기본 `bluetape` 설치는 계속 core-only입니다.
+[한국어 패키지 안내](packages/bluetape-audit/README.ko.md)와
+[English package guide](packages/bluetape-audit/README.md)를 참고하십시오.
+
 ## 패키지 문서
 
 | 패키지 | 문서 |
 |---|---|
 | `bluetape` | [한국어](packages/bluetape/README.ko.md) / [English](packages/bluetape/README.md) |
 | `bluetape-async` | [packages/bluetape-async/README.md](packages/bluetape-async/README.md) |
+| `bluetape-audit` | [한국어](packages/bluetape-audit/README.ko.md) / [English](packages/bluetape-audit/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.ko.md](packages/bluetape-cache-redis/README.ko.md) / [English](packages/bluetape-cache-redis/README.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.ko.md](packages/bluetape-benchmark/README.ko.md) / [English](packages/bluetape-benchmark/README.md) |

@@ -1,5 +1,7 @@
 import re
+import struct
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
@@ -102,44 +104,73 @@ def test_audit_readme_sections_and_install_contracts_match() -> None:
         assert "pip uninstall bluetape" in text
         assert "(content_type, schema_version)" in text
         assert "validate_audit_event" in text
-        assert "first side effect" in text
         assert "field_category" in text
         assert "limit_name" in text
         assert "make_audit_event" in text
         assert "assert_audit_event_preserved" in text
+    assert "first side effect" in english
+    assert "첫 부작용" in korean
 
 
 def test_audit_readmes_pin_security_rollout_and_ownership_boundaries() -> None:
-    required_literals = (
-        "untrusted caller assertion",
-        "adapter allowlist",
-        "before parser selection",
-        "before header emission",
-        "rejected before parsing",
-        "versioned adapter-owned limits",
-        "replay compatibility",
-        "producer compatibility",
-        "external bounded policy ID",
-        "not event metadata",
-        "never log rejected values",
-        "new writes",
-        "explicit caller migration",
-        "never rewrites history",
-        "preserve unknown payload bytes",
-        "no package-owned data migration",
-        "core-only default install",
-        "bluetape.audit is absent",
-        "validation is not durable capture",
-        "upstream allocation limits",
-        "reuse the event ID",
-        "every field may be sensitive",
-        "repository, history, and outbox remain external",
-        "value assertion, not durable history",
-    )
-    for path in PACKAGE_READMES:
-        text = path.read_text()
-        for literal in required_literals:
-            assert literal in text, f"{literal!r} missing from {path}"
+    required_literals = {
+        PACKAGE_READMES[0]: (
+            "untrusted caller assertion",
+            "adapter allowlist",
+            "before parser selection",
+            "before header emission",
+            "rejected before parsing",
+            "versioned adapter-owned limits",
+            "replay compatibility",
+            "producer compatibility",
+            "external bounded policy ID",
+            "not event metadata",
+            "never log rejected values",
+            "new writes",
+            "explicit caller migration",
+            "never rewrites history",
+            "preserve unknown payload bytes",
+            "no package-owned data migration",
+            "core-only default install",
+            "bluetape.audit is absent",
+            "validation is not durable capture",
+            "upstream allocation limits",
+            "reuse the event ID",
+            "every field may be sensitive",
+            "repository, history, and outbox remain external",
+            "value assertion, not durable history",
+        ),
+        PACKAGE_READMES[1]: (
+            "신뢰할 수 없는 호출자 주장",
+            "adapter allowlist",
+            "parser 선택 전",
+            "header 방출 전",
+            "파싱 전에 거부",
+            "버전이 있는 adapter 소유 제한",
+            "replay 호환성",
+            "producer 호환성",
+            "외부의 bounded policy ID",
+            "event metadata가 아닙니다",
+            "거부된 값을 절대 기록하지 마십시오",
+            "새 write",
+            "명시적인 호출자 migration",
+            "기존 history를 절대 재작성하지 않습니다",
+            "알 수 없는 payload bytes를 그대로 보존",
+            "패키지 소유 data migration은 없습니다",
+            "기본 `pip install bluetape`는 계속 core-only",
+            "bluetape.audit is absent",
+            "검증은 영속 캡처가 아닙니다",
+            "upstream allocation limits",
+            "event id를 재사용",
+            "모든 필드는 민감할 수 있습니다",
+            "repository, history, outbox는 외부에 남습니다",
+            "값 assertion이지 durable history가 아닙니다",
+        ),
+    }
+    for path, literals in required_literals.items():
+        text = " ".join(path.read_text().split()).casefold()
+        for literal in literals:
+            assert literal.casefold() in text, f"{literal!r} missing from {path}"
 
 
 def test_audit_readmes_reference_the_same_svg_and_png_assets() -> None:
@@ -159,3 +190,40 @@ def test_audit_readmes_reference_the_same_svg_and_png_assets() -> None:
 
     assert SVG_PATH.is_file()
     assert PNG_PATH.is_file()
+
+
+def test_audit_diagram_preserves_the_ownership_source_model() -> None:
+    root = ET.parse(SVG_PATH).getroot()
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+
+    assert root.attrib["width"] == "1300"
+    assert root.attrib["height"] == "800"
+    assert struct.unpack(">II", PNG_PATH.read_bytes()[16:24]) == (2600, 1600)
+
+    required_ids = {
+        "ownership-region-caller-serialization",
+        "ownership-region-bluetape-audit",
+        "ownership-region-caller-infrastructure",
+        "package-boundary",
+        "card-audit-values",
+        "card-audit-validation",
+        "card-adapter-validation",
+        "first-side-effect-boundary",
+        "card-external-durability",
+        "ownership-legend",
+    }
+    ids = {element.get("id") for element in root.iter()}
+    assert required_ids <= ids
+
+    markers = root.findall(".//svg:marker", namespace)
+    assert len(markers) == 4
+    assert all(marker.get("markerWidth") == "14" for marker in markers)
+    assert all(marker.get("markerHeight") == "14" for marker in markers)
+
+    connectors = [
+        element
+        for element in root.findall(".//svg:path", namespace)
+        if (element.get("id") or "").startswith("connector-")
+    ]
+    assert len(connectors) == 5
+    assert sum("optional" not in (element.get("class") or "") for element in connectors) == 4
