@@ -18,8 +18,9 @@ heavier capabilities into explicit PyPI distributions and extras.
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
 are confirmed. The collections, codec, compression, cache, Redis provider,
-serde, ID, measure, money, and testcontainers packages are available from the source workspace; registry
-install commands describe the intended post-publication shape only.
+serde, ID, measure, money, testcontainers, and audit packages are available
+from the source workspace; registry install commands describe the intended
+post-publication shape only.
 
 The current planning track is milestone
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2). It tracks
@@ -47,6 +48,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 |---|---|---:|---|---|
 | `bluetape` | none | yes | active | Thin meta distribution that depends on `bluetape-core`. |
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
+| `bluetape-audit` | `bluetape.audit` | no | active, source workspace | Stdlib-only immutable audit values, explicit limits, and preservation helpers. |
 | `bluetape-id` | `bluetape.id` | no | active, source workspace | Stdlib-only UUIDv4/v7 and random/monotonic ULID values. |
 | `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Immutable runtime dimension-checked linear measurements. |
 | `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currencies and exact Decimal money with caller-owned FX rates. |
@@ -96,6 +98,7 @@ The public install shape after the first PyPI release is:
 
 ```bash
 pip install bluetape
+pip install "bluetape[audit]"
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
@@ -124,6 +127,7 @@ Focused distributions can also be installed directly:
 
 ```bash
 pip install bluetape-core
+pip install bluetape-audit
 pip install bluetape-id
 pip install bluetape-measure
 pip install bluetape-money
