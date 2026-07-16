@@ -60,6 +60,15 @@ def test_nested_namespace_import_has_no_root_initializer() -> None:
     assert Path(module.__file__).name == "__init__.py"
 
 
+def test_testing_helpers_are_packaged_as_a_submodule_only() -> None:
+    module = importlib.import_module("bluetape.audit")
+    testing_spec = importlib.util.find_spec("bluetape.audit.testing")
+
+    assert testing_spec is not None
+    assert "make_audit_event" not in module.__all__
+    assert "assert_audit_event_preserved" not in module.__all__
+
+
 def test_audit_is_publishable_but_not_a_historical_release_target() -> None:
     preflight = (ROOT / "docs/release/pypi-preflight.md").read_text()
     target_table, classification = preflight.split("## Fail-Closed Workspace Classification", 1)
