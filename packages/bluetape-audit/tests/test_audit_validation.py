@@ -33,21 +33,23 @@ def validation_case(name: str, size: int) -> tuple[audit.AuditEvent, audit.Audit
         case "action":
             return make_event(action=text), audit.AuditLimits(max_action_chars=1)
         case "subject.kind":
-            return make_event(subject=audit.AuditIdentity(text, "v")), audit.AuditLimits(
-                max_identity_kind_chars=1
-            )
+            return make_event(
+                subject=audit.AuditIdentity(text, "v"), actor=None
+            ), audit.AuditLimits(max_identity_kind_chars=1)
         case "subject.value":
-            return make_event(subject=audit.AuditIdentity("k", text)), audit.AuditLimits(
-                max_identity_value_chars=1
-            )
+            return make_event(
+                subject=audit.AuditIdentity("k", text), actor=None
+            ), audit.AuditLimits(max_identity_value_chars=1)
         case "actor.kind":
-            return make_event(actor=audit.AuditIdentity(text, "v")), audit.AuditLimits(
-                max_identity_kind_chars=1
-            )
+            return make_event(
+                subject=audit.AuditIdentity("k", "v"),
+                actor=audit.AuditIdentity(text, "v"),
+            ), audit.AuditLimits(max_identity_kind_chars=1)
         case "actor.value":
-            return make_event(actor=audit.AuditIdentity("k", text)), audit.AuditLimits(
-                max_identity_value_chars=1
-            )
+            return make_event(
+                subject=audit.AuditIdentity("k", "v"),
+                actor=audit.AuditIdentity("k", text),
+            ), audit.AuditLimits(max_identity_value_chars=1)
         case "correlation_id":
             return make_event(correlation_id=text), audit.AuditLimits(max_correlation_id_chars=1)
         case "causation_id":
@@ -113,6 +115,25 @@ class TestAuditValidation:
             validate_audit_event(object(), object())
         with pytest.raises(TypeError, match=r"^limits must be an AuditLimits$"):
             validate_audit_event(make_event(), object())
+
+        class EventSubclass(audit.AuditEvent):
+            pass
+
+        class LimitsSubclass(audit.AuditLimits):
+            pass
+
+        event = make_event()
+        subclass_event = EventSubclass(
+            event.event_id,
+            event.action,
+            event.occurred_at,
+            event.subject,
+            event.payload,
+        )
+        with pytest.raises(TypeError, match=r"^event must be an AuditEvent$"):
+            validate_audit_event(subclass_event, audit.AuditLimits())
+        with pytest.raises(TypeError, match=r"^limits must be an AuditLimits$"):
+            validate_audit_event(event, LimitsSubclass())
 
     def test_success_returns_the_same_event(self) -> None:
         assert validate_audit_event is not None

@@ -8,6 +8,7 @@ from bluetape.audit._errors import (
     InvalidAuditLimitsError,
     InvalidAuditPayloadError,
 )
+from bluetape.audit._validation import validate_audit_event
 from bluetape.audit._values import AuditEvent, AuditIdentity, AuditLimits, AuditPayload
 
 __all__ = [  # noqa: RUF022 - public order is part of the package contract
@@ -21,4 +22,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the package contract
     "AuditPayload",
     "AuditEvent",
     "AuditLimits",
+    "validate_audit_event",
 ]
