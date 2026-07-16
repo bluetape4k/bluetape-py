@@ -116,7 +116,7 @@ metric may use only these package-owned categories:
 
 | Attribute | Safe use |
 |---|---|
-| `field_category` | Bounded field family such as `payload` or `metadata` |
+| `field_category` | Bounded field category such as `payload.data`, `metadata.key`, or `metadata` |
 | `limit_name` | Bounded configured limit name |
 
 ```python
