@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 import importlib
+import pickle
 
 import pytest
 
@@ -53,6 +55,35 @@ def test_invalid_errors_have_fixed_non_overridable_messages(error_name: str, mes
 
     with pytest.raises(TypeError):
         error_type("caller-secret")
+
+
+@pytest.mark.parametrize(("error_name", "message"), INVALID_ERRORS)
+def test_invalid_errors_support_safe_round_trips(error_name: str, message: str) -> None:
+    audit = importlib.import_module("bluetape.audit")
+    error = getattr(audit, error_name)()
+
+    restored_errors = [pickle.loads(pickle.dumps(error)), copy.copy(error), copy.deepcopy(error)]
+    for restored in restored_errors:
+        assert type(restored) is type(error)
+        assert str(restored) == message
+        assert repr(restored) == f"{error_name}({message!r})"
+        assert restored.args == (message,)
+
+
+def test_limit_error_supports_safe_round_trips() -> None:
+    audit = importlib.import_module("bluetape.audit")
+    error = audit.AuditLimitExceededError("payload.data", "max_payload_bytes")
+
+    restored_errors = [pickle.loads(pickle.dumps(error)), copy.copy(error), copy.deepcopy(error)]
+    for restored in restored_errors:
+        assert type(restored) is audit.AuditLimitExceededError
+        assert str(restored) == "audit value exceeds configured limit"
+        assert repr(restored) == "AuditLimitExceededError('audit value exceeds configured limit')"
+        assert restored.args == ("audit value exceeds configured limit",)
+        assert restored.field_category == "payload.data"
+        assert restored.limit_name == "max_payload_bytes"
+        assert "payload.data" not in str(restored)
+        assert "max_payload_bytes" not in repr(restored)
 
 
 def test_initial_public_api_exports_only_the_error_boundary() -> None:
