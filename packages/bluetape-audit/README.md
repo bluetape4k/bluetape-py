@@ -15,7 +15,16 @@ caller-owned infrastructure without claiming that the fact was stored.
 
 ## Install
 
-Install the focused distribution:
+PyPI publication is on hold while package ownership and trusted publishing are
+confirmed. Use the source workspace for current development and build the
+focused artifact locally when wheel-level verification is required:
+
+```bash
+uv sync --all-packages
+uv build --package bluetape-audit
+```
+
+After publication, install the focused distribution with:
 
 ```bash
 pip install bluetape-audit

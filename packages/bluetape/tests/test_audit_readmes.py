@@ -110,6 +110,11 @@ def test_audit_readme_sections_and_install_contracts_match() -> None:
         assert "assert_audit_event_preserved" in text
     assert "first side effect" in english
     assert "첫 부작용" in korean
+    assert "PyPI publication is on hold" in english
+    assert "PyPI 공개는 현재 보류" in korean
+    for text in (english, korean):
+        assert "uv sync --all-packages" in text
+        assert "uv build --package bluetape-audit" in text
 
 
 def test_audit_readmes_pin_security_rollout_and_ownership_boundaries() -> None:
