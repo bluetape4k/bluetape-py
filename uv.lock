@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 members = [
     "bluetape",
     "bluetape-async",
+    "bluetape-audit",
     "bluetape-benchmark",
     "bluetape-cache",
     "bluetape-cache-redis",
@@ -36,6 +37,7 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "bluetape-async" },
+    { name = "bluetape-audit" },
     { name = "bluetape-cache" },
     { name = "bluetape-codec" },
     { name = "bluetape-collections" },
@@ -51,6 +53,9 @@ all = [
 ]
 asyncio = [
     { name = "bluetape-async" },
+]
+audit = [
+    { name = "bluetape-audit" },
 ]
 cache = [
     { name = "bluetape-cache" },
@@ -81,6 +86,7 @@ compression-zstd = [
 ]
 dev = [
     { name = "bluetape-async" },
+    { name = "bluetape-audit" },
     { name = "bluetape-cache" },
     { name = "bluetape-codec" },
     { name = "bluetape-collections" },
@@ -132,6 +138,9 @@ requires-dist = [
     { name = "bluetape-async", marker = "extra == 'all'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'asyncio'", editable = "packages/bluetape-async" },
     { name = "bluetape-async", marker = "extra == 'dev'", editable = "packages/bluetape-async" },
+    { name = "bluetape-audit", marker = "extra == 'all'", editable = "packages/bluetape-audit" },
+    { name = "bluetape-audit", marker = "extra == 'audit'", editable = "packages/bluetape-audit" },
+    { name = "bluetape-audit", marker = "extra == 'dev'", editable = "packages/bluetape-audit" },
     { name = "bluetape-cache", marker = "extra == 'all'", editable = "packages/bluetape-cache" },
     { name = "bluetape-cache", marker = "extra == 'cache'", editable = "packages/bluetape-cache" },
     { name = "bluetape-cache", marker = "extra == 'dev'", editable = "packages/bluetape-cache" },
@@ -179,12 +188,17 @@ requires-dist = [
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "cache", "cache-redis", "codec", "collections", "compression", "compression-lz4", "compression-native", "compression-snappy", "compression-zstd", "id", "logging", "measure", "money", "resilience", "serde", "fory", "testing", "testcontainers", "dev", "all", "values"]
+provides-extras = ["asyncio", "audit", "cache", "cache-redis", "codec", "collections", "compression", "compression-lz4", "compression-native", "compression-snappy", "compression-zstd", "id", "logging", "measure", "money", "resilience", "serde", "fory", "testing", "testcontainers", "dev", "all", "values"]
 
 [[package]]
 name = "bluetape-async"
 version = "0.1.0"
 source = { editable = "packages/bluetape-async" }
+
+[[package]]
+name = "bluetape-audit"
+version = "0.1.0"
+source = { editable = "packages/bluetape-audit" }
 
 [[package]]
 name = "bluetape-benchmark"
@@ -347,6 +361,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "bluetape-async" },
+    { name = "bluetape-audit" },
     { name = "bluetape-cache" },
     { name = "bluetape-cache-redis" },
     { name = "bluetape-codec" },
@@ -374,6 +389,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bluetape-async", editable = "packages/bluetape-async" },
+    { name = "bluetape-audit", editable = "packages/bluetape-audit" },
     { name = "bluetape-cache", editable = "packages/bluetape-cache" },
     { name = "bluetape-cache-redis", editable = "packages/bluetape-cache-redis" },
     { name = "bluetape-codec", editable = "packages/bluetape-codec" },
