@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Issue: #25, milestone `0.2.0`
-Pre-evidence implementation head: `64b0bee26de59d0b0133e8d6dc17e07ffb311606`
+Pre-evidence implementation head: `71bf9b1a65c3abac4d9df4e3b805c16fa617dc58`
 
 This ledger records observed task evidence before the final evidence commit.
 The candidate exact head and fresh canonical replay belong to the workflow
@@ -33,6 +33,8 @@ the later exact-head gate has passed.
 | Deterministic testing helpers | `uv run pytest packages/bluetape-audit/tests/test_audit_testing.py -v`; `1 failed, 33 skipped` because `bluetape.audit.testing` was missing | `34` helper tests, `432` package tests, and `436` audit/isolation tests passed; focused sdist and wheel built | RED `cc9e483`; GREEN `8466202` |
 | Bilingual docs and SVG+PNG | `uv run pytest packages/bluetape/tests/test_audit_readmes.py -v`; `4 failed` because the marked example, final sections, security/rollout guidance, embeds, and assets were missing | Final README/source-model suite passed `5`; integrated audit/isolation/docs set passed `441`; all SVG audits reported zero failures and the PNG rendered at `2600x1600` | RED `165db5a`; GREEN/assets/ledger `be29264` |
 | Fail-closed workspace publication classification | The first candidate replay of `uv run pytest -m 'not observability_sdk and not observability_workspace'` produced `1 failed, 2281 passed, 9 deselected`; the resilience-owned exhaustive publication set omitted `bluetape-audit` while the benchmark-owned set and release preflight already included it | The existing failing test and its benchmark counterpart passed together as `11 passed`; Ruff and diff checks passed before the repair commit | Repair `64b0bee` |
+| Publication-hold install guidance | A fresh package README contract asserted the English/Korean publication hold plus workspace sync and focused build commands; it failed because both package READMEs presented registry commands without the current hold | Both locales now distinguish current workspace/build commands from post-publication registry shape; the README contract plus event/validation review repairs passed `102` tests | Repair `71bf9b1` |
+| Total validation-order evidence | Review found that one all-invalid validator case proved only the first category and constructor adjacency stopped after three transitions | Parameterized validator cases now relax every preceding category and prove all 14 outcomes; constructor cases prove all eight adjacent declaration-order pairs | Repair `71bf9b1` |
 
 Only observed missing-surface or wrong-behavior failures are called RED.
 Task 6 finalized an already-owned Task 1 installation contract and is not
@@ -58,6 +60,8 @@ the no-scan, one-copy, 64-entry, or fixed-key contracts.
 - Task 7 final focused set: `441 passed`.
 - The first candidate workspace replay exposed the duplicated publication-set
   omission; the bounded repair rerun passed `11` packaging tests at `64b0bee`.
+- The next exact-head review found two non-blocking P2 evidence/documentation
+  gaps; their RED/GREEN and ordered-test repair passed `102` tests at `71bf9b1`.
 - Static checks: targeted Ruff lint and format passed; `git diff --check`
   passed after the final documentation repair.
 - Packaging: all 19 workspace distributions built; `uv lock --check` passed.

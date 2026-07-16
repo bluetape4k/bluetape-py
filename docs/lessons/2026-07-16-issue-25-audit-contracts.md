@@ -86,6 +86,14 @@ Focused package 테스트와 build가 통과해도 workspace 전체를 열거하
 classification 집합을 모두 찾아 동일하게 갱신하고, equality assertion을 느슨하게 만들지
 않는다. 중복 자체를 정리하는 작업은 별도 범위로 두되 현재 fail-closed 보호는 유지한다.
 
+### Package README도 현재 publish authority를 직접 말해야 한다
+
+루트 README가 PyPI hold를 설명해도 package README로 바로 진입한 사용자는 registry 명령을
+현재 사용 가능한 절차로 받아들일 수 있다. 각 package Install 절은 현재 source workspace
+sync와 local wheel build를 먼저 제시하고, `pip install` 형태는 publication 이후 목표라고
+명시해야 한다. Localized README 계약에 이 상태와 명령을 함께 고정하면 release authority와
+사용자 안내가 갈라지는 것을 막을 수 있다.
+
 ## 향후 가드
 
 후속 audit adapter는 이 package에 repository/history/JSON/global context를 추가하지 않는다.
@@ -107,6 +115,8 @@ no-scan, one-copy, fixed-entry, fixed-key 계약을 source와 test로 직접 증
 - 각 Task spec/quality review는 P0=0, P1=0으로 수렴.
 - 첫 candidate workspace replay가 publication 분류 누락을 재현했고, 두 exhaustive
   classification suite의 bounded repair 검증은 `11 passed`.
+- 첫 exact-head review의 stability/Ops P2 두 건을 닫은 README 및 전체 ordered-validation
+  보강 검증은 `102 passed`.
 
 최종 exact-head canonical replay와 독립 six-lens/verifier 결과는 이 파일을 포함한 evidence
 commit 이후 변경 없는 SHA에서 workflow receipt와 PR body에 기록한다.
