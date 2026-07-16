@@ -1,7 +1,7 @@
 # Issue #25 audit contracts verifier map
 
 Date: 2026-07-16 KST
-Pre-evidence implementation head: `4c28d60487f87f8623c836fedb2cf9d209cf54bd`
+Pre-evidence implementation head: `460e8c5e85593785bc4fe713c9a1586233a3561d`
 
 Status: **READY FOR EXACT-HEAD VERIFICATION**. This file maps every approved
 criterion to source and executable evidence. It intentionally does not claim a
@@ -23,6 +23,7 @@ evidence commit at an unchanged candidate SHA.
 | Every workspace distribution is fail-closed classified | benchmark and resilience packaging `PUBLISHABLE`/`PRIVATE` sets, release preflight | both exhaustive equality tests cover the complete workspace distribution set | Mapped |
 | English/Korean ownership, serialization/versioning, policy, and adapter separation | package/root READMEs | identical installed-wheel marked example, locale headings/semantic assertions, exact install/removal and link tests | Mapped |
 | Current installation guidance matches the publication hold | package EN/KO Install sections and root status authority | README contracts require hold wording, workspace sync, focused local build, and post-publication registry shape | Mapped |
+| Root authorities expose the implemented distribution and extra | root EN/KO inventory/install sections, package layout, WIP current target | cross-document contract requires audit import row, focused/meta commands, and current public registration | Mapped |
 | SVG+PNG passes source and visual gates | canonical pair and diagram review ledger | XML, 2600x1600 IHDR, source IDs, 4 primary arrows, connector/geometry/endpoint/corner audits, original-pixel inspection | Mapped |
 | Canonical quality and independent review gates | Task 8 plan and this mapping | Commands and six fresh review lenses are defined but must run after candidate freeze | Pending exact-head replay |
 

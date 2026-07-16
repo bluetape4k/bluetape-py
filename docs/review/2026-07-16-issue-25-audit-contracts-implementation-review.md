@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Reviewed pre-evidence range:
-`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..4c28d60487f87f8623c836fedb2cf9d209cf54bd`
+`4b4df925a0a1cf3d1187cf6f4fb351595a5a02b3..460e8c5e85593785bc4fe713c9a1586233a3561d`
 
 ## Method and boundary
 
@@ -31,6 +31,7 @@ fresh lenses or independent verifier have passed.
 | P2 | Operator/docs | Package READMEs showed registry install commands without the root README's current PyPI publication hold | Add bilingual hold guidance, current workspace sync/focused build commands, and a README contract RED/GREEN | Closed in `71bf9b1` |
 | P2 | Performance/evidence | The TDD ledger described the fixed datetime equality key as having no history lookup, although accepted `ZoneInfo.utcoffset()` owns internal transition lookup cost | Narrow the claim to no UTC normalization or external I/O and explicitly delegate offset calculation to the stdlib timezone object | Closed in the final evidence commit |
 | P2 | Stability/testing | The rollback probe proved namespace/core importability but not that the meta distribution remained installed or audit metadata was absent | Assert installed `bluetape`/`bluetape-core` versions and `PackageNotFoundError` for `bluetape-audit` | Closed in `4c28d60` |
+| P2 | Operator/docs | Root EN/KO inventories and install lists plus package layout/WIP omitted the implemented audit distribution or extra | Add every root registration surface and an executable cross-document visibility contract | Closed in `460e8c5` |
 
 ## Per-task convergence
 
@@ -46,6 +47,7 @@ fresh lenses or independent verifier have passed.
 | Workspace publication classification repair | First candidate replay `1 failed, 2281 passed, 9 deselected`; focused repair `11 passed` | 0 | 0 | 0 | 0 |
 | First exact-head review repairs | Stability P2 and Ops P2 repaired; focused README/event/validation set `102 passed` | 0 | 0 | 0 | 0 |
 | Second exact-head review repairs | Performance wording corrected; distribution-aware rollback suite `4 passed` | 0 | 0 | 0 | 0 |
+| Root visibility repair | Root-doc contract RED; all six README/source-model tests GREEN | 0 | 0 | 0 | 0 |
 
 ## Pre-head six-lens readiness
 
