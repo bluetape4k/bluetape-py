@@ -135,7 +135,7 @@ Branch policy:
 |---|---|---|
 | `v0.1.0` | Released core helpers, logging, testing, docs, and release preflight | Kept the default install thin and the APIs Python-native. |
 | `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34 plus serialization follow-ups #45/#46; research-first work gates broad adapters. |
-| `0.3.0` | First implementation wave after research gates | Candidate scope depends on pending decisions from #14, #16, #21, #31, and #34; #10 and #23 now constrain their implementation follow-ups. |
+| `0.3.0` | First implementation wave after research gates | Candidate scope depends on pending decisions from #16, #21, #31, and #34; #10, #14, and #23 now constrain their implementation follow-ups. |
 
 ## Task Queue
 
@@ -199,7 +199,11 @@ Historical release scope; all items are closed.
   extras. KSUID requires a compatibility consumer; Snowflake needs machine/epoch
   ownership; compound/affine measure, locale money, and provider FX remain
   separate trigger-gated issues.
-- #14 - SQL, repository, and audit outbox strategy research.
+- #14 - SQL, repository, and audit outbox strategy research. Decision recorded
+  in `docs/research/2026-07-16-issue-14-sql-repository-audit-outbox-strategy.md`:
+  use caller-owned SQLAlchemy Core sync/async connections, keep audit
+  storage-neutral, and isolate PostgreSQL transactional outbox behavior in a
+  separate adapter with caller-driven relay execution.
 - #15 - Testcontainers fixture packages.
 - #16 - AWS, graph, text, and image adapter boundary research.
 - #17 - Leader election and distributed lock contracts.
@@ -214,12 +218,17 @@ Historical release scope; all items are closed.
   #24 proceeds; applications retain SDK/exporter/global lifecycle ownership.
 - #24 - Observability hooks and telemetry helpers. Implemented as the focused
   `bluetape-observability` API-only bridge; PR review and merge are pending.
-- #25 - Audit event and outbox publisher packages.
+- #25 - Storage-neutral audit event and conformance package; SQL outbox and
+  broker publishers are separate adapter issues.
+- #77 - PostgreSQL transactional audit outbox adapter with caller-transaction
+  enqueue, bounded lease-backed claim/mark operations, at-least-once delivery,
+  and caller-driven relay execution.
 - #26 - AWS integration provider packages.
 - #27 - Graph package and backend conformance suites.
 - #28 - Text search, tokenizer, and masking packages.
 - #29 - Image and media helper packages.
-- #30 - SQL toolkit, repository, and outbox helpers.
+- #30 - SQLAlchemy Core toolkit and explicit application repository helpers;
+  outbox storage and encrypted-column work are excluded from the first slice.
 - #31 - Geo, spatial, and statistics utility scope research.
 - #32 - Provider conformance and benchmark suites.
 - #33 - `bluetape-go` to `bluetape-py` ecosystem parity matrix.
@@ -232,9 +241,10 @@ Research notes belong under `docs/research/` and should be linked from
 
 - #10 must decide serialization baseline, optional adapters, trust profiles,
   typed errors, and cross-language compatibility expectations.
-- #14 must decide SQL/transaction ownership, repository helper scope, audit
-  model boundaries, outbox storage strategy, and required Testcontainers
-  fixtures.
+- #14 decided SQL/transaction ownership, repository helper scope, audit model
+  boundaries, PostgreSQL outbox isolation, and the required Testcontainers
+  fixture boundary. Implementation remains split across #15, narrowed #25,
+  narrowed #30, and focused PostgreSQL outbox issue #77.
 - #16 must decide whether AWS, graph, text, and image work should be first-class
   packages, optional adapters, or examples only.
 - #21 must decide ASGI/FastAPI/framework adapter boundaries, request-context

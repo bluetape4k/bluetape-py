@@ -158,6 +158,25 @@ Create a new distribution only when it has:
 Avoid adding optional integrations to the default `bluetape` dependency list.
 Use extras or direct focused distribution installs for heavier capabilities.
 
+Issue #14 establishes three separate future data boundaries:
+
+- `bluetape-sql` may own SQLAlchemy Core 2.x sync/async helpers under
+  `bluetape.sql`. Helpers receive caller-owned transaction-bound `Connection`
+  or `AsyncConnection` objects and never own engine, pool, commit, rollback,
+  migration, ORM session, or generic repository lifecycle.
+- `bluetape-audit` may own stdlib-only immutable audit value and conformance
+  contracts under `bluetape.audit`. It does not own a SQL schema, durable
+  history store, relay process, or broker.
+- Issue #77's focused PostgreSQL audit adapter may own transactional enqueue
+  and bounded outbox claim/mark behavior. It documents at-least-once delivery
+  and duplicate possibility, uses caller-driven relay execution, and contains
+  no hidden worker or scheduler.
+
+Psycopg is the PostgreSQL DB-API baseline and asyncpg is the first validated
+SQLAlchemy async driver; neither creates a second public query toolkit. The
+first conformance backend is PostgreSQL only. Additional databases require
+separate source-backed designs and tests.
+
 ## Internal Code
 
 Use package-local private modules for implementation details that are not public

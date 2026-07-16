@@ -40,7 +40,7 @@
    uv run --no-project \
      --with 'testcontainers[postgres]' \
      --with 'psycopg[binary]' \
-     --with sqlalchemy \
+     --with 'sqlalchemy[asyncio]' \
      --with asyncpg \
      python /tmp/bluetape-issue14-spike/spike.py
    ```
@@ -48,6 +48,12 @@
 4. Require PASS for Psycopg commit/mapping, Psycopg rollback, SQLAlchemy sync commit/mapping, SQLAlchemy sync rollback, SQLAlchemy async commit/mapping, SQLAlchemy async rollback, and concurrent `SKIP LOCKED` claim.
 5. Allow one rerun only for container-start or dependency-acquisition failure. A semantic failure remains visible and blocks the affected recommendation.
 6. Capture only resolved versions, image tag, proof booleans, bounded identifiers/counts, duration, and sanitized failure category. Do not preserve credentials, connection URLs, raw logs, or spike source in the repository.
+
+Execution note: the first run's plain `sqlalchemy` dependency omitted
+SQLAlchemy's declared asyncio runtime extra and failed before the async
+candidate could execute. This was classified as dependency-environment
+acquisition/configuration, not a semantic proof failure. The single allowed
+retry used `sqlalchemy[asyncio]`; no assertion or spike behavior changed.
 
 ## Task 3: Write the research decision
 
