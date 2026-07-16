@@ -95,6 +95,52 @@ CASES = [
 ]
 
 
+def ordered_multi_violation_case(
+    first_failure: str,
+) -> tuple[audit.AuditEvent, audit.AuditLimits]:
+    order = [field_category for field_category, _ in CASES]
+    first_index = order.index(first_failure)
+
+    def text(field_category: str) -> str:
+        return "가" if order.index(field_category) < first_index else "가가"
+
+    if first_index <= order.index("metadata"):
+        metadata = {"a": "b", "c": "d"}
+    elif first_failure == "metadata.key":
+        metadata = {"가가": "나나"}
+    else:
+        metadata = {"가": "나나"}
+
+    event = make_event(
+        event_id=text("event_id"),
+        action=text("action"),
+        subject=audit.AuditIdentity(text("subject.kind"), text("subject.value")),
+        actor=audit.AuditIdentity(text("actor.kind"), text("actor.value")),
+        correlation_id=text("correlation_id"),
+        causation_id=text("causation_id"),
+        payload=audit.AuditPayload(
+            b"x" if order.index("payload.data") < first_index else b"xx",
+            text("payload.content_type"),
+            text("payload.schema_version"),
+        ),
+        metadata=metadata,
+    )
+    return event, audit.AuditLimits(
+        max_event_id_chars=1,
+        max_action_chars=1,
+        max_identity_kind_chars=1,
+        max_identity_value_chars=1,
+        max_correlation_id_chars=1,
+        max_causation_id_chars=1,
+        max_content_type_chars=1,
+        max_schema_version_chars=1,
+        max_payload_bytes=1,
+        max_metadata_entries=1,
+        max_metadata_key_chars=1,
+        max_metadata_value_chars=1,
+    )
+
+
 def test_validator_is_not_implemented_before_task_four() -> None:
     assert validate_audit_event is not None, "validate_audit_event is not implemented"
 
@@ -161,37 +207,17 @@ class TestAuditValidation:
         assert "가가" not in repr(error.args)
         assert set(vars(error)) <= {"field_category", "limit_name"}
 
-    def test_multi_violation_uses_total_blueprint_order(self) -> None:
+    @pytest.mark.parametrize(("field_category", "limit_name"), CASES)
+    def test_multi_violation_uses_total_blueprint_order(
+        self, field_category: str, limit_name: str
+    ) -> None:
         assert validate_audit_event is not None
-        event = make_event(
-            event_id="11",
-            action="22",
-            subject=audit.AuditIdentity("33", "44"),
-            actor=audit.AuditIdentity("55", "66"),
-            correlation_id="77",
-            causation_id="88",
-            payload=audit.AuditPayload(b"99", "aa", "bb"),
-            metadata={"cc": "dd", "ee": "ff"},
-        )
-        limits = audit.AuditLimits(
-            max_event_id_chars=1,
-            max_action_chars=1,
-            max_identity_kind_chars=1,
-            max_identity_value_chars=1,
-            max_correlation_id_chars=1,
-            max_causation_id_chars=1,
-            max_content_type_chars=1,
-            max_schema_version_chars=1,
-            max_payload_bytes=1,
-            max_metadata_entries=1,
-            max_metadata_key_chars=1,
-            max_metadata_value_chars=1,
-        )
+        event, limits = ordered_multi_violation_case(field_category)
         with pytest.raises(audit.AuditLimitExceededError) as captured:
             validate_audit_event(event, limits)
         assert (captured.value.field_category, captured.value.limit_name) == (
-            "event_id",
-            "max_event_id_chars",
+            field_category,
+            limit_name,
         )
 
     def test_actor_absence_skips_actor_checks(self) -> None:

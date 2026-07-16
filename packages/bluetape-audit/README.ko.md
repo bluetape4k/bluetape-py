@@ -15,7 +15,16 @@ Python 네이티브 bluetape 애플리케이션을 위한 저장소 독립적이
 
 ## 설치
 
-전용 배포본을 설치합니다.
+Package ownership과 trusted publishing을 확인하는 동안 PyPI 공개는 현재 보류
+상태입니다. 현재 개발에는 source workspace를 사용하고 wheel 수준 검증이 필요하면
+전용 artifact를 로컬에서 빌드합니다.
+
+```bash
+uv sync --all-packages
+uv build --package bluetape-audit
+```
+
+공개 이후에는 전용 배포본을 다음과 같이 설치합니다.
 
 ```bash
 pip install bluetape-audit

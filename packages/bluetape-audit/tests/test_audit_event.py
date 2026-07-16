@@ -222,13 +222,29 @@ class TestAuditEvent:
             rejected,
         )
 
-    def test_validation_order_is_declaration_order(self) -> None:
-        with pytest.raises(TypeError, match="event id"):
-            make_event(event_id=SecretValue(), action=SecretValue())
-        with pytest.raises(TypeError, match="action"):
-            make_event(action=SecretValue(), occurred_at=SecretValue())
-        with pytest.raises(TypeError, match="occurrence time"):
-            make_event(occurred_at=SecretValue(), subject=SecretValue())
+    @pytest.mark.parametrize(
+        ("first_field", "second_field", "expected_message"),
+        [
+            ("event_id", "action", "event id"),
+            ("action", "occurred_at", "action"),
+            ("occurred_at", "subject", "occurrence time"),
+            ("subject", "payload", "subject"),
+            ("payload", "actor", "payload"),
+            ("actor", "correlation_id", "actor"),
+            ("correlation_id", "causation_id", "correlation id"),
+            ("causation_id", "metadata", "causation id"),
+        ],
+    )
+    def test_validation_order_is_declaration_order(
+        self, first_field: str, second_field: str, expected_message: str
+    ) -> None:
+        with pytest.raises(TypeError, match=expected_message):
+            make_event(
+                **{
+                    first_field: SecretValue(),
+                    second_field: SecretValue(),
+                }
+            )
 
     def test_exact_nested_types_and_optional_none_are_required(self) -> None:
         event = make_event(actor=None, correlation_id=None, causation_id=None, metadata=None)
