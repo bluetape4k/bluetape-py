@@ -158,15 +158,18 @@ Create a new distribution only when it has:
 Avoid adding optional integrations to the default `bluetape` dependency list.
 Use extras or direct focused distribution installs for heavier capabilities.
 
-Issue #14 establishes three separate future data boundaries:
+Issue #14 established three separate data boundaries:
 
 - `bluetape-sql` may own SQLAlchemy Core 2.x sync/async helpers under
   `bluetape.sql`. Helpers receive caller-owned transaction-bound `Connection`
   or `AsyncConnection` objects and never own engine, pool, commit, rollback,
   migration, ORM session, or generic repository lifecycle.
-- `bluetape-audit` may own stdlib-only immutable audit value and conformance
-  contracts under `bluetape.audit`. It does not own a SQL schema, durable
-  history store, relay process, or broker.
+- `bluetape-audit` owns stdlib-only immutable audit values, explicit bounded
+  validation, safe errors, and deterministic preservation helpers under
+  `bluetape.audit`. It does not own serialization, a SQL schema, repository,
+  transaction, durable history store, outbox, relay process, or broker.
+  Caller-owned adapters perform authoritative validation immediately before
+  their first side effect.
 - Issue #77's focused PostgreSQL audit adapter may own transactional enqueue
   and bounded outbox claim/mark behavior. It documents at-least-once delivery
   and duplicate possibility, uses caller-driven relay execution, and contains

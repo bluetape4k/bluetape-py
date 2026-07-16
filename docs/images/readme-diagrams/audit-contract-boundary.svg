@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="800" viewBox="0 0 1300 800" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">bluetape audit contract ownership boundary</title>
+  <desc id="diagram-desc">Caller serialization enters bounded bluetape audit values and validation; caller-owned adapter infrastructure establishes durability only after its first side effect.</desc>
+
+  <defs>
+    <linearGradient id="canvas-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F6FAFF"/>
+      <stop offset="55%" stop-color="#F2F9F7"/>
+      <stop offset="100%" stop-color="#FFF8EE"/>
+    </linearGradient>
+    <marker id="arrow-primary" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#4C6FA8"/>
+    </marker>
+    <marker id="arrow-validation" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#16856B"/>
+    </marker>
+    <marker id="arrow-side-effect" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#D97706"/>
+    </marker>
+    <marker id="arrow-optional" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#7C879A"/>
+    </marker>
+    <style>
+      .heading { font-family: "Architects Daughter", ui-rounded, system-ui, sans-serif; fill: #172033; }
+      .mono { font-family: "Comic Mono", ui-monospace, SFMono-Regular, Menlo, monospace; fill: #42526A; }
+      .region { fill: #FFFFFF; fill-opacity: 0.72; stroke: #CBD7E6; stroke-width: 2; }
+      .card { fill: #FFFFFF; stroke-width: 2; }
+      .connector { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .primary { stroke: #4C6FA8; marker-end: url(#arrow-primary); }
+      .validation { stroke: #16856B; marker-end: url(#arrow-validation); }
+      .side-effect { stroke: #D97706; marker-end: url(#arrow-side-effect); }
+      .optional { stroke: #7C879A; stroke-dasharray: 9 7; marker-end: url(#arrow-optional); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="800" fill="url(#canvas-bg)"/>
+  <text id="diagram-title-text" class="heading" x="650" y="39" font-size="34" font-weight="700" text-anchor="middle">Audit values stop before durability begins</text>
+  <text class="mono" x="650" y="67" font-size="15" text-anchor="middle">What does bluetape.audit own, and where does durability begin?</text>
+
+  <g id="ownership-region-caller-serialization">
+    <rect class="region" x="60" y="88" width="1180" height="150" rx="22" fill="#F7FAFF"/>
+    <text class="heading" x="88" y="119" font-size="21" font-weight="700">1 · caller serialization</text>
+
+    <g id="card-caller-serialization">
+      <rect class="card" x="120" y="137" width="500" height="72" rx="16" fill="#F1F6FD" stroke="#8EB7ED"/>
+      <text class="heading" x="370" y="166" font-size="20" font-weight="700" text-anchor="middle">application creates one audit fact</text>
+      <text class="mono" x="370" y="191" font-size="13" text-anchor="middle">serialize bytes / supply IDs + aware time / bound allocation first</text>
+    </g>
+
+    <g id="card-optional-prevalidation">
+      <rect class="card" x="830" y="137" width="350" height="72" rx="16" fill="#F7F8FA" stroke="#B6BECA"/>
+      <text class="heading" x="1005" y="166" font-size="20" font-weight="700" text-anchor="middle">optional application prevalidation</text>
+      <text class="mono" x="1005" y="191" font-size="13" text-anchor="middle">fast-fail only / never proof of capture</text>
+    </g>
+  </g>
+
+  <g id="ownership-region-bluetape-audit">
+    <rect id="package-boundary" class="region" x="60" y="270" width="1180" height="205" rx="22" fill="#F3FBF8" stroke="#82CFBC" stroke-dasharray="8 6"/>
+    <text class="heading" x="88" y="303" font-size="21" font-weight="700">2 · bounded bluetape.audit package code</text>
+    <text class="mono" x="1210" y="302" font-size="12" text-anchor="end">stdlib-only / pure values + validation</text>
+
+    <g id="card-audit-values">
+      <rect class="card" x="120" y="328" width="430" height="112" rx="18" fill="#F5F9FF" stroke="#8EB7ED"/>
+      <text class="heading" x="335" y="359" font-size="23" font-weight="700" text-anchor="middle">AuditPayload + AuditEvent</text>
+      <text class="mono" x="335" y="386" font-size="13" text-anchor="middle">immutable snapshots / preserved caller values</text>
+      <text class="mono" x="335" y="410" font-size="13" text-anchor="middle">constructor hard ceilings / constant-shape repr</text>
+      <text class="mono" x="335" y="431" font-size="12" text-anchor="middle">no parser / repository / transaction / logger</text>
+    </g>
+
+    <g id="card-audit-validation">
+      <rect class="card" x="750" y="328" width="430" height="112" rx="18" fill="#EFFAF6" stroke="#82CFBC"/>
+      <text class="heading" x="965" y="359" font-size="23" font-weight="700" text-anchor="middle">validate_audit_event</text>
+      <text class="mono" x="965" y="386" font-size="13" text-anchor="middle">explicit AuditLimits / original event returned</text>
+      <text class="mono" x="965" y="410" font-size="13" text-anchor="middle">bounded safe error categories</text>
+      <text class="mono" x="965" y="431" font-size="12" text-anchor="middle">validation never means recorded or delivered</text>
+    </g>
+  </g>
+
+  <g id="ownership-region-caller-infrastructure">
+    <rect class="region" x="60" y="507" width="1180" height="205" rx="22" fill="#FFF9EF"/>
+    <text class="heading" x="88" y="540" font-size="21" font-weight="700">3 · caller-owned adapter + durability</text>
+
+    <g id="card-adapter-validation">
+      <rect class="card" x="120" y="565" width="480" height="112" rx="18" fill="#F1F6FD" stroke="#8EB7ED"/>
+      <text class="heading" x="360" y="596" font-size="22" font-weight="700" text-anchor="middle">adapter acceptance boundary</text>
+      <text class="mono" x="360" y="624" font-size="13" text-anchor="middle">authoritative validate_audit_event immediately before</text>
+      <text class="mono" x="360" y="649" font-size="13" text-anchor="middle">the adapter's first side effect</text>
+      <text class="mono" x="360" y="670" font-size="12" text-anchor="middle">adapter owns policy version + allowlisted payload routes</text>
+    </g>
+
+    <line id="first-side-effect-boundary" x1="690" y1="557" x2="690" y2="686" stroke="#D97706" stroke-width="3" stroke-dasharray="7 6"/>
+    <text class="mono" x="690" y="550" font-size="12" font-weight="700" text-anchor="middle">first-side-effect boundary</text>
+
+    <g id="card-external-durability">
+      <rect class="card" x="780" y="565" width="400" height="112" rx="18" fill="#FFF8EB" stroke="#E7B65D"/>
+      <text class="heading" x="980" y="596" font-size="22" font-weight="700" text-anchor="middle">durability begins outside</text>
+      <text class="mono" x="980" y="624" font-size="13" text-anchor="middle">caller storage / transaction / outbox</text>
+      <text class="mono" x="980" y="649" font-size="13" text-anchor="middle">relay / broker / transport / retries</text>
+      <text class="mono" x="980" y="670" font-size="12" text-anchor="middle">capture and delivery claims belong here</text>
+    </g>
+  </g>
+
+  <path id="connector-serialized-to-values" class="connector primary" d="M 335 209 V 328"/>
+  <path id="connector-event-to-adapter" class="connector primary" d="M 335 440 V 565"/>
+  <path id="connector-adapter-invokes-validation" class="connector validation" d="M 600 610 H 660 Q 680 610 680 590 V 404 Q 680 384 700 384 H 750"/>
+  <path id="connector-adapter-to-durability" class="connector side-effect" d="M 600 650 H 780"/>
+  <path id="connector-optional-prevalidation" class="connector optional" d="M 1005 209 V 328"/>
+
+  <g id="ownership-legend">
+    <rect x="205" y="735" width="890" height="44" rx="14" fill="#FFFFFF" stroke="#D5DFEC" stroke-width="2"/>
+    <rect x="235" y="750" width="16" height="16" rx="4" fill="#F1F6FD" stroke="#8EB7ED"/>
+    <text class="mono" x="262" y="763" font-size="12">caller input + adapter</text>
+    <rect x="475" y="750" width="16" height="16" rx="4" fill="#EFFAF6" stroke="#82CFBC"/>
+    <text class="mono" x="502" y="763" font-size="12">package code, no side effect</text>
+    <rect x="755" y="750" width="16" height="16" rx="4" fill="#FFF8EB" stroke="#E7B65D"/>
+    <text class="mono" x="782" y="763" font-size="12">external durability</text>
+    <line x1="935" y1="758" x2="970" y2="758" stroke="#7C879A" stroke-width="3" stroke-dasharray="8 6"/>
+    <text class="mono" x="981" y="763" font-size="12">optional</text>
+  </g>
+</svg>

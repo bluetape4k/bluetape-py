@@ -218,8 +218,10 @@ Historical release scope; all items are closed.
   #24 proceeds; applications retain SDK/exporter/global lifecycle ownership.
 - #24 - Observability hooks and telemetry helpers. Implemented as the focused
   `bluetape-observability` API-only bridge; PR review and merge are pending.
-- #25 - Storage-neutral audit event and conformance package; SQL outbox and
-  broker publishers are separate adapter issues.
+- #25 - Storage-neutral audit event and conformance package. Implemented as the
+  stdlib-only `bluetape-audit` opt-in with immutable values, explicit bounded
+  validation, safe errors, and deterministic preservation helpers; SQL outbox
+  and broker publishers remain separate adapter issues.
 - #77 - PostgreSQL transactional audit outbox adapter with caller-transaction
   enqueue, bounded lease-backed claim/mark operations, at-least-once delivery,
   and caller-driven relay execution.

@@ -22,6 +22,11 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in, stdlib-only `bluetape-audit` distribution with immutable
+  storage-neutral audit values, explicit caller-supplied limits, value-safe
+  errors, and deterministic adapter preservation helpers. Applications retain
+  serialization, repository, transaction, history, outbox, relay, transport,
+  redaction, and logging ownership; the default install remains core-only.
 - Add the independent stdlib-only `bluetape-id`, `bluetape-measure`, and
   `bluetape-money` value distributions with opt-in `id`, `measure`, `money`,
   and aggregate `values` meta extras. The packages provide UUIDv4/v7 and
