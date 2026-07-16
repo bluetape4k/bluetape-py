@@ -7,6 +7,7 @@ ROOT = Path(__file__).parents[4]
 PUBLISHABLE = {
     "bluetape",
     "bluetape-async",
+    "bluetape-audit",
     "bluetape-cache",
     "bluetape-cache-redis",
     "bluetape-codec",
