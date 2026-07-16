@@ -95,6 +95,14 @@ sync와 local wheel build를 먼저 제시하고, `pip install` 형태는 public
 명시해야 한다. Localized README 계약에 이 상태와 명령을 함께 고정하면 release authority와
 사용자 안내가 갈라지는 것을 막을 수 있다.
 
+### 새 distribution 가시성은 package 문서만으로 충분하지 않다
+
+Package README와 root의 기능 소개가 있어도 root workspace table, meta/focused install
+목록, package-layout public list, WIP current inventory가 빠지면 서로 다른 진입점에서
+공개 범위가 달라진다. 새 distribution 계약 테스트는 이 네 종류의 정본과 localized root
+README를 함께 확인해야 한다. 소개 prose의 존재만 검사하지 말고 실제 import row와 설치
+명령을 section 범위 안에서 고정해야 한다.
+
 ## 향후 가드
 
 후속 audit adapter는 이 package에 repository/history/JSON/global context를 추가하지 않는다.
@@ -120,6 +128,7 @@ no-scan, one-copy, fixed-entry, fixed-key 계약을 source와 test로 직접 증
   보강 검증은 `102 passed`.
 - 다음 review의 rollback false-positive와 datetime 비용 과장을 닫았고, distribution-aware
   isolated wheel suite는 `4 passed`.
+- 이어진 Ops review의 root visibility drift를 닫은 README/source-model suite는 `6 passed`.
 
 최종 exact-head canonical replay와 독립 six-lens/verifier 결과는 이 파일을 포함한 evidence
 commit 이후 변경 없는 SHA에서 workflow receipt와 PR body에 기록한다.

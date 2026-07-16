@@ -2,7 +2,7 @@
 
 Date: 2026-07-16 KST
 Issue: #25, milestone `0.2.0`
-Pre-evidence implementation head: `4c28d60487f87f8623c836fedb2cf9d209cf54bd`
+Pre-evidence implementation head: `460e8c5e85593785bc4fe713c9a1586233a3561d`
 
 This ledger records observed task evidence before the final evidence commit.
 The candidate exact head and fresh canonical replay belong to the workflow
@@ -36,6 +36,7 @@ the later exact-head gate has passed.
 | Publication-hold install guidance | A fresh package README contract asserted the English/Korean publication hold plus workspace sync and focused build commands; it failed because both package READMEs presented registry commands without the current hold | Both locales now distinguish current workspace/build commands from post-publication registry shape; the README contract plus event/validation review repairs passed `102` tests | Repair `71bf9b1` |
 | Total validation-order evidence | Review found that one all-invalid validator case proved only the first category and constructor adjacency stopped after three transitions | Parameterized validator cases now relax every preceding category and prove all 14 outcomes; constructor cases prove all eight adjacent declaration-order pairs | Repair `71bf9b1` |
 | Distribution-level rollback evidence | Review found that namespace imports after audit removal could still pass if only `bluetape-core` remained | The default/removal probe now requires `bluetape` and `bluetape-core` version `0.1.0` metadata and requires `bluetape-audit` metadata to be absent; the isolated wheel suite passed `4` tests | Repair `4c28d60` |
+| Root distribution and install visibility | A new root-doc contract required the audit inventory row, meta/focused install commands, package-layout public registration, and WIP current inventory; it failed because those root authorities omitted the new distribution | EN/KO root docs, package layout, and WIP now agree; all six README/source-model tests passed | Repair `460e8c5` |
 
 Only observed missing-surface or wrong-behavior failures are called RED.
 Task 6 finalized an already-owned Task 1 installation contract and is not
@@ -66,6 +67,9 @@ the no-scan, one-copy, 64-entry, or fixed-key contracts.
 - The following review removed a timezone-cost overclaim and strengthened the
   rollback probe to distribution metadata; the wheel suite passed `4` tests at
   `4c28d60`.
+- The next Ops review found root visibility drift; its documentation contract
+  failed before the repair and all `6` README/source-model tests passed at
+  `460e8c5`.
 - Static checks: targeted Ruff lint and format passed; `git diff --check`
   passed after the final documentation repair.
 - Packaging: all 19 workspace distributions built; `uv lock --check` passed.
