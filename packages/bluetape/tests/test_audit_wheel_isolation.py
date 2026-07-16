@@ -22,17 +22,18 @@ AUDIT_EXPORTS = (
 
 
 class Wheels(NamedTuple):
-    audit: Path
+    audit_build: subprocess.CompletedProcess[str]
+    audit: Path | None
     meta: Path
     core: Path
 
 
-def run(
+def capture(
     *args: str | Path,
     cwd: Path = ROOT,
     timeout: int = 120,
 ) -> subprocess.CompletedProcess[str]:
-    completed = subprocess.run(
+    return subprocess.run(
         [str(arg) for arg in args],
         cwd=cwd,
         check=False,
@@ -40,18 +41,30 @@ def run(
         text=True,
         timeout=timeout,
     )
-    assert completed.returncode == 0, (
+
+
+def command_failure(completed: subprocess.CompletedProcess[str]) -> str:
+    return (
         f"command failed with exit code {completed.returncode}: {completed.args!r}\n"
         f"stdout:\n{completed.stdout}\n"
         f"stderr:\n{completed.stderr}"
     )
+
+
+def run(
+    *args: str | Path,
+    cwd: Path = ROOT,
+    timeout: int = 120,
+) -> subprocess.CompletedProcess[str]:
+    completed = capture(*args, cwd=cwd, timeout=timeout)
+    assert completed.returncode == 0, command_failure(completed)
     return completed
 
 
 @pytest.fixture(scope="session")
 def audit_wheels(tmp_path_factory: pytest.TempPathFactory) -> Wheels:
     wheelhouse = tmp_path_factory.mktemp("audit-wheelhouse")
-    for package in ("bluetape-core", "bluetape", "bluetape-audit"):
+    for package in ("bluetape-core", "bluetape"):
         run(
             "uv",
             "build",
@@ -61,12 +74,28 @@ def audit_wheels(tmp_path_factory: pytest.TempPathFactory) -> Wheels:
             "--out-dir",
             wheelhouse,
         )
+    audit_build = capture(
+        "uv",
+        "build",
+        "--package",
+        "bluetape-audit",
+        "--wheel",
+        "--out-dir",
+        wheelhouse,
+    )
 
     return Wheels(
-        audit=next(wheelhouse.glob("bluetape_audit-*.whl")),
+        audit_build=audit_build,
+        audit=next(wheelhouse.glob("bluetape_audit-*.whl"), None),
         meta=next(wheelhouse.glob("bluetape-*.whl")),
         core=next(wheelhouse.glob("bluetape_core-*.whl")),
     )
+
+
+def require_audit_wheel(wheels: Wheels) -> Path:
+    assert wheels.audit_build.returncode == 0, command_failure(wheels.audit_build)
+    assert wheels.audit is not None, "audit build succeeded without producing a wheel"
+    return wheels.audit
 
 
 def new_venv(path: Path) -> Path:
@@ -154,11 +183,12 @@ assert importlib.util.find_spec("bluetape.audit") is None
 def test_audit_and_meta_wheel_metadata_preserve_dependency_boundaries(
     audit_wheels: Wheels,
 ) -> None:
-    audit_metadata = wheel_metadata(audit_wheels.audit)
+    audit_wheel = require_audit_wheel(audit_wheels)
+    audit_metadata = wheel_metadata(audit_wheel)
     meta_metadata = wheel_metadata(audit_wheels.meta)
 
     assert audit_metadata.get_all("Requires-Dist") is None
-    with zipfile.ZipFile(audit_wheels.audit) as archive:
+    with zipfile.ZipFile(audit_wheel) as archive:
         assert "bluetape/__init__.py" not in archive.namelist()
 
     requirements = meta_metadata.get_all("Requires-Dist") or []
@@ -173,6 +203,7 @@ def test_focused_audit_wheel_imports_offline_from_its_own_venv(
     audit_wheels: Wheels,
     tmp_path: Path,
 ) -> None:
+    audit_wheel = require_audit_wheel(audit_wheels)
     python = new_venv(tmp_path / "focused-audit")
     run(
         "uv",
@@ -183,7 +214,7 @@ def test_focused_audit_wheel_imports_offline_from_its_own_venv(
         "--offline",
         "--no-index",
         "--no-deps",
-        audit_wheels.audit,
+        audit_wheel,
     )
 
     run(python, "-I", "-c", _AUDIT_IMPORT_PROBE, cwd=tmp_path)
@@ -194,7 +225,8 @@ def test_meta_audit_extra_installs_offline_and_audit_removal_rolls_back(
     audit_wheels: Wheels,
     tmp_path: Path,
 ) -> None:
-    wheelhouse = audit_wheels.audit.parent
+    audit_wheel = require_audit_wheel(audit_wheels)
+    wheelhouse = audit_wheel.parent
     python = new_venv(tmp_path / "meta-audit-extra")
     run(
         "uv",
@@ -221,7 +253,8 @@ def test_default_meta_install_stays_core_only(
     audit_wheels: Wheels,
     tmp_path: Path,
 ) -> None:
-    wheelhouse = audit_wheels.audit.parent
+    audit_wheel = require_audit_wheel(audit_wheels)
+    wheelhouse = audit_wheel.parent
     python = new_venv(tmp_path / "meta-default")
     run(
         "uv",
