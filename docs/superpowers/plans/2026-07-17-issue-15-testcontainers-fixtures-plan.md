@@ -376,7 +376,6 @@ Create `test_postgres_server.py` with provider fakes and these required cases:
 ```python
 from __future__ import annotations
 
-import builtins
 import traceback
 from dataclasses import dataclass, field
 from unittest.mock import Mock
@@ -930,6 +929,7 @@ Create `test_localstack_server.py` with these exact anchors:
 ```python
 from __future__ import annotations
 
+import builtins
 import traceback
 from dataclasses import dataclass, field
 from unittest.mock import Mock
