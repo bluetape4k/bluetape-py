@@ -10,9 +10,16 @@ from bluetape.testcontainers import (
     DEFAULT_REDIS_IMAGE,
     RedisServer,
     StartFailureKind,
+    TestcontainerStartError,
 )
 from bluetape.testcontainers import (
     TestcontainerStartError as RedisStartError,
+)
+from bluetape.testcontainers.redis import (
+    StartFailureKind as RedisStartFailureKind,
+)
+from bluetape.testcontainers.redis import (
+    TestcontainerStartError as RedisTestcontainerStartError,
 )
 from docker.errors import DockerException, ImageNotFound
 
@@ -64,6 +71,35 @@ def test_rejects_non_string_image(image: object) -> None:
 def test_rejects_image_whitespace_and_control_characters(image: str) -> None:
     with pytest.raises(ValueError):
         RedisServer(image=image)
+
+
+def test_shared_error_move_preserves_redis_identity_and_message() -> None:
+    error = TestcontainerStartError(StartFailureKind.RUNTIME_UNAVAILABLE, "redis:8")
+
+    assert RedisStartFailureKind is StartFailureKind
+    assert RedisTestcontainerStartError is TestcontainerStartError
+    assert str(error) == ("Redis test container start failed (runtime-unavailable, image=redis:8)")
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "https://registry.example/redis:8",
+        "user:secret@registry.example/redis:8",
+        "user:secret@registry.example/redis@sha256:" + "a" * 64,
+    ],
+)
+def test_rejects_uri_or_credential_bearing_image_without_echo(image: str) -> None:
+    with pytest.raises(ValueError) as raised:
+        RedisServer(image=image)
+
+    assert image not in str(raised.value)
+
+
+def test_accepts_complete_sha256_image_digest() -> None:
+    server = RedisServer(image="redis@sha256:" + "a" * 64)
+
+    assert server.running is False
 
 
 @pytest.mark.parametrize("timeout", [True, "5"])
