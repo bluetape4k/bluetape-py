@@ -1,5 +1,6 @@
 import importlib.util
 import subprocess
+import sys
 import tomllib
 import zipfile
 from pathlib import Path
@@ -50,6 +51,35 @@ def test_wrapper_does_not_depend_on_redis_py() -> None:
     project = load_project(ROOT / "packages/bluetape-testcontainers/pyproject.toml")
 
     assert all(not dependency.startswith("redis") for dependency in project["dependencies"])
+
+
+def test_base_import_does_not_load_optional_providers() -> None:
+    script = """
+import importlib.abc
+import sys
+
+blocked = {"boto3", "psycopg", "sqlalchemy", "testcontainers.localstack", "testcontainers.postgres"}
+
+class Blocker(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname in blocked or any(fullname.startswith(name + ".") for name in blocked):
+            raise AssertionError(f"optional provider imported: {fullname}")
+        return None
+
+sys.meta_path.insert(0, Blocker())
+import bluetape.testcontainers as tc
+for name in tc.__all__:
+    getattr(tc, name)
+print("base-import-ok")
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == "base-import-ok"
 
 
 def test_built_wheels_preserve_version_and_namespace_coexistence(tmp_path: Path) -> None:
