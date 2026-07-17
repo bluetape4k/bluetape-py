@@ -408,10 +408,10 @@ caller-owned observability SDK suite separate:
 
 ```bash
 uv sync --package bluetape-testcontainers --extra all --group test --python 3.13.14 --locked
-uv run --package bluetape-testcontainers --extra all --python 3.13.14 pytest \
+uv run --package bluetape-testcontainers --extra all --group test --python 3.13.14 pytest \
   -m "not testcontainers" packages/bluetape-testcontainers -q
 docker info
-uv run --package bluetape-testcontainers --extra all --python 3.13.14 pytest \
+uv run --package bluetape-testcontainers --extra all --group test --python 3.13.14 pytest \
   -m testcontainers packages/bluetape-testcontainers -q
 uv sync --all-packages --all-extras --python 3.13.14 --locked
 uv run pytest -m "not observability_sdk"
