@@ -165,6 +165,218 @@ def test_rejected_client_has_no_io_for_hostile_response_callback_container(
 
 
 @pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "socket_connect_timeout",
+        "socket_timeout",
+        "health_check_interval",
+        "retry_on_error",
+        "retry",
+        "redis_connect_func",
+        "credential_provider",
+        "decode_responses",
+        "encoding",
+        "encoding_errors",
+        "legacy_responses",
+        "socket_read_size",
+        "driver_info",
+        "protocol",
+        "db",
+        "client_name",
+        "username",
+        "password",
+        "host",
+        "port",
+        "socket_keepalive",
+        "socket_keepalive_options",
+    ],
+)
+def test_rejected_client_never_invokes_hostile_scalar_option(
+    client_factory: object,
+    field: str,
+) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+        def __ne__(self, other: object) -> bool:
+            del other
+            observed.append("ne")
+            return True
+
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+        def __len__(self) -> int:
+            observed.append("len")
+            return 0
+
+        def __iter__(self):  # type: ignore[no-untyped-def]
+            observed.append("iter")
+            return iter(())
+
+        def __contains__(self, item: object) -> bool:
+            del item
+            observed.append("contains")
+            return False
+
+        def __lt__(self, other: object) -> bool:
+            del other
+            observed.append("lt")
+            return False
+
+        def __le__(self, other: object) -> bool:
+            del other
+            observed.append("le")
+            return False
+
+        def __gt__(self, other: object) -> bool:
+            del other
+            observed.append("gt")
+            return False
+
+        def __ge__(self, other: object) -> bool:
+            del other
+            observed.append("ge")
+            return False
+
+        def __float__(self) -> float:
+            observed.append("float")
+            return 1.0
+
+    client = client_factory()  # type: ignore[operator]
+    client.connection_pool.connection_kwargs[field] = Hostile()
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_never_hashes_or_compares_hostile_option_key(
+    client_factory: object,
+) -> None:
+    observed: list[str] = []
+
+    class HostileKey:
+        def __hash__(self) -> int:
+            observed.append("hash")
+            return 0
+
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+    client = client_factory()  # type: ignore[operator]
+    options = client.connection_pool.connection_kwargs
+    del options["client_name"]
+    options[HostileKey()] = None
+    observed.clear()
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("field", ["connection_class", "max_connections"])
+def test_rejected_client_never_invokes_hostile_pool_scalar(
+    client_factory: object,
+    field: str,
+) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+        def __le__(self, other: object) -> bool:
+            del other
+            observed.append("le")
+            return False
+
+    client = client_factory()  # type: ignore[operator]
+    setattr(client.connection_pool, field, Hostile())
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("field", ["name", "lib_version", "_upstream"])
+def test_rejected_client_checks_driver_info_field_types_before_values(
+    client_factory: object,
+    field: str,
+) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+    client = client_factory()  # type: ignore[operator]
+    driver_info = client.connection_pool.connection_kwargs["driver_info"]
+    setattr(driver_info, field, Hostile())
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize(
+    "field", ["_maint_notifications_pool_handler", "_oss_cluster_maint_notifications_handler"]
+)
+def test_rejected_client_has_no_io_for_hostile_sync_pool_handler(field: str) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+    client = safe_sync_client()
+    setattr(client.connection_pool, field, Hostile())
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_sync_client(client)
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
 @pytest.mark.parametrize("pool_state", ["available", "in-use"])
 def test_rejected_client_has_no_io_for_nonempty_pool_and_registered_callback(
     client_factory: object,
