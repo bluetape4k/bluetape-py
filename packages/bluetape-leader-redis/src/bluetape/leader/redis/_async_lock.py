@@ -124,6 +124,9 @@ class _AsyncRedisLockLease:
             )
         except Exception:
             backend_failed = True
+        if self._state in ("LOST", "RELEASED"):
+            return NotHeld()
+        self._raise_if_unknown()
         if backend_failed:
             failure = LeaderBackendError()
             self._state = "UNKNOWN"
@@ -156,6 +159,9 @@ class _AsyncRedisLockLease:
             )
         except Exception:
             backend_failed = True
+        if self._state in ("LOST", "RELEASED"):
+            return False
+        self._raise_if_unknown()
         if backend_failed:
             self._fail_unknown(LeaderBackendError())
         if status == "HELD":
@@ -170,7 +176,23 @@ class _AsyncRedisLockLease:
             raise LeaderLeaseLostError()
 
     async def release(self) -> None:
-        await self._release(scoped=False)
+        self._raise_if_unknown()
+        if self._state in ("LOST", "RELEASED"):
+            await self._release(scoped=False)
+            return
+        first_cancel, renew_failure = await self._stop_renew_task(None)
+        first_cancel, cleanup_failure = await self._await_cleanup(
+            scoped=False, first_cancel=first_cancel
+        )
+        if first_cancel is not None:
+            if renew_failure is not None:
+                first_cancel.add_note("leader lifecycle renew failed")
+            if cleanup_failure is not None and cleanup_failure is not renew_failure:
+                first_cancel.add_note("leader lifecycle cleanup failed")
+            raise first_cancel
+        lifecycle_failure = renew_failure or cleanup_failure
+        if lifecycle_failure is not None:
+            raise lifecycle_failure
 
     async def _release(self, *, scoped: bool) -> None:
         self._raise_if_unknown()
@@ -273,26 +295,9 @@ class _AsyncRedisLockLease:
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
         first_cancel = exc if isinstance(exc, asyncio.CancelledError) else None
         first_cancel, renew_failure = await self._stop_renew_task(first_cancel)
-        if self._cleanup_task is None:
-            self._cleanup_task = asyncio.create_task(self._release(scoped=True))
-        completed, first_cancel = await self._wait_task(
-            self._cleanup_task, self._timing.release, first_cancel
+        first_cancel, cleanup_failure = await self._await_cleanup(
+            scoped=True, first_cancel=first_cancel
         )
-        cleanup_failure: BaseException | None = None
-        if not completed:
-            cleanup_failure = LeaderBackendError()
-            self._state = "UNKNOWN"
-            self._failure = cleanup_failure
-        elif self._cleanup_task.cancelled():
-            failure = LeaderBackendError()
-            self._state = "UNKNOWN"
-            self._failure = failure
-            cleanup_failure = failure
-        else:
-            try:
-                self._cleanup_task.result()
-            except BaseException as error:
-                cleanup_failure = error
         lifecycle_failure = renew_failure or cleanup_failure
         if first_cancel is not None:
             if renew_failure is not None:
@@ -311,6 +316,34 @@ class _AsyncRedisLockLease:
         if isinstance(exc, Exception):
             raise LeaderExecutionError(exc, lifecycle_failure)
         raise lifecycle_failure
+
+    async def _await_cleanup(
+        self,
+        *,
+        scoped: bool,
+        first_cancel: asyncio.CancelledError | None,
+    ) -> tuple[asyncio.CancelledError | None, BaseException | None]:
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._release(scoped=scoped))
+        completed, first_cancel = await self._wait_task(
+            self._cleanup_task, self._timing.release, first_cancel
+        )
+        cleanup_failure: BaseException | None = None
+        if not completed:
+            cleanup_failure = LeaderBackendError()
+            self._state = "UNKNOWN"
+            self._failure = cleanup_failure
+        elif self._cleanup_task.cancelled():
+            failure = LeaderBackendError()
+            self._state = "UNKNOWN"
+            self._failure = failure
+            cleanup_failure = failure
+        else:
+            try:
+                self._cleanup_task.result()
+            except BaseException as error:
+                cleanup_failure = error
+        return first_cancel, cleanup_failure
 
     async def _renew_loop(self) -> None:
         interval = self._options.renew_interval
