@@ -5,6 +5,7 @@ import socket
 from datetime import timedelta
 
 import pytest
+import redis
 from _support import safe_async_client, safe_sync_client
 from bluetape.leader import LeaderBackendError
 from bluetape.leader.redis._support import (
@@ -64,6 +65,85 @@ def test_rejected_client_has_no_io_for_wrong_family_subclass_and_instance_hook()
     client.execute_command = lambda *args, **kwargs: None  # type: ignore[method-assign]
     with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
         _validated_sync_client(client)
+
+
+@pytest.mark.parametrize("attribute", ["_execute_command", "parse_response"])
+def test_rejected_client_has_no_io_for_shadowed_sync_command_path(
+    attribute: str,
+) -> None:
+    observed: list[str] = []
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        observed.append("called")
+        raise AssertionError("shadow hook executed")
+
+    client = safe_sync_client()
+    setattr(client, attribute, forbidden)
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_sync_client(client)
+
+    assert observed == []
+
+
+def test_rejected_client_has_no_io_for_shadowed_async_command_path() -> None:
+    observed: list[str] = []
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        observed.append("called")
+        raise AssertionError("shadow hook executed")
+
+    client = safe_async_client()
+    client.parse_response = forbidden  # type: ignore[method-assign]
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_async_client(client)
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_has_no_io_for_shadowed_pool_command_path(
+    client_factory: object,
+) -> None:
+    observed: list[str] = []
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        observed.append("called")
+        raise AssertionError("shadow hook executed")
+
+    client = client_factory()  # type: ignore[operator]
+    client.connection_pool.get_connection = forbidden  # type: ignore[method-assign]
+
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_has_no_io_for_shadowed_event_dispatch(
+    client_factory: object,
+) -> None:
+    observed: list[str] = []
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        observed.append("called")
+        raise AssertionError("shadow hook executed")
+
+    client = client_factory()  # type: ignore[operator]
+    client._event_dispatcher.dispatch = forbidden  # type: ignore[method-assign]
+
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
 
 
 @pytest.mark.parametrize(
@@ -133,6 +213,12 @@ def test_record_round_trips_canonical_private_value() -> None:
     assert not hasattr(record, "__dict__")
 
 
+def test_record_accepts_redis_signed_maximum_fence() -> None:
+    record = _LeaseRecord("A" * 32, 9_223_372_036_854_775_807)
+
+    assert _LeaseRecord.parse(record.to_bytes()) == record
+
+
 @pytest.mark.parametrize(
     "value",
     [
@@ -142,6 +228,7 @@ def test_record_round_trips_canonical_private_value() -> None:
         b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:0",
         b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:01",
         b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:+1",
+        b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:9223372036854775808",
         b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:1:extra",
         b"v1:\xff:1",
         "v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:1",

@@ -112,9 +112,22 @@ def test_acquire_parses_string_safe_fence_above_lua_integer_precision() -> None:
     assert _parse_acquire_response([b"CORRUPT"]) == ("CORRUPT", None)
 
 
+def test_acquire_accepts_redis_signed_maximum_fence() -> None:
+    assert _parse_acquire_response([b"ACQUIRED", b"9223372036854775807"]) == (
+        "ACQUIRED",
+        9_223_372_036_854_775_807,
+    )
+
+
 @pytest.mark.parametrize(
     "value",
-    [[b"ACQUIRED", b"0"], [b"ACQUIRED", b"01"], [b"ACQUIRED", 1], [b"OTHER"]],
+    [
+        [b"ACQUIRED", b"0"],
+        [b"ACQUIRED", b"01"],
+        [b"ACQUIRED", b"9223372036854775808"],
+        [b"ACQUIRED", 1],
+        [b"OTHER"],
+    ],
 )
 def test_acquire_rejects_malformed_response(value: object) -> None:
     with pytest.raises(ValueError, match="^invalid Redis script response$"):

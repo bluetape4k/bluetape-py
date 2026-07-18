@@ -36,6 +36,63 @@ _UNSUPPORTED_CLIENT = "unsupported Redis client configuration"
 _INVALID_RECORD = "invalid Redis lease record"
 _OWNER_TOKEN_LENGTH = 32
 _OWNER_ALPHABET = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+_MAX_REDIS_INTEGER = 9_223_372_036_854_775_807
+_MAX_REDIS_INTEGER_TEXT = str(_MAX_REDIS_INTEGER)
+_SYNC_CLIENT_ATTRIBUTES = frozenset(
+    {
+        "_event_dispatcher",
+        "_single_connection_client",
+        "auto_close_connection_pool",
+        "connection",
+        "connection_pool",
+        "response_callbacks",
+        "single_connection_lock",
+    }
+)
+_ASYNC_CLIENT_ATTRIBUTES = frozenset(
+    {
+        "_event_dispatcher",
+        "_single_conn_lock",
+        "_usage_counter",
+        "_usage_lock",
+        "auto_close_connection_pool",
+        "connection",
+        "connection_pool",
+        "response_callbacks",
+        "single_connection_client",
+    }
+)
+_SYNC_POOL_ATTRIBUTES = frozenset(
+    {
+        "_available_connections",
+        "_cache_factory",
+        "_connection_kwargs",
+        "_created_connections",
+        "_event_dispatcher",
+        "_fork_lock",
+        "_in_use_connections",
+        "_lock",
+        "_maint_notifications_pool_handler",
+        "_oss_cluster_maint_notifications_handler",
+        "_pool_id",
+        "cache",
+        "connection_class",
+        "max_connections",
+        "pid",
+    }
+)
+_ASYNC_POOL_ATTRIBUTES = frozenset(
+    {
+        "_available_connections",
+        "_event_dispatcher",
+        "_in_use_connections",
+        "_lock",
+        "connection_class",
+        "connection_kwargs",
+        "encoder_class",
+        "max_connections",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -46,7 +103,11 @@ class _LeaseRecord:
     def __post_init__(self) -> None:
         if not _is_owner_token(self.owner_token):
             raise ValueError(_INVALID_RECORD)
-        if type(self.fencing_token) is not int or self.fencing_token <= 0:
+        if (
+            type(self.fencing_token) is not int
+            or self.fencing_token <= 0
+            or self.fencing_token > _MAX_REDIS_INTEGER
+        ):
             raise ValueError(_INVALID_RECORD)
 
     def __repr__(self) -> str:
@@ -83,13 +144,17 @@ class _Timing:
 def _validated_sync_client(client: redis.Redis) -> _Timing:
     if (
         type(client) is not redis.Redis
-        or "execute_command" in vars(client)
+        or not _has_exact_attribute_names(client, _SYNC_CLIENT_ATTRIBUTES)
         or client.connection is not None
         or client._single_connection_client is not False
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     pool = client.connection_pool
-    if type(pool) is not SyncConnectionPool or pool.cache is not None:
+    if (
+        type(pool) is not SyncConnectionPool
+        or not _has_exact_attribute_names(pool, _SYNC_POOL_ATTRIBUTES)
+        or pool.cache is not None
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
@@ -115,13 +180,15 @@ def _validated_async_client(client: async_redis.Redis) -> _Timing:
 
     if (
         type(client) is not async_redis.Redis
-        or "execute_command" in vars(client)
+        or not _has_exact_attribute_names(client, _ASYNC_CLIENT_ATTRIBUTES)
         or client.connection is not None
         or client.single_connection_client is not False
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     pool = client.connection_pool
-    if type(pool) is not AsyncConnectionPool:
+    if type(pool) is not AsyncConnectionPool or not _has_exact_attribute_names(
+        pool, _ASYNC_POOL_ATTRIBUTES
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
@@ -336,25 +403,47 @@ def _validate_response_callbacks(client: object, options: Mapping[str, Any]) -> 
 
 
 def _validate_event_dispatcher(value: object) -> None:
-    if type(value) is not EventDispatcher:
+    if type(value) is not EventDispatcher or not _has_exact_attribute_names(
+        value, frozenset({"_event_listeners_mapping", "_lock", "_async_lock"})
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     expected = EventDispatcher()
     actual_mapping = vars(value).get("_event_listeners_mapping")
     expected_mapping = vars(expected).get("_event_listeners_mapping")
     if type(actual_mapping) is not dict or type(expected_mapping) is not dict:
         raise TypeError(_UNSUPPORTED_CLIENT)
-    actual_signature = {
-        event: tuple(type(listener) for listener in listeners)
-        for event, listeners in actual_mapping.items()
-        if type(listeners) is list
-    }
-    expected_signature = {
-        event: tuple(type(listener) for listener in listeners)
-        for event, listeners in expected_mapping.items()
-        if type(listeners) is list
-    }
-    if actual_signature != expected_signature or len(actual_signature) != len(actual_mapping):
+    if len(actual_mapping) != len(expected_mapping):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    for event, expected_listeners in expected_mapping.items():
+        actual_listeners = actual_mapping.get(event)
+        if type(actual_listeners) is not list or len(actual_listeners) != len(expected_listeners):
+            raise TypeError(_UNSUPPORTED_CLIENT)
+        for actual_listener, expected_listener in zip(
+            actual_listeners, expected_listeners, strict=True
+        ):
+            if type(actual_listener) is not type(expected_listener) or not _has_exact_default_state(
+                actual_listener, expected_listener
+            ):
+                raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _has_exact_attribute_names(value: object, expected: frozenset[str]) -> bool:
+    state = vars(value)
+    return (
+        type(state) is dict
+        and len(state) == len(expected)
+        and all(type(name) is str and name in expected for name in state)
+    )
+
+
+def _has_exact_default_state(actual: object, expected: object) -> bool:
+    actual_state = vars(actual)
+    expected_state = vars(expected)
+    if type(actual_state) is not dict or type(expected_state) is not dict:
+        return False
+    if not _has_exact_attribute_names(actual, frozenset(expected_state)):
+        return False
+    return all(actual_state[name] is expected_state[name] for name in expected_state)
 
 
 def _positive_finite(value: object) -> float | None:
@@ -413,7 +502,16 @@ def _is_owner_token(value: object) -> bool:
 
 
 def _is_canonical_fence(value: str) -> bool:
-    return bool(value) and value[0] in "123456789" and value.isascii() and value.isdigit()
+    return (
+        bool(value)
+        and value[0] in "123456789"
+        and value.isascii()
+        and value.isdigit()
+        and (
+            len(value) < len(_MAX_REDIS_INTEGER_TEXT)
+            or (len(value) == len(_MAX_REDIS_INTEGER_TEXT) and value <= _MAX_REDIS_INTEGER_TEXT)
+        )
+    )
 
 
 def _new_owner_token() -> str:
