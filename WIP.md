@@ -137,7 +137,7 @@ Branch policy:
 |---|---|---|
 | `v0.1.0` | Released core helpers, logging, testing, docs, and release preflight | Kept the default install thin and the APIs Python-native. |
 | `0.2.0` | Ecosystem package planning and first expansion tracks | Track issues #7-#34 plus serialization follow-ups #45/#46; research-first work gates broad adapters. |
-| `0.3.0` | First implementation wave after research gates | Candidate scope depends on pending decisions from #16, #21, #31, and #34; #10, #14, and #23 now constrain their implementation follow-ups. |
+| `0.3.0` | First implementation wave after research gates | Candidate scope depends on pending decisions from #21, #31, and #34; #10, #14, #16, and #23 now constrain their implementation follow-ups. |
 
 ## Task Queue
 
@@ -207,7 +207,12 @@ Historical release scope; all items are closed.
   storage-neutral, and isolate PostgreSQL transactional outbox behavior in a
   separate adapter with caller-driven relay execution.
 - #15 - Testcontainers fixture packages.
-- #16 - AWS, graph, text, and image adapter boundary research.
+- #16 - AWS, graph, text, and image adapter boundary research. Decision
+  recorded in `docs/research/2026-07-18-issue-16-adapter-boundaries.md`: keep
+  only narrow optional wrappers for bounded synchronous AWS batch behavior,
+  literal text matching/masking, and Pillow single-image transforms; prove
+  graph values and Neo4j interoperability through examples before publishing a
+  common graph API.
 - #17 - Leader election and distributed lock contracts.
 - #18 - JWT and key-rotation helpers.
 - #19 - Rules, workflow, batch, and work-report primitives.
@@ -227,10 +232,14 @@ Historical release scope; all items are closed.
 - #77 - PostgreSQL transactional audit outbox adapter with caller-transaction
   enqueue, bounded lease-backed claim/mark operations, at-least-once delivery,
   and caller-driven relay execution.
-- #26 - AWS integration provider packages.
-- #27 - Graph package and backend conformance suites.
-- #28 - Text search, tokenizer, and masking packages.
-- #29 - Image and media helper packages.
+- #26 - Narrow synchronous Boto3 proof for SQS partial results, DynamoDB
+  unprocessed-item handling, and at most one proven S3 envelope/checksum helper.
+- #27 - Bounded graph value and interoperability proof using direct NetworkX
+  and official Neo4j driver integration; multi-backend conformance is deferred.
+- #28 - Optional bounded literal multi-pattern matching and union-based masking;
+  tokenizer and language-detection abstractions are excluded.
+- #29 - Optional bounded Pillow single-image transform proof; pyvips, barcode,
+  OCR, CAPTCHA, storage, and framework integration are excluded.
 - #30 - SQLAlchemy Core toolkit and explicit application repository helpers;
   outbox storage and encrypted-column work are excluded from the first slice.
 - #31 - Geo, spatial, and statistics utility scope research.
@@ -249,8 +258,11 @@ Research notes belong under `docs/research/` and should be linked from
   boundaries, PostgreSQL outbox isolation, and the required Testcontainers
   fixture boundary. Implementation remains split across #15, narrowed #25,
   narrowed #30, and focused PostgreSQL outbox issue #77.
-- #16 must decide whether AWS, graph, text, and image work should be first-class
-  packages, optional adapters, or examples only.
+- #16 decided that AWS, literal text matching, and Pillow transforms may proceed
+  only as narrow optional light wrappers; graph begins with direct dependency
+  examples and earns shared values only after two independent consumers.
+  Existing issues #26-#29 own the narrowed proofs; broad service/backend/model/
+  codec surfaces remain 0.2.x non-goals.
 - #21 must decide ASGI/FastAPI/framework adapter boundaries, request-context
   ownership, RFC 7807 scope, and middleware conformance expectations.
 - #23 decided stdlib logging hook boundaries, a separate API-only optional
