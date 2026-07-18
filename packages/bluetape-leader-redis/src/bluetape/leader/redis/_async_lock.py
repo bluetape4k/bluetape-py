@@ -14,6 +14,7 @@ from bluetape.leader import (
     FencedLeaderLease,
     LeaderBackendError,
     LeaderElectionOptions,
+    LeaderError,
     LeaderExecutionError,
     LeaderLeaseLostError,
     LeaderReleaseError,
@@ -288,7 +289,20 @@ class _AsyncRedisLockLease:
                     raise LeaderLeaseLostError()
                 if isinstance(outcome, RenewBackendFailure):
                     raise outcome.cause
-                self._renew_task = asyncio.create_task(self._renew_loop())
+                renew_coroutine = self._renew_loop()
+                try:
+                    self._renew_task = asyncio.create_task(renew_coroutine)
+                except BaseException as start_failure:
+                    renew_coroutine.close()
+                    _, cleanup_failure = await self._await_cleanup(scoped=True, first_cancel=None)
+                    if cleanup_failure is None:
+                        raise start_failure
+                    if isinstance(start_failure, Exception) and isinstance(
+                        cleanup_failure, LeaderError
+                    ):
+                        raise LeaderExecutionError(start_failure, cleanup_failure) from None
+                    start_failure.add_note("leader lifecycle cleanup failed")
+                    raise start_failure
             elif not await self.is_held():
                 raise LeaderLeaseLostError()
         except (KeyboardInterrupt, SystemExit, GeneratorExit) as process_control:
@@ -338,7 +352,15 @@ class _AsyncRedisLockLease:
         first_cancel: asyncio.CancelledError | None,
     ) -> tuple[asyncio.CancelledError | None, BaseException | None]:
         if self._cleanup_task is None:
-            self._cleanup_task = asyncio.create_task(self._release(scoped=scoped))
+            cleanup_coroutine = self._release(scoped=scoped)
+            try:
+                self._cleanup_task = asyncio.create_task(cleanup_coroutine)
+            except BaseException:
+                cleanup_coroutine.close()
+                failure = LeaderBackendError()
+                self._state = "UNKNOWN"
+                self._failure = failure
+                return first_cancel, failure
         completed, first_cancel = await self._wait_task(
             self._cleanup_task, self._timing.release, first_cancel
         )

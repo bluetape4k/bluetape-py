@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from datetime import timedelta
 from typing import Any
 
@@ -580,6 +581,87 @@ async def test_entry_process_control_awaits_one_cleanup_and_preserves_identity(
     assert handle._cleanup_task is retained[0] and retained[0].done()
     assert handle._renew_task is None
     assert handle._state == "RELEASED"
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.parametrize("release_response", [[b"DELETED"], [b"CORRUPT"]])
+@pytest.mark.asyncio
+async def test_renew_task_start_failure_closes_coroutine_and_settles_cleanup(
+    release_response: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], release_response])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    start_error = RuntimeError("renew start marker")
+    captured: list[object] = []
+    original_create_task = asyncio.create_task
+
+    def fail_renew_start(coroutine: object) -> asyncio.Task[object]:
+        if "_renew_loop" in coroutine.cr_code.co_qualname:  # type: ignore[attr-defined]
+            captured.append(coroutine)
+            raise start_error
+        return original_create_task(coroutine)  # type: ignore[arg-type,return-value]
+
+    monkeypatch.setattr(asyncio, "create_task", fail_renew_start)
+
+    if release_response == [b"DELETED"]:
+        with pytest.raises(RuntimeError) as caught:
+            await handle.__aenter__()
+        assert caught.value is start_error
+        assert handle._state == "RELEASED"
+    else:
+        with pytest.raises(LeaderExecutionError) as caught:
+            await handle.__aenter__()
+        assert caught.value.action_cause is start_error
+        assert isinstance(caught.value.lifecycle_cause, LeaderBackendError)
+        assert "CORRUPT" not in str(caught.value)
+        assert handle._state == "UNKNOWN"
+
+    assert len(captured) == 1
+    assert inspect.getcoroutinestate(captured[0]) == inspect.CORO_CLOSED
+    assert handle._renew_task is None
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.asyncio
+async def test_global_task_start_failure_closes_both_coroutines_and_falls_back_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"]])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    start_error = RuntimeError("renew start marker")
+    captured: list[object] = []
+
+    def fail_every_task(coroutine: object) -> asyncio.Task[object]:
+        captured.append(coroutine)
+        if len(captured) == 1:
+            raise start_error
+        raise RuntimeError("secret cleanup task marker")
+
+    monkeypatch.setattr(asyncio, "create_task", fail_every_task)
+
+    with pytest.raises(LeaderExecutionError) as caught:
+        await handle.__aenter__()
+
+    assert caught.value.action_cause is start_error
+    assert isinstance(caught.value.lifecycle_cause, LeaderBackendError)
+    assert "secret" not in str(caught.value)
+    assert len(captured) == 2
+    assert all(inspect.getcoroutinestate(item) == inspect.CORO_CLOSED for item in captured)
+    assert handle._renew_task is None
+    assert handle._cleanup_task is None
+    assert handle._state == "UNKNOWN"
     assert asyncio.all_tasks() == baseline
 
 
