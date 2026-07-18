@@ -3,4 +3,4 @@
 from ._async_lock import AsyncRedisDistributedLock
 from ._lock import RedisDistributedLock
 
-__all__ = ["AsyncRedisDistributedLock", "RedisDistributedLock"]
+__all__ = ["RedisDistributedLock", "AsyncRedisDistributedLock"]  # noqa: RUF022

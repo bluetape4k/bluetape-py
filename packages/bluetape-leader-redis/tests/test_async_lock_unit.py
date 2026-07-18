@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from typing import Any
 
 import pytest
 from bluetape.leader import (
@@ -72,6 +73,16 @@ class AsyncBlockingEffect:
         if isinstance(self.response, BaseException):
             raise self.response
         return self.response
+
+
+class CountingTask(asyncio.Task[Any]):
+    def __init__(self, coroutine: object, *, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(coroutine, loop=loop)  # type: ignore[arg-type]
+        self.cancel_calls = 0
+
+    def cancel(self, msg: object = None) -> bool:
+        self.cancel_calls += 1
+        return super().cancel(msg)
 
 
 TIMING = _Timing(0, 0.01, 0.02, 0.04, 0.06, 0.04, 0.04, 0.1)
@@ -316,6 +327,7 @@ async def test_async_uncertain_release_same_owner_repeats_once_with_remaining_tt
 
 @pytest.mark.asyncio
 async def test_renew_task_lifecycle_cancels_stall_by_absolute_terminal_deadline() -> None:
+    baseline = asyncio.all_tasks()
     clock = AsyncClock()
     stalled = AsyncBlockingEffect([b"RENEWED"])
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled])
@@ -325,15 +337,105 @@ async def test_renew_task_lifecycle_cancels_stall_by_absolute_terminal_deadline(
     assert handle is not None
     entered = await handle.__aenter__()
     await asyncio.wait_for(stalled.entered.wait(), 0.2)
-    started = asyncio.get_running_loop().time()
+    await asyncio.sleep(TIMING.renew + 0.11)
+
+    assert handle._renew_task is not None and handle._renew_task.done()
 
     with pytest.raises(LeaderBackendError):
         await entered.__aexit__(None, None, None)
 
-    assert asyncio.get_running_loop().time() - started < TIMING.renew + 0.15
-    assert handle._renew_task is not None and handle._renew_task.done()
-    assert handle._cleanup_task is None
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert asyncio.all_tasks() == baseline
     assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
+
+
+@pytest.mark.asyncio
+async def test_caller_cancellation_survives_timed_out_renew_and_restores_task_baseline() -> None:
+    loop = asyncio.get_running_loop()
+    baseline = asyncio.all_tasks()
+    created: list[CountingTask] = []
+    previous_factory = loop.get_task_factory()
+
+    def task_factory(loop: asyncio.AbstractEventLoop, coroutine: object) -> CountingTask:
+        task = CountingTask(coroutine, loop=loop)
+        created.append(task)
+        return task
+
+    loop.set_task_factory(task_factory)
+    try:
+        clock = AsyncClock()
+        stalled = AsyncBlockingEffect([b"RENEWED"])
+        commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled])
+        handle = await new_lock(commands, clock).try_acquire(
+            "job", options(auto_renew=True, renew_interval=0.01)
+        )
+        assert handle is not None
+        body_started = asyncio.Event()
+        body_cancel: list[asyncio.CancelledError] = []
+        owner_cancel: list[asyncio.CancelledError] = []
+
+        async def owner() -> None:
+            try:
+                async with handle:
+                    body_started.set()
+                    try:
+                        await asyncio.Event().wait()
+                    except asyncio.CancelledError as error:
+                        body_cancel.append(error)
+                        raise
+            except asyncio.CancelledError as error:
+                owner_cancel.append(error)
+                raise
+
+        task = asyncio.create_task(owner())
+        await asyncio.wait_for(body_started.wait(), 0.2)
+        await asyncio.wait_for(stalled.entered.wait(), 0.2)
+        task.cancel("first caller cancel")
+        await asyncio.sleep(0)
+        task.cancel("second caller cancel")
+
+        with pytest.raises(asyncio.CancelledError) as caught:
+            await task
+
+        assert body_cancel and caught.value is body_cancel[0]
+        assert len(owner_cancel) == 1 and owner_cancel[0] is caught.value
+        assert caught.value.args == ("first caller cancel",)
+        assert caught.value.__notes__ == ["leader lifecycle renew failed"]
+        assert handle._renew_task is not None and handle._renew_task.done()
+        assert handle._cleanup_task is not None and handle._cleanup_task.done()
+        assert isinstance(handle._renew_task, CountingTask)
+        assert isinstance(handle._cleanup_task, CountingTask)
+        assert handle._renew_task.cancel_calls <= 1
+        assert handle._cleanup_task.cancel_calls <= 1
+        assert asyncio.all_tasks() == baseline
+    finally:
+        loop.set_task_factory(previous_factory)
+
+
+@pytest.mark.asyncio
+async def test_successful_auto_renew_clears_command_deadline_before_exit() -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    commands = AsyncCommands(
+        evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"RENEWED"], [b"DELETED"]]
+    )
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    entered = await handle.__aenter__()
+    for _ in range(100):
+        if len(commands.calls) >= 3:
+            break
+        await asyncio.sleep(0.001)
+
+    assert len(commands.calls) == 3
+    assert handle._renew_deadline is None
+    await entered.__aexit__(None, None, None)
+
+    assert handle._renew_task is not None and handle._renew_task.done()
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert asyncio.all_tasks() == baseline
 
 
 @pytest.mark.asyncio
@@ -413,6 +515,17 @@ async def test_repeated_cancellation_keeps_first_owner_cancel_and_same_task(
 
 @pytest.mark.asyncio
 async def test_release_deadline_cancels_retained_task_and_leaves_zero_pending() -> None:
+    loop = asyncio.get_running_loop()
+    baseline = asyncio.all_tasks()
+    created: list[CountingTask] = []
+    previous_factory = loop.get_task_factory()
+
+    def task_factory(loop: asyncio.AbstractEventLoop, coroutine: object) -> CountingTask:
+        task = CountingTask(coroutine, loop=loop)
+        created.append(task)
+        return task
+
+    loop.set_task_factory(task_factory)
     clock = AsyncClock()
     stalled = AsyncBlockingEffect([b"DELETED"])
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"HELD"], stalled])
@@ -423,11 +536,17 @@ async def test_release_deadline_cancels_retained_task_and_leaves_zero_pending() 
     await asyncio.wait_for(stalled.entered.wait(), 0.2)
     started = asyncio.get_running_loop().time()
 
-    with pytest.raises(LeaderBackendError) as caught:
-        await exit_task
+    try:
+        with pytest.raises(LeaderBackendError) as caught:
+            await exit_task
+    finally:
+        loop.set_task_factory(previous_factory)
 
     assert asyncio.get_running_loop().time() - started < TIMING.release + 0.15
     assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert isinstance(handle._cleanup_task, CountingTask)
+    assert handle._cleanup_task.cancel_calls == 1
+    assert asyncio.all_tasks() == baseline
     terminal_calls = len(commands.calls)
     with pytest.raises(LeaderBackendError) as later:
         await handle.release()
