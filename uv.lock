@@ -15,6 +15,8 @@ members = [
     "bluetape-compression",
     "bluetape-core",
     "bluetape-id",
+    "bluetape-leader",
+    "bluetape-leader-redis",
     "bluetape-logging",
     "bluetape-measure",
     "bluetape-money",
@@ -43,6 +45,7 @@ all = [
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
     { name = "bluetape-id" },
+    { name = "bluetape-leader" },
     { name = "bluetape-logging" },
     { name = "bluetape-measure" },
     { name = "bluetape-money" },
@@ -92,6 +95,7 @@ dev = [
     { name = "bluetape-collections" },
     { name = "bluetape-compression" },
     { name = "bluetape-id" },
+    { name = "bluetape-leader" },
     { name = "bluetape-logging" },
     { name = "bluetape-measure" },
     { name = "bluetape-money" },
@@ -105,6 +109,12 @@ fory = [
 ]
 id = [
     { name = "bluetape-id" },
+]
+leader = [
+    { name = "bluetape-leader" },
+]
+leader-redis = [
+    { name = "bluetape-leader-redis" },
 ]
 logging = [
     { name = "bluetape-logging" },
@@ -163,6 +173,10 @@ requires-dist = [
     { name = "bluetape-id", marker = "extra == 'dev'", editable = "packages/bluetape-id" },
     { name = "bluetape-id", marker = "extra == 'id'", editable = "packages/bluetape-id" },
     { name = "bluetape-id", marker = "extra == 'values'", editable = "packages/bluetape-id" },
+    { name = "bluetape-leader", marker = "extra == 'all'", editable = "packages/bluetape-leader" },
+    { name = "bluetape-leader", marker = "extra == 'dev'", editable = "packages/bluetape-leader" },
+    { name = "bluetape-leader", marker = "extra == 'leader'", editable = "packages/bluetape-leader" },
+    { name = "bluetape-leader-redis", marker = "extra == 'leader-redis'", editable = "packages/bluetape-leader-redis" },
     { name = "bluetape-logging", marker = "extra == 'all'", editable = "packages/bluetape-logging" },
     { name = "bluetape-logging", marker = "extra == 'dev'", editable = "packages/bluetape-logging" },
     { name = "bluetape-logging", marker = "extra == 'logging'", editable = "packages/bluetape-logging" },
@@ -188,7 +202,7 @@ requires-dist = [
     { name = "bluetape-testing", marker = "extra == 'dev'", editable = "packages/bluetape-testing" },
     { name = "bluetape-testing", marker = "extra == 'testing'", editable = "packages/bluetape-testing" },
 ]
-provides-extras = ["asyncio", "audit", "cache", "cache-redis", "codec", "collections", "compression", "compression-lz4", "compression-native", "compression-snappy", "compression-zstd", "id", "logging", "measure", "money", "resilience", "serde", "fory", "testing", "testcontainers", "dev", "all", "values"]
+provides-extras = ["asyncio", "audit", "cache", "cache-redis", "codec", "collections", "compression", "compression-lz4", "compression-native", "compression-snappy", "compression-zstd", "id", "leader", "leader-redis", "logging", "measure", "money", "resilience", "serde", "fory", "testing", "testcontainers", "dev", "all", "values"]
 
 [[package]]
 name = "bluetape-async"
@@ -312,6 +326,40 @@ version = "0.1.0"
 source = { editable = "packages/bluetape-id" }
 
 [[package]]
+name = "bluetape-leader"
+version = "0.1.0"
+source = { editable = "packages/bluetape-leader" }
+
+[[package]]
+name = "bluetape-leader-redis"
+version = "0.1.0"
+source = { editable = "packages/bluetape-leader-redis" }
+dependencies = [
+    { name = "bluetape-leader" },
+    { name = "redis" },
+]
+
+[package.dev-dependencies]
+test = [
+    { name = "bluetape-testcontainers" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bluetape-leader", editable = "packages/bluetape-leader" },
+    { name = "redis", specifier = "==8.0.1" },
+]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "bluetape-testcontainers", editable = "packages/bluetape-testcontainers" },
+    { name = "pytest", specifier = ">=8.4.0" },
+    { name = "pytest-asyncio", specifier = ">=1.1.0" },
+]
+
+[[package]]
 name = "bluetape-logging"
 version = "0.1.0"
 source = { editable = "packages/bluetape-logging" }
@@ -369,6 +417,8 @@ dependencies = [
     { name = "bluetape-compression" },
     { name = "bluetape-core" },
     { name = "bluetape-id" },
+    { name = "bluetape-leader" },
+    { name = "bluetape-leader-redis" },
     { name = "bluetape-logging" },
     { name = "bluetape-measure" },
     { name = "bluetape-money" },
@@ -397,6 +447,8 @@ requires-dist = [
     { name = "bluetape-compression", editable = "packages/bluetape-compression" },
     { name = "bluetape-core", editable = "packages/bluetape-core" },
     { name = "bluetape-id", editable = "packages/bluetape-id" },
+    { name = "bluetape-leader", editable = "packages/bluetape-leader" },
+    { name = "bluetape-leader-redis", editable = "packages/bluetape-leader-redis" },
     { name = "bluetape-logging", editable = "packages/bluetape-logging" },
     { name = "bluetape-measure", editable = "packages/bluetape-measure" },
     { name = "bluetape-money", editable = "packages/bluetape-money" },
