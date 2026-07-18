@@ -119,10 +119,12 @@ class _RedisLockLease:
                 )
                 status = _parse_status_response(raw, frozenset({"RENEWED", "NOT_HELD", "CORRUPT"}))
             except Exception:
+                self._raise_if_unknown()
                 failure = LeaderBackendError()
                 self._state = "UNKNOWN"
                 self._failure = failure
                 return RenewBackendFailure(failure)
+            self._raise_if_unknown()
             if status == "RENEWED":
                 return Renewed(None)
             if status == "NOT_HELD":
@@ -138,6 +140,7 @@ class _RedisLockLease:
             self._raise_if_unknown()
             if self._state in ("LOST", "RELEASED"):
                 return False
+            backend_failed = False
             try:
                 raw = _run_script(
                     self._commands,
@@ -147,6 +150,8 @@ class _RedisLockLease:
                 )
                 status = _parse_status_response(raw, frozenset({"HELD", "NOT_HELD", "CORRUPT"}))
             except Exception:
+                backend_failed = True
+            if backend_failed:
                 self._fail_unknown(LeaderBackendError())
             if status == "HELD":
                 return True
@@ -172,12 +177,18 @@ class _RedisLockLease:
                 if scoped:
                     raise LeaderLeaseLostError()
                 raise LeaderReleaseError()
+            uncertain = False
+            backend_failed = False
             try:
                 status = self._dispatch_release()
             except _UNCERTAIN_ERRORS:
+                uncertain = True
+            except Exception:
+                backend_failed = True
+            if uncertain:
                 self._reconcile_release(scoped=scoped)
                 return
-            except Exception:
+            if backend_failed:
                 self._fail_unknown(LeaderBackendError())
             self._finish_release_status(status, scoped=scoped)
 
@@ -200,11 +211,14 @@ class _RedisLockLease:
         return 0 if remaining_ns <= 0 else (remaining_ns + 999_999) // 1_000_000
 
     def _reconcile_release(self, *, scoped: bool) -> None:
+        reconcile_failed = False
         try:
             status, record = _parse_reconcile_response(
                 _run_reconcile(self._commands, self._lease_key)
             )
         except Exception:
+            reconcile_failed = True
+        if reconcile_failed:
             self._fail_unknown(LeaderBackendError())
         if status == "ABSENT":
             self._fail_unknown(LeaderReleaseError())
@@ -215,11 +229,17 @@ class _RedisLockLease:
             if scoped:
                 raise LeaderLeaseLostError()
             raise LeaderReleaseError()
+        uncertain = False
+        backend_failed = False
         try:
             repeat_status = self._dispatch_release()
         except _UNCERTAIN_ERRORS:
-            self._fail_unknown(LeaderReleaseError())
+            uncertain = True
         except Exception:
+            backend_failed = True
+        if uncertain:
+            self._fail_unknown(LeaderReleaseError())
+        if backend_failed:
             self._fail_unknown(LeaderBackendError())
         self._finish_release_status(repeat_status, scoped=scoped)
 
@@ -295,14 +315,17 @@ class _RedisLockLease:
             daemon=False,
         )
         self._worker = worker
+        start_failed = False
         try:
             worker.start()
         except Exception:
+            start_failed = True
+        if start_failed:
             if worker.is_alive():
                 self._fail_unknown(LeaderBackendError())
             self._worker = None
             self._release(scoped=True)
-            raise LeaderBackendError() from None
+            raise LeaderBackendError()
 
     def _stop_worker(self) -> None:
         worker = self._worker
@@ -323,8 +346,9 @@ class _RedisLockLease:
                 outcome = self.renew()
             except BaseException:
                 with self._lock:
-                    self._state = "UNKNOWN"
-                    self._failure = LeaderBackendError()
+                    if self._state != "UNKNOWN":
+                        self._state = "UNKNOWN"
+                        self._failure = LeaderBackendError()
                 self._stop_event.set()
                 return
             if isinstance(outcome, (NotHeld, RenewBackendFailure)):
@@ -401,6 +425,8 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
                 return None
             attempted = True
             acquired_ns = self._monotonic_ns()
+            uncertain = False
+            backend_failed = False
             try:
                 raw = _run_script(
                     self._commands,
@@ -410,20 +436,25 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
                 )
                 status, fencing_token = _parse_acquire_response(raw)
             except _UNCERTAIN_ERRORS:
+                uncertain = True
+            except Exception:
+                backend_failed = True
+            if uncertain:
                 return self._reconcile_acquire(
                     keys.lease.encode(), owner_token, options, acquired_ns
                 )
-            except Exception:
-                raise LeaderBackendError() from None
+            if backend_failed:
+                raise LeaderBackendError()
             if status == "ACQUIRED" and fencing_token is not None:
                 return self._new_handle(
                     keys.lease.encode(), owner_token, fencing_token, options, acquired_ns
                 )
             if status != "CONTENDED":
                 raise LeaderBackendError()
-            if self._monotonic_ns() >= deadline:
+            remaining_ns = deadline - self._monotonic_ns()
+            if remaining_ns <= 0:
                 return None
-            remaining = (deadline - self._monotonic_ns()) / 1_000_000_000
+            remaining = remaining_ns / 1_000_000_000
             delay = self._jitter()
             if type(delay) not in (int, float) or not 0.04 <= delay <= 0.06:
                 raise RuntimeError("Redis acquisition jitter is invalid")
@@ -436,10 +467,13 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
         options: LeaderElectionOptions,
         acquired_ns: int,
     ) -> LockLease[FencedLeaderLease]:
+        backend_failed = False
         try:
             status, record = _parse_reconcile_response(_run_reconcile(self._commands, lease_key))
         except Exception:
-            raise LeaderBackendError() from None
+            backend_failed = True
+        if backend_failed:
+            raise LeaderBackendError()
         if (
             status != "PRESENT"
             or record is None
