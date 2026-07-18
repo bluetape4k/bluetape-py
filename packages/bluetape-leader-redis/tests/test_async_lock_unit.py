@@ -539,6 +539,50 @@ async def test_entry_cancellation_awaits_one_cleanup_and_preserves_identity(
     assert asyncio.all_tasks() == baseline
 
 
+@pytest.mark.parametrize("auto_renew", [False, True])
+@pytest.mark.parametrize("error_type", [KeyboardInterrupt, SystemExit, GeneratorExit])
+@pytest.mark.asyncio
+async def test_entry_process_control_awaits_one_cleanup_and_preserves_identity(
+    auto_renew: bool,
+    error_type: type[BaseException],
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    marker = error_type("entry process control")
+    blocked_proof = AsyncBlockingEffect(marker)
+    blocked_cleanup = AsyncBlockingEffect([b"DELETED"])
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], blocked_proof, blocked_cleanup])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job",
+        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+    )
+    assert handle is not None
+    retained: list[asyncio.Task[None]] = []
+
+    async def drive_proof_and_cleanup() -> None:
+        await blocked_proof.entered.wait()
+        blocked_proof.release.set()
+        await asyncio.wait_for(blocked_cleanup.entered.wait(), 0.2)
+        assert handle._cleanup_task is not None
+        retained.append(handle._cleanup_task)
+        blocked_cleanup.release.set()
+
+    driver = asyncio.create_task(drive_proof_and_cleanup())
+    caught: BaseException | None = None
+    try:
+        await handle.__aenter__()
+    except BaseException as error:
+        caught = error
+    await driver
+
+    assert caught is marker
+    assert len(retained) == 1
+    assert handle._cleanup_task is retained[0] and retained[0].done()
+    assert handle._renew_task is None
+    assert handle._state == "RELEASED"
+    assert asyncio.all_tasks() == baseline
+
+
 @pytest.mark.asyncio
 async def test_explicit_release_waits_for_inflight_renew_and_exit_reuses_cleanup() -> None:
     clock = AsyncClock()
