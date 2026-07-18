@@ -22,9 +22,7 @@ def test_adapter_distribution_has_exact_runtime_dependencies_and_uses_uv_build()
         "requires": ["uv_build>=0.11.28,<0.12"],
         "build-backend": "uv_build",
     }
-    assert metadata["tool"]["uv"]["build-backend"]["module-name"] == (
-        "bluetape.leader.redis"
-    )
+    assert metadata["tool"]["uv"]["build-backend"]["module-name"] == ("bluetape.leader.redis")
 
 
 def test_workspace_registers_the_adapter_distribution() -> None:
@@ -54,12 +52,8 @@ def test_lock_resolves_exact_adapter_runtime_dependencies() -> None:
 
 
 def test_initial_readmes_reserve_only_the_adapter_boundary() -> None:
-    english = " ".join(
-        (ROOT / "packages/bluetape-leader-redis/README.md").read_text().split()
-    )
-    korean = " ".join(
-        (ROOT / "packages/bluetape-leader-redis/README.ko.md").read_text().split()
-    )
+    english = " ".join((ROOT / "packages/bluetape-leader-redis/README.md").read_text().split())
+    korean = " ".join((ROOT / "packages/bluetape-leader-redis/README.ko.md").read_text().split())
 
     assert "The current package only reserves the Redis adapter namespace." in english
     assert "Redis lock and leader behavior are not implemented yet." in english
