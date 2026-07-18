@@ -169,13 +169,14 @@ def _validated_sync_client(client: redis.Redis) -> _Timing:
     _validate_empty_pool(pool)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
-    _validate_response_callbacks(client, pool.connection_kwargs)
-    return _validate_pool(
+    timing = _validate_pool(
         pool.connection_class,
         pool.connection_kwargs,
         pool.max_connections,
         sync=True,
     )
+    _validate_response_callbacks(client, pool.connection_kwargs)
+    return timing
 
 
 def _validated_async_client(client: async_redis.Redis) -> _Timing:
@@ -207,16 +208,17 @@ def _validated_async_client(client: async_redis.Redis) -> _Timing:
     _validate_empty_pool(pool)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
-    _validate_response_callbacks(client, pool.connection_kwargs)
     connection_class = pool.connection_class
-    if connection_class not in (AsyncConnection, AsyncUnixConnection):
+    if connection_class is not AsyncConnection and connection_class is not AsyncUnixConnection:
         raise TypeError(_UNSUPPORTED_CLIENT)
-    return _validate_pool(
+    timing = _validate_pool(
         connection_class,
         pool.connection_kwargs,
         pool.max_connections,
         sync=False,
     )
+    _validate_response_callbacks(client, pool.connection_kwargs)
+    return timing
 
 
 def _validate_pool(
@@ -233,25 +235,32 @@ def _validate_pool(
         UnixDomainSocketConnection as AsyncUnixConnection,
     )
 
-    allowed_classes = (
-        (SyncConnection, SyncUnixConnection) if sync else (AsyncConnection, AsyncUnixConnection)
-    )
-    if connection_class not in allowed_classes:
+    is_sync_tcp = sync and connection_class is SyncConnection
+    is_sync_unix = sync and connection_class is SyncUnixConnection
+    is_async_tcp = not sync and connection_class is AsyncConnection
+    is_async_unix = not sync and connection_class is AsyncUnixConnection
+    if not (is_sync_tcp or is_sync_unix or is_async_tcp or is_async_unix):
         raise TypeError(_UNSUPPORTED_CLIENT)
-    if type(options) is not dict or set(options) != _required_option_keys(connection_class):
+    required_keys = _required_option_keys(connection_class)
+    if (
+        type(options) is not dict
+        or len(options) != len(required_keys)
+        or any(type(key) is not str or key not in required_keys for key in options)
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     if type(max_connections) is not int or max_connections <= 0:
         raise TypeError(_UNSUPPORTED_CLIENT)
 
     connect_timeout = _positive_finite(
         options.get("socket_connect_timeout", 5.0)
-        if connection_class in (SyncUnixConnection, AsyncUnixConnection)
+        if is_sync_unix or is_async_unix
         else options.get("socket_connect_timeout")
     )
     socket_timeout = _positive_finite(options.get("socket_timeout"))
     if connect_timeout is None or socket_timeout is None:
         raise TypeError(_UNSUPPORTED_CLIENT)
-    if options.get("health_check_interval") != 0:
+    health_check_interval = options.get("health_check_interval")
+    if type(health_check_interval) is not int or health_check_interval != 0:
         raise TypeError(_UNSUPPORTED_CLIENT)
     retry_errors = options.get("retry_on_error")
     if retry_errors is not None and (type(retry_errors) is not list or retry_errors):
@@ -265,7 +274,11 @@ def _validate_pool(
         raise TypeError(_UNSUPPORTED_CLIENT)
     if options.get("decode_responses") is not False:
         raise TypeError(_UNSUPPORTED_CLIENT)
-    if options.get("encoding") != "utf-8" or options.get("encoding_errors") != "strict":
+    encoding = options.get("encoding")
+    encoding_errors = options.get("encoding_errors")
+    if type(encoding) is not str or encoding != "utf-8":
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if type(encoding_errors) is not str or encoding_errors != "strict":
         raise TypeError(_UNSUPPORTED_CLIENT)
     if options.get("legacy_responses") is not True:
         raise TypeError(_UNSUPPORTED_CLIENT)
@@ -273,11 +286,7 @@ def _validate_pool(
     if type(read_size) is not int or read_size <= 0:
         raise TypeError(_UNSUPPORTED_CLIENT)
     driver_info = options.get("driver_info")
-    if type(driver_info) is not DriverInfo or vars(driver_info) != {
-        "name": "redis-py",
-        "lib_version": redis.__version__,
-        "_upstream": [],
-    }:
+    if not _valid_driver_info(driver_info):
         raise TypeError(_UNSUPPORTED_CLIENT)
 
     protocol = options.get("protocol")
@@ -297,7 +306,7 @@ def _validate_pool(
     elif not _nonempty_credential(username) or not _nonempty_credential(password):
         raise TypeError(_UNSUPPORTED_CLIENT)
 
-    if connection_class in (SyncConnection, AsyncConnection):
+    if is_sync_tcp or is_async_tcp:
         host = options.get("host")
         if type(host) is not str:
             raise TypeError(_UNSUPPORTED_CLIENT)
@@ -325,7 +334,7 @@ def _validate_pool(
             raise TypeError(_UNSUPPORTED_CLIENT)
 
     handshake = len(_handshake_commands(options))
-    if not sync and connection_class is AsyncUnixConnection:
+    if is_async_unix:
         handshake *= 2
     return _timing(handshake, connect_timeout, socket_timeout, pool_wait=0.0)
 
@@ -349,12 +358,39 @@ def _handshake_commands(options: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def _maintenance_disabled(value: object) -> bool:
-    return value is None or (
-        type(value) is MaintNotificationsConfig
-        and value.enabled is False
-        and value.proactive_reconnect is False
-        and value.relaxed_timeout == -1
-        and value.endpoint_type is None
+    if value is None:
+        return True
+    if type(value) is not MaintNotificationsConfig or not _has_exact_attribute_names(
+        value, frozenset({"enabled", "relaxed_timeout", "proactive_reconnect", "endpoint_type"})
+    ):
+        return False
+    state = vars(value)
+    relaxed_timeout = state["relaxed_timeout"]
+    return (
+        state["enabled"] is False
+        and state["proactive_reconnect"] is False
+        and type(relaxed_timeout) is int
+        and relaxed_timeout == -1
+        and state["endpoint_type"] is None
+    )
+
+
+def _valid_driver_info(value: object) -> bool:
+    if type(value) is not DriverInfo or not _has_exact_attribute_names(
+        value, frozenset({"name", "lib_version", "_upstream"})
+    ):
+        return False
+    state = vars(value)
+    name = state["name"]
+    lib_version = state["lib_version"]
+    upstream = state["_upstream"]
+    return (
+        type(name) is str
+        and name == "redis-py"
+        and type(lib_version) is str
+        and lib_version == redis.__version__
+        and type(upstream) is list
+        and not upstream
     )
 
 
@@ -384,7 +420,7 @@ def _required_option_keys(connection_class: type[object]) -> set[str]:
         "socket_timeout",
         "username",
     }
-    if connection_class in (SyncConnection,):
+    if connection_class is SyncConnection:
         return common | {
             "host",
             "port",
@@ -424,6 +460,11 @@ def _validate_sync_pool_identity(pool: object) -> None:
     pid = state.get("pid")
     pool_id = state.get("_pool_id")
     if type(pid) is not int or pid != os.getpid():
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if (
+        state.get("_maint_notifications_pool_handler") is not None
+        or state.get("_oss_cluster_maint_notifications_handler") is not None
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     if (
         type(pool_id) is not str
