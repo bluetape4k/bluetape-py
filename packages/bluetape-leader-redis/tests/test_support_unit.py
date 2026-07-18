@@ -361,6 +361,7 @@ async def test_sanitized_exception_graph_async_has_no_raw_backend_canary() -> No
 
 def test_sanitized_exception_graph_covers_traceback_and_composite_properties() -> None:
     marker = "redis://user:secret@127.0.0.1:6379 owner-raw-canary"
+    action_marker = "caller-owned-action-canary"
 
     def fail() -> None:
         raise RuntimeError(marker)
@@ -370,16 +371,34 @@ def test_sanitized_exception_graph_covers_traceback_and_composite_properties() -
 
     backend_error = caught.value
     renewal = RenewBackendFailure(backend_error)
-    execution = LeaderExecutionError(ValueError("caller-owned action"), backend_error)
-    rendered = "".join(
-        traceback.format_exception(type(backend_error), backend_error, backend_error.__traceback__)
-    )
+    action_error = ValueError(action_marker)
+    execution = LeaderExecutionError(action_error, backend_error)
+    try:
+        raise execution from None
+    except LeaderExecutionError as raised:
+        execution_traceback = "".join(
+            traceback.format_exception(type(raised), raised, raised.__traceback__)
+        )
 
     assert renewal.cause is backend_error
+    assert not isinstance(renewal, BaseException)
+    assert getattr(renewal, "args", ()) == ()
+    assert getattr(renewal, "__cause__", None) is None
+    assert getattr(renewal, "__context__", None) is None
+    assert getattr(renewal, "__notes__", []) == []
     assert execution.lifecycle_cause is backend_error
-    assert marker not in rendered
-    assert marker not in repr(renewal)
-    assert marker not in repr(execution)
+    assert execution.action_cause is action_error
+    assert execution.args == ("leader action and lifecycle both failed",)
+    assert execution.__cause__ is None
+    assert execution.__context__ is None
+    assert getattr(execution, "__notes__", []) == []
+    _assert_sanitized(renewal.cause, marker)
+    _assert_sanitized(execution.lifecycle_cause, marker)
+    _assert_public_surface_sanitized(renewal, marker)
+    _assert_public_surface_sanitized(execution, marker)
+    _assert_public_surface_sanitized(execution, action_marker)
+    assert marker not in execution_traceback
+    assert action_marker not in execution_traceback
 
 
 def _assert_sanitized(error: LeaderBackendError, marker: str) -> None:
@@ -387,8 +406,27 @@ def _assert_sanitized(error: LeaderBackendError, marker: str) -> None:
     assert error.__cause__ is None
     assert error.__context__ is None
     assert getattr(error, "__notes__", []) == []
-    assert marker not in str(error)
-    assert marker not in repr(error)
+    _assert_public_surface_sanitized(error, marker)
+
+
+def _assert_public_surface_sanitized(value: object, marker: str) -> None:
+    args = getattr(value, "args", ())
+    for argument in args:
+        assert marker not in str(argument)
+        assert marker not in repr(argument)
+    for attribute in ("__cause__", "__context__"):
+        linked = getattr(value, attribute, None)
+        assert marker not in str(linked)
+        assert marker not in repr(linked)
+    notes = getattr(value, "__notes__", [])
+    for note in notes:
+        assert marker not in str(note)
+        assert marker not in repr(note)
+    assert marker not in str(value)
+    assert marker not in repr(value)
+    if isinstance(value, BaseException):
+        rendered = "".join(traceback.format_exception(type(value), value, value.__traceback__))
+        assert marker not in rendered
 
 
 def test_owner_token_uses_one_24_byte_urlsafe_entropy_call(
