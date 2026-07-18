@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from datetime import timedelta
 
@@ -18,7 +19,7 @@ from bluetape.leader import (
     Renewed,
 )
 from bluetape.leader.redis import RedisDistributedLock
-from bluetape.leader.redis._scripts import RECONCILE_SCRIPT
+from bluetape.leader.redis._scripts import ACQUIRE_SCRIPT, RECONCILE_SCRIPT
 from bluetape.leader.redis._support import _Timing
 from redis.exceptions import NoScriptError
 
@@ -36,6 +37,19 @@ class FakeClock:
         self.now += int(seconds * 1_000_000_000)
 
 
+class SequencedClock(FakeClock):
+    def __init__(self, samples: list[int]) -> None:
+        super().__init__()
+        self._samples = iter(samples)
+
+    def monotonic_ns(self) -> int:
+        return next(self._samples)
+
+    def sleep(self, seconds: float) -> None:
+        assert seconds >= 0
+        self.sleeps.append(seconds)
+
+
 class FakeCommands:
     def __init__(
         self,
@@ -48,6 +62,7 @@ class FakeCommands:
         self.eval_effects = list(eval_effects or [])
         self.after_call = after_call
         self.calls: list[tuple[object, ...]] = []
+        self.close_calls = 0
 
     def evalsha(self, sha1: str, numkeys: int, *values: bytes) -> object:
         self.calls.append(("evalsha", sha1, numkeys, *values))
@@ -60,6 +75,9 @@ class FakeCommands:
         if self.after_call is not None:
             self.after_call("eval")
         return self._next(self.eval_effects)
+
+    def close(self) -> None:
+        self.close_calls += 1
 
     @staticmethod
     def _next(effects: list[object]) -> object:
@@ -85,6 +103,8 @@ class BlockingEffect:
         self.entered.set()
         if not self.release.wait(2.0):
             raise RuntimeError("test failed to unblock worker")
+        if isinstance(self.response, BaseException):
+            raise self.response
         return self.response
 
 
@@ -136,6 +156,22 @@ def test_zero_wait_dispatches_exactly_one_acquire_with_monotonic_deadline() -> N
     assert clock.sleeps == []
 
 
+def test_repr_is_redacted_and_borrowed_client_is_never_closed() -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"DELETED"]])
+    lock = new_lock(commands, clock, token="S" * 32)
+
+    handle = lock.try_acquire("secret-lock-name", options())
+    assert handle is not None
+    handle.release()
+
+    assert repr(lock) == "RedisDistributedLock(<redacted>)"
+    assert repr(handle) == "_RedisLockLease(<redacted>)"
+    assert "secret-lock-name" not in repr(lock) + repr(handle)
+    assert "S" * 32 not in repr(lock) + repr(handle)
+    assert commands.close_calls == 0
+
+
 def test_zero_wait_generates_one_owner_token_per_public_call() -> None:
     clock = FakeClock()
     commands = FakeCommands(evalsha_effects=[[b"CONTENDED"], [b"CONTENDED"]])
@@ -182,6 +218,17 @@ def test_contention_retry_uses_jitter_inside_closed_40_to_60ms_range() -> None:
     assert [call[0] for call in commands.calls] == ["evalsha"]
 
 
+def test_contention_retry_never_sleeps_negative_when_deadline_crosses_samples() -> None:
+    clock = SequencedClock([0, 0, 99_999_999, 100_000_001])
+    commands = FakeCommands(evalsha_effects=[[b"CONTENDED"]])
+    lock = new_lock(commands, clock)
+
+    assert lock.try_acquire("job", options(wait=0.1)) is None
+
+    assert clock.sleeps == [1e-09]
+    assert [call[0] for call in commands.calls] == ["evalsha"]
+
+
 def test_uncertain_acquire_recovers_matching_owner_without_redispatch() -> None:
     clock = FakeClock()
     commands = FakeCommands(
@@ -195,6 +242,25 @@ def test_uncertain_acquire_recovers_matching_owner_without_redispatch() -> None:
     assert handle.lease.fencing_token == 9
     assert [call[0] for call in commands.calls] == ["evalsha", "eval"]
     assert commands.calls[1][1] == RECONCILE_SCRIPT.source
+
+
+def test_noscript_acquire_response_loss_reconciles_with_exact_trace() -> None:
+    clock = FakeClock()
+    commands = FakeCommands(
+        evalsha_effects=[NoScriptError()],
+        eval_effects=[
+            TimeoutError("raw response marker"),
+            [b"PRESENT", b"v1:" + b"A" * 32 + b":9"],
+        ],
+    )
+
+    handle = new_lock(commands, clock).try_acquire("job", options())
+
+    assert handle is not None
+    assert handle.lease.fencing_token == 9
+    assert [call[0] for call in commands.calls] == ["evalsha", "eval", "eval"]
+    assert commands.calls[1][1] == ACQUIRE_SCRIPT.source
+    assert commands.calls[2][1] == RECONCILE_SCRIPT.source
 
 
 @pytest.mark.parametrize(
@@ -493,37 +559,66 @@ def test_uncertain_release_minimum_ttl_starts_at_successful_acquire_attempt() ->
 
 
 @pytest.mark.parametrize(
-    ("reconciliation", "repeat", "expected_error"),
+    (
+        "reconciliation",
+        "repeat",
+        "expected_error",
+        "terminal_kind",
+        "expected_trace",
+    ),
     [
         (
             [b"PRESENT", b"v1:" + b"A" * 32 + b":7"],
             [b"NOT_HELD"],
             LeaderLeaseLostError,
+            "lost",
+            ["evalsha", "eval", "evalsha"],
         ),
         (
             [b"PRESENT", b"v1:" + b"A" * 32 + b":7"],
             [b"CORRUPT"],
             LeaderBackendError,
+            "unknown",
+            ["evalsha", "eval", "evalsha"],
+        ),
+        (
+            [b"PRESENT", b"v1:" + b"A" * 32 + b":7"],
+            ValueError("ordinary secret"),
+            LeaderBackendError,
+            "unknown",
+            ["evalsha", "eval", "evalsha"],
         ),
         (
             [b"PRESENT", b"v1:" + b"A" * 32 + b":7"],
             TimeoutError("second secret"),
             LeaderReleaseError,
+            "unknown",
+            ["evalsha", "eval", "evalsha"],
         ),
-        ([b"ABSENT"], None, LeaderReleaseError),
+        ([b"ABSENT"], None, LeaderReleaseError, "unknown", ["evalsha", "eval"]),
         (
             [b"PRESENT", b"v1:" + b"B" * 32 + b":8"],
             None,
             LeaderLeaseLostError,
+            "lost",
+            ["evalsha", "eval"],
         ),
-        ([b"CORRUPT"], None, LeaderBackendError),
-        (TimeoutError("reconcile secret"), None, LeaderBackendError),
+        ([b"CORRUPT"], None, LeaderBackendError, "unknown", ["evalsha", "eval"]),
+        (
+            TimeoutError("reconcile secret"),
+            None,
+            LeaderBackendError,
+            "unknown",
+            ["evalsha", "eval"],
+        ),
     ],
 )
 def test_uncertain_release_scoped_cleanup_matrix(
     reconciliation: object,
     repeat: object | None,
     expected_error: type[Exception],
+    terminal_kind: str,
+    expected_trace: list[str],
 ) -> None:
     clock = FakeClock()
     effects: list[object] = [
@@ -538,8 +633,18 @@ def test_uncertain_release_scoped_cleanup_matrix(
     assert handle is not None
     entered = handle.__enter__()
 
-    with pytest.raises(expected_error):
+    with pytest.raises(expected_error) as caught:
         entered.__exit__(None, None, None)
+    terminal_calls = len(commands.calls)
+
+    if terminal_kind == "lost":
+        assert handle.is_held() is False
+    else:
+        with pytest.raises(expected_error) as later:
+            handle.is_held()
+        assert later.value is caught.value
+    assert len(commands.calls) == terminal_calls
+    assert [call[0] for call in commands.calls[2:]] == expected_trace
 
 
 def test_uncertain_release_scoped_same_owner_repeat_success() -> None:
@@ -632,14 +737,49 @@ def test_worker_start_failure_proves_no_worker_before_owner_checked_cleanup(
 
     monkeypatch.setattr(threading.Thread, "start", fail_start)
 
-    with pytest.raises(LeaderBackendError, match=r"^leader backend operation failed$"):
+    with pytest.raises(LeaderBackendError, match=r"^leader backend operation failed$") as caught:
         handle.__enter__()
 
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
+    assert "secret start marker" not in "".join(traceback.format_exception(caught.value))
     assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
     assert not any(
         thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
     )
     assert handle.is_held() is False
+
+
+def test_worker_start_cleanup_failure_wins_and_enters_sanitized_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"CORRUPT"]])
+    handle = new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.1)
+    )
+    assert handle is not None
+
+    def fail_start(self: threading.Thread) -> None:
+        raise RuntimeError("raw worker start marker")
+
+    monkeypatch.setattr(threading.Thread, "start", fail_start)
+
+    with pytest.raises(LeaderBackendError) as caught:
+        handle.__enter__()
+    terminal_calls = len(commands.calls)
+
+    with pytest.raises(LeaderBackendError) as later:
+        handle.is_held()
+    assert later.value is caught.value
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
+    assert "raw worker start marker" not in "".join(traceback.format_exception(caught.value))
+    assert len(commands.calls) == terminal_calls
+    assert commands.close_calls == 0
+    assert not any(
+        thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+    )
 
 
 def test_worker_crash_is_sanitized_unknown_and_never_releases() -> None:
@@ -705,6 +845,102 @@ def test_worker_join_deadline_returns_unknown_without_release_and_fixture_joins(
     assert len(commands.calls) == 3
 
 
+@pytest.mark.parametrize("late_effect", [[b"NOT_HELD"], TimeoutError("late secret")])
+def test_worker_join_deadline_unknown_cannot_be_overwritten_by_late_renew(
+    late_effect: object,
+) -> None:
+    clock = FakeClock()
+    blocked = BlockingEffect(late_effect)
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], blocked])
+    handle = new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.1)
+    )
+    assert handle is not None
+    worker: threading.Thread | None = None
+    retained: LeaderBackendError | None = None
+
+    try:
+        entered = handle.__enter__()
+        assert blocked.entered.wait(0.5)
+        worker = next(
+            thread
+            for thread in threading.enumerate()
+            if thread.name.startswith("bluetape-leader-renew-")
+        )
+        with pytest.raises(LeaderBackendError) as caught:
+            entered.__exit__(None, None, None)
+        retained = caught.value
+    finally:
+        blocked.release.set()
+        if worker is not None:
+            worker.join(0.5)
+
+    assert worker is not None and not worker.is_alive()
+    terminal_calls = len(commands.calls)
+    operations = [
+        handle.renew,
+        handle.is_held,
+        handle.assert_held,
+        handle.release,
+        handle.__enter__,
+    ]
+    for operation in operations:
+        with pytest.raises(LeaderBackendError) as later:
+            operation()
+        assert later.value is retained
+    assert len(commands.calls) == terminal_calls
+
+
+@pytest.mark.parametrize("operation", ["acquire", "probe", "release", "uncertain_release"])
+def test_exception_graph_sanitized_errors_drop_raw_backend_graph(operation: str) -> None:
+    clock = FakeClock()
+    secret = "raw" + "-backend-marker"
+    if operation == "acquire":
+        commands = FakeCommands(evalsha_effects=[TimeoutError(secret)], eval_effects=[[b"ABSENT"]])
+
+        def call() -> object:
+            return new_lock(commands, clock).try_acquire("job", options())
+    else:
+        second: object = TimeoutError(secret)
+        eval_effects: list[object] = []
+        if operation == "probe":
+            effects = [[b"ACQUIRED", b"7"], second]
+        elif operation == "release":
+            effects = [[b"ACQUIRED", b"7"], ValueError(secret)]
+        else:
+            effects = [[b"ACQUIRED", b"7"], second]
+            eval_effects = [TimeoutError(secret)]
+        commands = FakeCommands(evalsha_effects=effects, eval_effects=eval_effects)
+        handle = new_lock(commands, clock).try_acquire("job", options())
+        assert handle is not None
+        call = handle.is_held if operation == "probe" else handle.release
+
+    with pytest.raises(LeaderBackendError) as caught:
+        call()
+
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
+    assert secret not in "".join(traceback.format_exception(caught.value))
+
+
+def test_exception_graph_renew_failure_is_retained_without_raw_graph() -> None:
+    clock = FakeClock()
+    secret = "raw" + "-renew-marker"
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], TimeoutError(secret)])
+    handle = new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+
+    outcome = handle.renew()
+    assert isinstance(outcome, RenewBackendFailure)
+    with pytest.raises(LeaderBackendError) as caught:
+        handle.is_held()
+
+    assert caught.value is outcome.cause
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
+    assert secret not in "".join(traceback.format_exception(caught.value))
+
+
 def test_state_operation_matrix_reentry_is_rejected_without_disturbing_scope() -> None:
     clock = FakeClock()
     commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"HELD"], [b"DELETED"]])
@@ -760,6 +996,115 @@ def test_state_operation_matrix_manual_release_makes_later_exit_idempotent() -> 
 
     assert entered.is_held() is False
     assert len(commands.calls) == terminal_calls
+
+
+@pytest.mark.parametrize("state", ["ACQUIRED", "ENTERED", "LOST", "RELEASED", "UNKNOWN"])
+@pytest.mark.parametrize("operation", ["renew", "probe", "assert", "release", "enter", "exit"])
+def test_state_operation_matrix_all_states_and_operations(
+    state: str,
+    operation: str,
+) -> None:
+    clock = FakeClock()
+    effects: list[object] = [[b"ACQUIRED", b"7"]]
+    if state == "ENTERED":
+        effects.append([b"HELD"])
+    elif state == "LOST":
+        effects.append([b"NOT_HELD"])
+    elif state == "RELEASED":
+        effects.append([b"DELETED"])
+    elif state == "UNKNOWN":
+        effects.append(TimeoutError("state setup marker"))
+
+    active_state = state in ("ACQUIRED", "ENTERED")
+    if active_state and operation == "renew":
+        effects.append([b"RENEWED"])
+    elif active_state and operation in ("probe", "assert"):
+        effects.append([b"HELD"])
+    elif active_state and operation in ("release", "exit"):
+        effects.append([b"DELETED"])
+    elif state == "ACQUIRED" and operation == "enter":
+        effects.append([b"HELD"])
+
+    commands = FakeCommands(evalsha_effects=effects)
+    handle = new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    retained: LeaderBackendError | None = None
+    if state == "ENTERED":
+        handle.__enter__()
+    elif state == "LOST":
+        assert handle.is_held() is False
+    elif state == "RELEASED":
+        handle.release()
+    elif state == "UNKNOWN":
+        with pytest.raises(LeaderBackendError) as setup_failure:
+            handle.is_held()
+        retained = setup_failure.value
+    before = len(commands.calls)
+
+    call: Callable[[], object]
+    if operation == "renew":
+        call = handle.renew
+    elif operation == "probe":
+        call = handle.is_held
+    elif operation == "assert":
+        call = handle.assert_held
+    elif operation == "release":
+        call = handle.release
+    elif operation == "enter":
+        call = handle.__enter__
+    else:
+
+        def call() -> object:
+            return handle.__exit__(None, None, None)
+
+    if state == "UNKNOWN":
+        with pytest.raises(LeaderBackendError) as caught:
+            call()
+        assert caught.value is retained
+        expected_state = "UNKNOWN"
+        expected_io = 0
+    elif state in ("LOST", "RELEASED"):
+        if operation == "renew":
+            assert isinstance(call(), NotHeld)
+        elif operation == "probe":
+            assert call() is False
+        elif operation in ("assert", "enter") or (operation == "exit" and state == "LOST"):
+            with pytest.raises(LeaderLeaseLostError):
+                call()
+        elif operation == "release":
+            with pytest.raises(LeaderReleaseError):
+                call()
+        else:
+            assert call() is None
+        expected_state = state
+        expected_io = 0
+    elif operation == "renew":
+        assert isinstance(call(), Renewed)
+        expected_state = state
+        expected_io = 1
+    elif operation == "probe":
+        assert call() is True
+        expected_state = state
+        expected_io = 1
+    elif operation == "assert":
+        assert call() is None
+        expected_state = state
+        expected_io = 1
+    elif operation == "enter" and state == "ENTERED":
+        with pytest.raises(LeaderLeaseLostError):
+            call()
+        expected_state = "ENTERED"
+        expected_io = 0
+    else:
+        assert call() is handle if operation == "enter" else call() is None
+        expected_state = "ENTERED" if operation == "enter" else "RELEASED"
+        expected_io = 1
+
+    assert handle._state == expected_state
+    assert len(commands.calls) - before == expected_io
+    assert not any(
+        thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+    )
 
 
 @pytest.mark.parametrize(
@@ -836,3 +1181,83 @@ def test_context_failure_matrix_success_with_lost_cleanup_raises_lifecycle() -> 
     with pytest.raises(LeaderLeaseLostError):
         with handle:
             pass
+
+
+@pytest.mark.parametrize("body_fails", [False, True])
+@pytest.mark.parametrize(
+    ("cleanup", "lifecycle_type", "expected_trace"),
+    [
+        ("success", None, ["evalsha", "evalsha", "evalsha"]),
+        ("worker_lost", LeaderLeaseLostError, ["evalsha", "evalsha", "evalsha"]),
+        ("worker_backend", LeaderBackendError, ["evalsha", "evalsha", "evalsha"]),
+        ("release_lost", LeaderLeaseLostError, ["evalsha", "evalsha", "evalsha"]),
+        ("release_backend", LeaderBackendError, ["evalsha", "evalsha", "evalsha"]),
+        (
+            "uncertain_release",
+            LeaderReleaseError,
+            ["evalsha", "evalsha", "evalsha", "eval"],
+        ),
+    ],
+)
+def test_context_failure_matrix_full_body_and_lifecycle_precedence(
+    body_fails: bool,
+    cleanup: str,
+    lifecycle_type: type[Exception] | None,
+    expected_trace: list[str],
+) -> None:
+    clock = FakeClock()
+    worker_terminal = threading.Event()
+
+    def observe_call(kind: str) -> None:
+        if cleanup.startswith("worker_") and kind == "evalsha" and len(commands.calls) == 3:
+            worker_terminal.set()
+
+    eval_effects: list[object] = []
+    if cleanup == "worker_lost":
+        effects: list[object] = [[b"ACQUIRED", b"7"], [b"RENEWED"], [b"NOT_HELD"]]
+    elif cleanup == "worker_backend":
+        effects = [[b"ACQUIRED", b"7"], [b"RENEWED"], TimeoutError("worker marker")]
+    elif cleanup == "success":
+        effects = [[b"ACQUIRED", b"7"], [b"HELD"], [b"DELETED"]]
+    elif cleanup == "release_lost":
+        effects = [[b"ACQUIRED", b"7"], [b"HELD"], [b"NOT_HELD"]]
+    elif cleanup == "release_backend":
+        effects = [[b"ACQUIRED", b"7"], [b"HELD"], [b"CORRUPT"]]
+    else:
+        effects = [[b"ACQUIRED", b"7"], [b"HELD"], TimeoutError("release marker")]
+        eval_effects = [[b"ABSENT"]]
+    commands = FakeCommands(
+        evalsha_effects=effects,
+        eval_effects=eval_effects,
+        after_call=observe_call,
+    )
+    auto_renew = cleanup.startswith("worker_")
+    handle = new_lock(commands, clock).try_acquire(
+        "job",
+        options(auto_renew=auto_renew, renew_interval=0.1 if auto_renew else None),
+    )
+    assert handle is not None
+    marker = ValueError("caller-owned marker")
+    caught: BaseException | None = None
+
+    try:
+        with handle:
+            if auto_renew:
+                assert worker_terminal.wait(0.5)
+            if body_fails:
+                raise marker
+    except BaseException as error:
+        caught = error
+
+    if lifecycle_type is None:
+        assert caught is marker if body_fails else caught is None
+    elif body_fails:
+        assert isinstance(caught, LeaderExecutionError)
+        assert caught.action_cause is marker
+        assert isinstance(caught.lifecycle_cause, lifecycle_type)
+    else:
+        assert isinstance(caught, lifecycle_type)
+    assert [call[0] for call in commands.calls] == expected_trace
+    assert not any(
+        thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+    )
