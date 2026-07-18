@@ -226,6 +226,17 @@ class LeaderReleaseError(LeaderError): ...
 class LeaderExecutionError(LeaderError): ...
 ```
 
+The six concrete errors use these exact value-free messages:
+
+| Error | Exact message |
+| --- | --- |
+| `InvalidLeaderOptionsError` | `leader options are invalid` |
+| `InvalidLockNameError` | `lock name is invalid` |
+| `LeaderBackendError` | `leader backend operation failed` |
+| `LeaderLeaseLostError` | `leader lease was lost` |
+| `LeaderReleaseError` | `leader release failed` |
+| `LeaderExecutionError` | `leader action and lifecycle both failed` |
+
 - Validation errors identify only the invalid field category and never echo a
   lock name, node ID, owner token, Redis key, URL, credential, or action value.
 - `LeaderBackendError` sanitizes an ordinary backend exception and is raised

@@ -271,6 +271,19 @@ the borrowed client.
   inheritance, fixed safe messages, meta extras, default dependency, aggregate
   policy, publish classifier, and initial public export prefix.
 
+Pin the complete message contract in the parameterized error test:
+
+```python
+ERROR_MESSAGES = (
+    ("InvalidLeaderOptionsError", "leader options are invalid"),
+    ("InvalidLockNameError", "lock name is invalid"),
+    ("LeaderBackendError", "leader backend operation failed"),
+    ("LeaderLeaseLostError", "leader lease was lost"),
+    ("LeaderReleaseError", "leader release failed"),
+    ("LeaderExecutionError", "leader action and lifecycle both failed"),
+)
+```
+
 ```python
 def test_backend_error_does_not_retain_raw_cause() -> None:
     marker = "redis://user:secret@127.0.0.1:6379 owner-123"
