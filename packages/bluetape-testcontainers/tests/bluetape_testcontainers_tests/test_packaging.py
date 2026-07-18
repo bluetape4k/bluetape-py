@@ -13,6 +13,11 @@ def load_project(path: Path) -> dict[str, object]:
         return tomllib.load(stream)["project"]
 
 
+def load_document(path: Path) -> dict[str, object]:
+    with path.open("rb") as stream:
+        return tomllib.load(stream)
+
+
 def test_distribution_owns_testcontainers_namespace_and_dependency() -> None:
     project = load_project(ROOT / "packages/bluetape-testcontainers/pyproject.toml")
 
@@ -45,6 +50,38 @@ def test_meta_default_does_not_forward_testcontainers() -> None:
 
     assert project["dependencies"] == ["bluetape-core==0.1.0"]
     assert "bluetape-testcontainers" not in project["dependencies"]
+
+
+def test_wrapper_extras_and_test_clients_are_isolated() -> None:
+    document = load_document(ROOT / "packages/bluetape-testcontainers/pyproject.toml")
+    project = document["project"]
+    extras = project["optional-dependencies"]
+    test_group = document["dependency-groups"]["test"]
+
+    assert project["dependencies"] == ["testcontainers>=4.14.2,<4.15"]
+    assert extras == {
+        "postgres": ["testcontainers[postgres]>=4.14.2,<4.15"],
+        "aws": ["testcontainers[localstack]>=4.14.2,<4.15"],
+        "all": [
+            "testcontainers[postgres]>=4.14.2,<4.15",
+            "testcontainers[localstack]>=4.14.2,<4.15",
+        ],
+    }
+    assert test_group == [
+        "boto3>=1,<2",
+        "psycopg[binary]>=3.2,<4",
+        "pytest>=8.4.0",
+    ]
+
+
+def test_root_meta_extra_stays_base_only() -> None:
+    project = load_project(ROOT / "packages/bluetape/pyproject.toml")
+
+    assert project["optional-dependencies"]["testcontainers"] == [
+        "bluetape-testcontainers==0.1.0"
+    ]
+    assert "[aws]" not in project["optional-dependencies"]["testcontainers"][0]
+    assert "[postgres]" not in project["optional-dependencies"]["testcontainers"][0]
 
 
 def test_wrapper_does_not_depend_on_redis_py() -> None:
@@ -109,3 +146,8 @@ def test_built_wheels_preserve_version_and_namespace_coexistence(tmp_path: Path)
     assert "Version: 0.1.0\n" in metadata
     assert "Requires-Python: >=3.13\n" in metadata
     assert "Requires-Dist: testcontainers>=4.14.2,<4.15\n" in metadata
+    assert "Provides-Extra: postgres\n" in metadata
+    assert "Provides-Extra: aws\n" in metadata
+    assert "Provides-Extra: all\n" in metadata
+    assert "boto3" not in metadata.split("Provides-Extra:", 1)[0]
+    assert "psycopg" not in metadata.split("Provides-Extra:", 1)[0]
