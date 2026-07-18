@@ -1,4 +1,3 @@
-import boto3
 import pytest
 from bluetape.testcontainers import DEFAULT_LOCALSTACK_IMAGE, LocalStackServer
 
@@ -8,6 +7,11 @@ pytestmark = pytest.mark.testcontainers
 
 
 def test_localstack_s3_round_trip_loopback_binding_and_cleanup() -> None:
+    boto3 = pytest.importorskip(
+        "boto3",
+        reason="LocalStack integration tests require the package test dependency group",
+    )
+
     server = LocalStackServer(services=("s3",))
     with server:
         provider = server._container

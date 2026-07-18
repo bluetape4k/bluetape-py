@@ -1,4 +1,3 @@
-import psycopg
 import pytest
 from bluetape.testcontainers import DEFAULT_POSTGRES_IMAGE, PostgresServer
 
@@ -8,6 +7,11 @@ pytestmark = pytest.mark.testcontainers
 
 
 def test_postgres_18_query_loopback_binding_and_cleanup() -> None:
+    psycopg = pytest.importorskip(
+        "psycopg",
+        reason="PostgreSQL integration tests require the package test dependency group",
+    )
+
     server = PostgresServer()
     with server:
         provider = server._container
