@@ -61,7 +61,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
 | `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis provider, 크기 제한 result envelope, sync/async load coordinator. |
-| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8 테스트 서버 수명주기와 연결 정보. |
+| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8, PostgreSQL 18, 선택 서비스 LocalStack 테스트 서버 수명주기와 연결 정보. |
 | `bluetape-benchmark` | `bluetape.benchmark` | no | private, source-only | Build/test 대상 benchmark report와 comparison contract이며 publish하지 않음. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
 
@@ -146,6 +146,9 @@ pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 전용
 pip install bluetape-testing
 pip install bluetape-testcontainers
+pip install "bluetape-testcontainers[postgres]"
+pip install "bluetape-testcontainers[aws]"
+pip install "bluetape-testcontainers[all]"
 ```
 
 저장소에서 로컬 개발 환경을 만들 때는 다음 명령을 사용합니다.
@@ -160,13 +163,19 @@ uv run --package bluetape-resilience python -c "from bluetape.resilience import 
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
-uv run pytest -m testcontainers packages/bluetape-testcontainers -q
+uv run --package bluetape-testcontainers --extra all --group test --python 3.13.14 pytest \
+  -m testcontainers packages/bluetape-testcontainers -q
 ```
 
 #54 Redis provider 테스트는 생태계 래퍼의 `RedisServer`를 사용해 Redis 8 command,
 TTL, NX, Lua compare-and-delete, lifecycle, ACL, redaction 동작을 검증합니다. Value는
 명시적인 `serialize -> compress -> store` 조합을 사용합니다. Issue #55는 opt-in
 패키지 경계를 유지하면서 bounded sync/async Redis lease coordination을 제공합니다.
+
+Issue #15는 `postgres:18-alpine`과 `localstack/localstack:4.14.0`을 사용하는
+caller-owned `PostgresServer`, `LocalStackServer` adapter를 추가합니다. Provider
+extra는 focused package에서만 선택하며 루트 `bluetape[testcontainers]` extra는
+계속 base-only입니다.
 
 현재 focused wheel을 빌드하고 격리 환경에 설치한 뒤 strict JSON roundtrip을
 실행할 수 있습니다.

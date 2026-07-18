@@ -65,6 +65,9 @@ and this project uses semantic versioning once the first tag is published.
 - Add the opt-in `bluetape-testcontainers` Redis 8 wrapper with explicit
   lifecycle, bounded readiness, dynamic connection details, and serial Docker
   CI coverage.
+- Extend `bluetape-testcontainers` with opt-in PostgreSQL 18 and selected-service
+  LocalStack wrappers, focused `postgres`/`aws`/`all` extras, lazy provider
+  imports, loopback-only dynamic ports, and deterministic cleanup.
 - `bluetape-async` source workspace package with bounded structured-concurrency
   helpers under `bluetape.asyncio`, including ordered `map_bounded` execution.
 - `bluetape-collections` source workspace package with eager stdlib-only

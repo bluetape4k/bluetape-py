@@ -63,7 +63,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
 | `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis providers, bounded result envelopes, and sync/async load coordinators. |
-| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8 test server lifecycle and connection details. |
+| `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8, PostgreSQL 18, and selected-service LocalStack test-server lifecycles and connection details. |
 | `bluetape-benchmark` | `bluetape.benchmark` | no | private, source-only | Built/tested benchmark report and comparison contracts; never published. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
 
@@ -148,6 +148,9 @@ pip install bluetape-serde
 pip install "bluetape-serde[fory]"  # CPython 3.13 only
 pip install bluetape-testing
 pip install bluetape-testcontainers
+pip install "bluetape-testcontainers[postgres]"
+pip install "bluetape-testcontainers[aws]"
+pip install "bluetape-testcontainers[all]"
 ```
 
 For local development from this repository:
@@ -162,7 +165,8 @@ uv run --package bluetape-resilience python -c "from bluetape.resilience import 
 uv run --package bluetape-serde python -c "import bluetape.serde"
 uv sync --all-packages --extra fory --python 3.13.14 --locked
 uv run --package bluetape-serde --extra fory --python 3.13.14 python -c "import bluetape.serde.fory"
-uv run pytest -m testcontainers packages/bluetape-testcontainers -q
+uv run --package bluetape-testcontainers --extra all --group test --python 3.13.14 pytest \
+  -m testcontainers packages/bluetape-testcontainers -q
 ```
 
 The #54 Redis provider tests consume `RedisServer` from the ecosystem wrapper
@@ -170,6 +174,11 @@ and verify Redis 8 commands, TTL, NX, Lua compare-and-delete, lifecycle, ACL,
 and redaction behavior. Values use explicit `serialize -> compress -> store`
 composition. Issue #55 provides bounded sync/async Redis lease coordination
 while preserving the opt-in package boundary.
+
+Issue #15 adds caller-owned `PostgresServer` and `LocalStackServer` adapters
+using `postgres:18-alpine` and `localstack/localstack:4.14.0`. Their provider
+extras remain focused-package choices; the root `bluetape[testcontainers]`
+extra stays base-only.
 
 Build the current focused wheel, install it into an isolated environment, and
 run a strict JSON roundtrip:
