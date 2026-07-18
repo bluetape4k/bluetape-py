@@ -71,6 +71,7 @@ class _RedisLockLease:
         "_stop_event",
         "_timing",
         "_worker",
+        "_worker_ready",
     )
 
     def __init__(
@@ -98,6 +99,8 @@ class _RedisLockLease:
         self._stop_event = threading.Event()
         self._timing = timing
         self._worker: threading.Thread | None = None
+        self._worker_ready = threading.Event()
+        self._worker_ready.set()
 
     @property
     def lease(self) -> FencedLeaderLease:
@@ -337,29 +340,45 @@ class _RedisLockLease:
             name=f"bluetape-leader-renew-{id(self):x}",
             daemon=False,
         )
-        self._worker = worker
+        with self._lock:
+            self._worker = worker
+            self._worker_ready.clear()
         start_failed = False
         try:
             worker.start()
         except Exception:
             start_failed = True
         if start_failed:
-            if worker.is_alive():
-                self._fail_unknown(LeaderBackendError())
-            self._worker = None
+            with self._lock:
+                if worker.is_alive():
+                    self._worker_ready.set()
+                    self._fail_unknown(LeaderBackendError())
+                self._worker = None
+                self._worker_ready.set()
             self._release(scoped=True)
             raise LeaderBackendError()
+        with self._lock:
+            self._worker_ready.set()
 
     def _stop_worker(self) -> None:
-        worker = self._worker
-        if worker is None:
-            return
+        with self._lock:
+            worker = self._worker
+            if worker is None:
+                return
         self._stop_event.set()
+        if not self._worker_ready.wait(self._timing.renew + 0.1):
+            with self._lock:
+                self._fail_unknown(LeaderBackendError())
+        with self._lock:
+            worker = self._worker
+            if worker is None:
+                return
         worker.join(self._timing.renew + 0.1)
         if worker.is_alive():
             with self._lock:
                 self._fail_unknown(LeaderBackendError())
-        self._worker = None
+        with self._lock:
+            self._worker = None
 
     def _renew_loop(self) -> None:
         interval = self._options.renew_interval

@@ -880,6 +880,63 @@ def test_worker_start_failure_proves_no_worker_before_owner_checked_cleanup(
     assert handle.is_held() is False
 
 
+def test_worker_start_publication_gap_allows_concurrent_release_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"DELETED"]])
+    handle = new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.1)
+    )
+    assert handle is not None
+    start_entered = threading.Event()
+    allow_start = threading.Event()
+    release_done = threading.Event()
+    failures: list[BaseException] = []
+    real_start = threading.Thread.start
+
+    def gated_start(thread: threading.Thread) -> None:
+        if thread.name.startswith("bluetape-leader-renew-"):
+            start_entered.set()
+            assert allow_start.wait(0.5)
+        real_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", gated_start)
+
+    def enter() -> None:
+        try:
+            handle.__enter__()
+        except BaseException as error:
+            failures.append(error)
+
+    def release() -> None:
+        try:
+            handle.release()
+        except BaseException as error:
+            failures.append(error)
+        finally:
+            release_done.set()
+
+    enter_thread = threading.Thread(target=enter)
+    release_thread = threading.Thread(target=release)
+    enter_thread.start()
+    assert start_entered.wait(0.5)
+    release_thread.start()
+    time.sleep(0.02)
+    assert release_done.is_set() is False
+    allow_start.set()
+    enter_thread.join(0.5)
+    release_thread.join(0.5)
+
+    assert not enter_thread.is_alive() and not release_thread.is_alive()
+    assert failures == []
+    assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
+    assert handle.is_held() is False
+    assert not any(
+        thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+    )
+
+
 def test_worker_start_cleanup_failure_wins_and_enters_sanitized_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
