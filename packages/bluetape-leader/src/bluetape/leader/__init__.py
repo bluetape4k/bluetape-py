@@ -13,6 +13,8 @@ from ._errors import (
     LeaderLeaseLostError,
     LeaderReleaseError,
 )
+from ._options import LeaderElectionOptions
+from ._values import FencedLeaderLease, LeaderLease
 
 __all__ = [  # noqa: RUF022 - public order is part of the contract
     "LeaderError",
@@ -22,4 +24,7 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "LeaderLeaseLostError",
     "LeaderReleaseError",
     "LeaderExecutionError",
+    "LeaderElectionOptions",
+    "LeaderLease",
+    "FencedLeaderLease",
 ]
