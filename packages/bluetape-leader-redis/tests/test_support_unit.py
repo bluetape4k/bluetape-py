@@ -54,6 +54,117 @@ def test_rejected_client_has_no_io_when_retry_is_enabled() -> None:
 
 
 @pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("mutation", ["bool-retries", "backoff-state", "supported-errors"])
+def test_rejected_client_requires_canonical_retry_state(
+    client_factory: object,
+    mutation: str,
+) -> None:
+    client = client_factory()  # type: ignore[operator]
+    retry = client.connection_pool.connection_kwargs["retry"]
+    if mutation == "bool-retries":
+        retry._retries = False
+    elif mutation == "backoff-state":
+        retry._backoff._backoff = False
+    else:
+        retry._supported_errors = (Exception,)
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+
+def test_rejected_client_requires_exact_retry_family() -> None:
+    import redis.asyncio as async_redis
+    from redis.backoff import NoBackoff
+    from redis.retry import Retry
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_sync_client(safe_sync_client(retry=async_redis.retry.Retry(NoBackoff(), 0)))
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_async_client(safe_async_client(retry=Retry(NoBackoff(), 0)))
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("field", ["_backoff", "_supported_errors"])
+def test_rejected_client_has_no_io_for_mutated_retry_internals(
+    client_factory: object,
+    field: str,
+) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def reset(self) -> None:
+            observed.append("reset")
+
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+        def __ne__(self, other: object) -> bool:
+            del other
+            observed.append("ne")
+            return False
+
+    client = client_factory()  # type: ignore[operator]
+    setattr(client.connection_pool.connection_kwargs["retry"], field, Hostile())
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("field", ["pid", "_pool_id"])
+def test_rejected_client_has_no_io_for_hostile_sync_pool_identity(field: str) -> None:
+    observed: list[str] = []
+
+    class Hostile:
+        def __bool__(self) -> bool:
+            observed.append("bool")
+            return False
+
+        def __ne__(self, other: object) -> bool:
+            del other
+            observed.append("ne")
+            return False
+
+    client = safe_sync_client()
+    setattr(client.connection_pool, field, Hostile())
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        _validated_sync_client(client)
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_has_no_io_for_hostile_response_callback_container(
+    client_factory: object,
+) -> None:
+    observed: list[str] = []
+
+    class HostileCallbacks:
+        def __len__(self) -> int:
+            observed.append("len")
+            return 0
+
+        def get(self, key: object) -> object:
+            del key
+            observed.append("get")
+            return None
+
+    client = client_factory()  # type: ignore[operator]
+    client.response_callbacks = HostileCallbacks()
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
 @pytest.mark.parametrize("pool_state", ["available", "in-use"])
 def test_rejected_client_has_no_io_for_nonempty_pool_and_registered_callback(
     client_factory: object,

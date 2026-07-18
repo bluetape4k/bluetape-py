@@ -338,7 +338,10 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
         assert len(server.commands) == 1
         assert len(server.commands[0]) == stall_after + 1
         assert elapsed >= 0.009
-        assert elapsed <= timing.command
+        if stall_after < expected_handshakes:
+            assert elapsed <= timing.connect
+        else:
+            assert elapsed <= timing.command
 
 
 def _exercise_stalled_command(client_family: str, options: dict[str, object]) -> _Timing:

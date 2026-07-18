@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import math
+import os
 import threading
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -16,7 +17,8 @@ from bluetape.leader import LeaderBackendError
 
 import redis
 import redis.asyncio as async_redis
-from redis.client import get_response_callbacks
+from redis.backoff import NoBackoff
+from redis.client import CaseInsensitiveDict, get_response_callbacks
 from redis.connection import (
     SENTINEL,
 )
@@ -31,6 +33,8 @@ from redis.connection import (
 )
 from redis.driver_info import DriverInfo
 from redis.event import EventDispatcher
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from redis.maint_notifications import MaintNotificationsConfig
 from redis.retry import Retry as SyncRetry
 
@@ -159,6 +163,7 @@ def _validated_sync_client(client: redis.Redis) -> _Timing:
         or pool.cache is not None
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_sync_pool_identity(pool)
     _validate_sync_lock(pool._fork_lock)
     _validate_sync_lock(pool._lock)
     _validate_empty_pool(pool)
@@ -227,7 +232,6 @@ def _validate_pool(
     from redis.asyncio.connection import (
         UnixDomainSocketConnection as AsyncUnixConnection,
     )
-    from redis.asyncio.retry import Retry as AsyncRetry
 
     allowed_classes = (
         (SyncConnection, SyncUnixConnection) if sync else (AsyncConnection, AsyncUnixConnection)
@@ -253,10 +257,7 @@ def _validate_pool(
     if retry_errors is not None and (type(retry_errors) is not list or retry_errors):
         raise TypeError(_UNSUPPORTED_CLIENT)
 
-    retry = options.get("retry")
-    retry_type = SyncRetry if sync else AsyncRetry
-    if type(retry) is not retry_type or vars(retry).get("_retries") != 0:
-        raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_retry(options.get("retry"), sync=sync)
 
     if options.get("redis_connect_func") is not None:
         raise TypeError(_UNSUPPORTED_CLIENT)
@@ -406,7 +407,7 @@ def _required_option_keys(connection_class: type[object]) -> set[str]:
 
 def _validate_response_callbacks(client: object, options: Mapping[str, Any]) -> None:
     actual = getattr(client, "response_callbacks", None)
-    if actual is None:
+    if type(actual) is not CaseInsensitiveDict:
         raise TypeError(_UNSUPPORTED_CLIENT)
     expected = get_response_callbacks(
         options.get("protocol"), options.get("legacy_responses", True)
@@ -416,6 +417,55 @@ def _validate_response_callbacks(client: object, options: Mapping[str, Any]) -> 
     for name, callback in expected.items():
         if actual.get(name) is not callback:
             raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _validate_sync_pool_identity(pool: object) -> None:
+    state = vars(pool)
+    pid = state.get("pid")
+    pool_id = state.get("_pool_id")
+    if type(pid) is not int or pid != os.getpid():
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if (
+        type(pool_id) is not str
+        or len(pool_id) != 8
+        or any(character not in "0123456789abcdef" for character in pool_id)
+    ):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _validate_retry(value: object, *, sync: bool) -> None:
+    from redis.asyncio.retry import Retry as AsyncRetry
+
+    retry_type = SyncRetry if sync else AsyncRetry
+    if type(value) is not retry_type or not _has_exact_attribute_names(
+        value, frozenset({"_backoff", "_retries", "_supported_errors"})
+    ):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+
+    state = vars(value)
+    retries = state["_retries"]
+    backoff = state["_backoff"]
+    supported_errors = state["_supported_errors"]
+    if type(retries) is not int or retries != 0 or type(backoff) is not NoBackoff:
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if not _has_exact_attribute_names(backoff, frozenset({"_backoff"})):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    backoff_value = vars(backoff)["_backoff"]
+    if type(backoff_value) is not int or backoff_value != 0:
+        raise TypeError(_UNSUPPORTED_CLIENT)
+
+    expected_errors = (
+        (RedisConnectionError, RedisTimeoutError, TimeoutError)
+        if sync
+        else (RedisConnectionError, RedisTimeoutError)
+    )
+    if type(supported_errors) is not tuple or len(supported_errors) != len(expected_errors):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if any(
+        actual is not expected
+        for actual, expected in zip(supported_errors, expected_errors, strict=True)
+    ):
+        raise TypeError(_UNSUPPORTED_CLIENT)
 
 
 def _validate_event_dispatcher(value: object) -> None:
