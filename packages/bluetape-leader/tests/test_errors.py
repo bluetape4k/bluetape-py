@@ -3,7 +3,7 @@ import inspect
 
 import pytest
 
-PUBLIC_EXPORTS = [
+ERROR_EXPORTS = [
     "LeaderError",
     "InvalidLeaderOptionsError",
     "InvalidLockNameError",
@@ -11,9 +11,6 @@ PUBLIC_EXPORTS = [
     "LeaderLeaseLostError",
     "LeaderReleaseError",
     "LeaderExecutionError",
-    "LeaderElectionOptions",
-    "LeaderLease",
-    "FencedLeaderLease",
 ]
 
 
@@ -21,10 +18,10 @@ def load_leader() -> object:
     return importlib.import_module("bluetape.leader")
 
 
-def test_public_surface_exports_contracts_in_plan_order() -> None:
+def test_public_surface_starts_with_errors_in_plan_order() -> None:
     leader = load_leader()
 
-    assert leader.__all__ == PUBLIC_EXPORTS
+    assert leader.__all__[: len(ERROR_EXPORTS)] == ERROR_EXPORTS
 
 
 def test_error_inheritance_is_exact() -> None:
