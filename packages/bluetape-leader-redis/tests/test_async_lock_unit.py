@@ -439,6 +439,145 @@ async def test_successful_auto_renew_clears_command_deadline_before_exit() -> No
 
 
 @pytest.mark.asyncio
+async def test_explicit_release_waits_for_inflight_renew_and_exit_reuses_cleanup() -> None:
+    clock = AsyncClock()
+    stalled_renew = AsyncBlockingEffect([b"RENEWED"])
+    commands = AsyncCommands(
+        evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled_renew, [b"DELETED"]]
+    )
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    entered = await handle.__aenter__()
+    await asyncio.wait_for(stalled_renew.entered.wait(), 0.2)
+
+    release_task = asyncio.create_task(handle.release())
+    await asyncio.sleep(0)
+    assert len(commands.calls) == 3
+    stalled_renew.release.set()
+    await release_task
+
+    assert handle._renew_task is not None and handle._renew_task.done()
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    cleanup_task = handle._cleanup_task
+    assert handle._state == "RELEASED"
+    calls = list(commands.calls)
+    marker = ValueError("action marker")
+
+    assert await entered.__aexit__(ValueError, marker, marker.__traceback__) is None
+
+    assert handle._cleanup_task is cleanup_task
+    assert commands.calls == calls
+    assert handle._state == "RELEASED"
+
+
+@pytest.mark.asyncio
+async def test_explicit_release_preserves_first_cancellation_and_retained_cleanup() -> None:
+    clock = AsyncClock()
+    stalled_renew = AsyncBlockingEffect([b"RENEWED"])
+    stalled_release = AsyncBlockingEffect([b"DELETED"])
+    commands = AsyncCommands(
+        evalsha_effects=[
+            [b"ACQUIRED", b"7"],
+            [b"RENEWED"],
+            stalled_renew,
+            stalled_release,
+        ]
+    )
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    entered = await handle.__aenter__()
+    await asyncio.wait_for(stalled_renew.entered.wait(), 0.2)
+
+    release_task = asyncio.create_task(handle.release())
+    await asyncio.sleep(0)
+    release_task.cancel("first release cancel")
+    await asyncio.sleep(0)
+    release_task.cancel("second release cancel")
+    stalled_renew.release.set()
+    await asyncio.wait_for(stalled_release.entered.wait(), 0.2)
+    assert release_task.done() is False
+    stalled_release.release.set()
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await release_task
+
+    assert caught.value.args == ("first release cancel",)
+    assert handle._renew_task is not None and handle._renew_task.done()
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    cleanup_task = handle._cleanup_task
+    calls = list(commands.calls)
+
+    await entered.__aexit__(None, None, None)
+
+    assert handle._cleanup_task is cleanup_task
+    assert commands.calls == calls
+
+
+@pytest.mark.parametrize(
+    ("auto_renew", "stale_response"),
+    [
+        (False, [b"HELD"]),
+        (True, [b"RENEWED"]),
+        (False, TimeoutError("stale probe")),
+        (True, TimeoutError("stale renew")),
+    ],
+)
+@pytest.mark.asyncio
+async def test_entry_proof_cannot_deliver_handle_after_concurrent_release(
+    auto_renew: bool,
+    stale_response: object,
+) -> None:
+    clock = AsyncClock()
+    stale_proof = AsyncBlockingEffect(stale_response)
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], stale_proof, [b"DELETED"]])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job",
+        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+    )
+    assert handle is not None
+
+    enter_task = asyncio.create_task(handle.__aenter__())
+    await asyncio.wait_for(stale_proof.entered.wait(), 0.2)
+    await handle.release()
+    stale_proof.release.set()
+
+    with pytest.raises(LeaderLeaseLostError):
+        await enter_task
+
+    assert handle._state == "RELEASED"
+    assert handle._renew_task is None
+
+
+@pytest.mark.parametrize("operation", ["probe", "renew"])
+@pytest.mark.asyncio
+async def test_stale_backend_failure_cannot_overwrite_concurrent_lost_state(
+    operation: str,
+) -> None:
+    clock = AsyncClock()
+    stale_failure = AsyncBlockingEffect(TimeoutError("stale backend"))
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], stale_failure, [b"NOT_HELD"]])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+
+    proof_task = asyncio.create_task(handle.is_held() if operation == "probe" else handle.renew())
+    await asyncio.wait_for(stale_failure.entered.wait(), 0.2)
+    with pytest.raises(LeaderReleaseError):
+        await handle.release()
+    stale_failure.release.set()
+
+    result = await proof_task
+    if operation == "probe":
+        assert result is False
+    else:
+        assert isinstance(result, NotHeld)
+    assert handle._state == "LOST"
+
+
+@pytest.mark.asyncio
 async def test_incoming_cancellation_waits_for_retained_cleanup_task() -> None:
     clock = AsyncClock()
     blocked_release = AsyncBlockingEffect([b"DELETED"])
