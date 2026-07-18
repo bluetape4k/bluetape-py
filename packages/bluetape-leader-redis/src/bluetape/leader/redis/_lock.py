@@ -110,6 +110,7 @@ class _RedisLockLease:
                 return NotHeld()
             duration = self._options.lease_time if lease_time is None else lease_time
             ttl_ms = _duration_milliseconds(duration)
+            backend_failed = False
             try:
                 raw = _run_script(
                     self._commands,
@@ -119,6 +120,8 @@ class _RedisLockLease:
                 )
                 status = _parse_status_response(raw, frozenset({"RENEWED", "NOT_HELD", "CORRUPT"}))
             except Exception:
+                backend_failed = True
+            if backend_failed:
                 self._raise_if_unknown()
                 failure = LeaderBackendError()
                 self._state = "UNKNOWN"
