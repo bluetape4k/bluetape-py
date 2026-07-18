@@ -54,10 +54,9 @@ focused distribution model:
   #46. PyPI publication remains on HOLD.
 - `bluetape-testing`: pytest helpers that start internal-first before promising
   a broad public API.
-- `bluetape-testcontainers`: ecosystem-owned Redis 8 test server wrapper,
-  implemented for issue #57 with explicit lifecycle, bounded readiness,
-  dynamic connection details, and serial Docker verification. PyPI publication
-  remains on HOLD.
+- `bluetape-testcontainers`: ecosystem-owned Redis 8, PostgreSQL 18, and
+  caller-selected LocalStack test server wrappers with dynamic loopback ports,
+  immutable details, explicit fixture ownership, and serial Docker verification.
 
 ## Current State
 
