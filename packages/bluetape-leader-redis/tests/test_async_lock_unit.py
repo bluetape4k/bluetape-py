@@ -66,10 +66,15 @@ class AsyncBlockingEffect:
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
         self.response = response
+        self.cancellations: list[asyncio.CancelledError] = []
 
     async def resolve(self) -> object:
         self.entered.set()
-        await self.release.wait()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError as error:
+            self.cancellations.append(error)
+            raise
         if isinstance(self.response, BaseException):
             raise self.response
         return self.response
@@ -83,6 +88,11 @@ class CountingTask(asyncio.Task[Any]):
     def cancel(self, msg: object = None) -> bool:
         self.cancel_calls += 1
         return super().cancel(msg)
+
+
+class FakeTimer:
+    def cancel(self) -> None:
+        pass
 
 
 TIMING = _Timing(0, 0.01, 0.02, 0.04, 0.06, 0.04, 0.04, 0.1)
@@ -439,6 +449,97 @@ async def test_successful_auto_renew_clears_command_deadline_before_exit() -> No
 
 
 @pytest.mark.asyncio
+async def test_renew_timer_callback_ignores_same_turn_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loop = asyncio.get_running_loop()
+    delayed: list[tuple[object, tuple[object, ...]]] = []
+    errors: list[dict[str, object]] = []
+    previous_handler = loop.get_exception_handler()
+
+    def fake_call_later(
+        delay: float,
+        callback: object,
+        *args: object,
+        context: object = None,
+    ) -> FakeTimer:
+        delayed.append((callback, args))
+        return FakeTimer()
+
+    monkeypatch.setattr(loop, "call_later", fake_call_later)
+    loop.set_exception_handler(lambda loop, context: errors.append(context))
+    try:
+        clock = AsyncClock()
+        commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"DELETED"]])
+        handle = await new_lock(commands, clock).try_acquire(
+            "job", options(auto_renew=True, renew_interval=0.01)
+        )
+        assert handle is not None
+        entered = await handle.__aenter__()
+        await asyncio.sleep(0)
+        assert len(delayed) == 1
+
+        release_task = asyncio.create_task(handle.release())
+        callback, args = delayed[0]
+        loop.call_soon(callback, *args)  # type: ignore[arg-type]
+        await release_task
+        await asyncio.sleep(0)
+
+        assert errors == []
+        assert handle._renew_task is not None and handle._renew_task.done()
+        await entered.__aexit__(None, None, None)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+
+@pytest.mark.parametrize("auto_renew", [False, True])
+@pytest.mark.asyncio
+async def test_entry_cancellation_awaits_one_cleanup_and_preserves_identity(
+    auto_renew: bool,
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    blocked_proof = AsyncBlockingEffect([b"RENEWED"] if auto_renew else [b"HELD"])
+    blocked_cleanup = AsyncBlockingEffect([b"DELETED"])
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], blocked_proof, blocked_cleanup])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job",
+        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+    )
+    assert handle is not None
+    observed: list[asyncio.CancelledError] = []
+
+    async def owner() -> None:
+        try:
+            await handle.__aenter__()
+        except asyncio.CancelledError as error:
+            observed.append(error)
+            raise
+
+    task = asyncio.create_task(owner())
+    await asyncio.wait_for(blocked_proof.entered.wait(), 0.2)
+    task.cancel("first entry cancel")
+    await asyncio.wait_for(blocked_cleanup.entered.wait(), 0.2)
+    cleanup_task = handle._cleanup_task
+    assert cleanup_task is not None
+    task.cancel("second entry cancel")
+    await asyncio.sleep(0)
+    assert task.done() is False
+    blocked_cleanup.release.set()
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await task
+
+    assert blocked_proof.cancellations and caught.value is blocked_proof.cancellations[0]
+    assert len(observed) == 1 and observed[0] is caught.value
+    assert caught.value.args == ("first entry cancel",)
+    assert handle._cleanup_task is cleanup_task and cleanup_task.done()
+    assert handle._renew_task is None
+    assert handle._state == "RELEASED"
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.asyncio
 async def test_explicit_release_waits_for_inflight_renew_and_exit_reuses_cleanup() -> None:
     clock = AsyncClock()
     stalled_renew = AsyncBlockingEffect([b"RENEWED"])
@@ -726,3 +827,40 @@ async def test_async_context_failure_matrix_process_control_remains_primary() ->
 
     assert caught is marker
     assert marker.__notes__ == ["leader lifecycle cleanup failed"]
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [KeyboardInterrupt, SystemExit, GeneratorExit],
+)
+@pytest.mark.asyncio
+async def test_process_control_remains_primary_during_cleanup_cancellation(
+    error_type: type[BaseException],
+) -> None:
+    clock = AsyncClock()
+    blocked_cleanup = AsyncBlockingEffect([b"DELETED"])
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"HELD"], blocked_cleanup])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    entered = await handle.__aenter__()
+    marker = error_type("process control marker")
+    owner = asyncio.current_task()
+    assert owner is not None
+
+    async def interrupt_cleanup() -> None:
+        await blocked_cleanup.entered.wait()
+        owner.cancel("late caller cancel")
+        await asyncio.sleep(0)
+        blocked_cleanup.release.set()
+
+    interrupter = asyncio.create_task(interrupt_cleanup())
+    caught: BaseException | None = None
+    try:
+        await entered.__aexit__(error_type, marker, marker.__traceback__)
+    except BaseException as error:
+        caught = error
+    await interrupter
+
+    assert caught is marker
+    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert handle._state == "RELEASED"

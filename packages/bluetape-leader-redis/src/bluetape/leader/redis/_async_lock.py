@@ -281,15 +281,24 @@ class _AsyncRedisLockLease:
         if self._state != "ACQUIRED":
             raise LeaderLeaseLostError()
         self._state = "ENTERED"
-        if self._options.auto_renew:
-            outcome = await self.renew()
-            if isinstance(outcome, NotHeld):
+        try:
+            if self._options.auto_renew:
+                outcome = await self.renew()
+                if isinstance(outcome, NotHeld):
+                    raise LeaderLeaseLostError()
+                if isinstance(outcome, RenewBackendFailure):
+                    raise outcome.cause
+                self._renew_task = asyncio.create_task(self._renew_loop())
+            elif not await self.is_held():
                 raise LeaderLeaseLostError()
-            if isinstance(outcome, RenewBackendFailure):
-                raise outcome.cause
-            self._renew_task = asyncio.create_task(self._renew_loop())
-        elif not await self.is_held():
-            raise LeaderLeaseLostError()
+        except asyncio.CancelledError as first_cancel:
+            first_cancel, cleanup_failure = await self._await_cleanup(
+                scoped=True, first_cancel=first_cancel
+            )
+            assert first_cancel is not None
+            if cleanup_failure is not None:
+                first_cancel.add_note("leader lifecycle cleanup failed")
+            raise first_cancel
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
@@ -299,18 +308,18 @@ class _AsyncRedisLockLease:
             scoped=True, first_cancel=first_cancel
         )
         lifecycle_failure = renew_failure or cleanup_failure
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+            if renew_failure is not None:
+                exc.add_note("leader lifecycle renew failed")
+            if cleanup_failure is not None and cleanup_failure is not renew_failure:
+                exc.add_note("leader lifecycle cleanup failed")
+            raise exc
         if first_cancel is not None:
             if renew_failure is not None:
                 first_cancel.add_note("leader lifecycle renew failed")
             if cleanup_failure is not None and cleanup_failure is not renew_failure:
                 first_cancel.add_note("leader lifecycle cleanup failed")
             raise first_cancel
-        if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
-            if renew_failure is not None:
-                exc.add_note("leader lifecycle renew failed")
-            if cleanup_failure is not None and cleanup_failure is not renew_failure:
-                exc.add_note("leader lifecycle cleanup failed")
-            return
         if lifecycle_failure is None:
             return
         if isinstance(exc, Exception):
@@ -353,7 +362,12 @@ class _AsyncRedisLockLease:
             loop = asyncio.get_running_loop()
             wake = loop.create_future()
             self._renew_wake = wake
-            timer = loop.call_later(seconds, wake.set_result, False)
+
+            def wake_after_interval(target: asyncio.Future[bool] = wake) -> None:
+                if not target.done():
+                    target.set_result(False)
+
+            timer = loop.call_later(seconds, wake_after_interval)
             try:
                 stopped = await wake
             finally:
