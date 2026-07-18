@@ -359,6 +359,12 @@ class _RedisLockLease:
             raise LeaderBackendError()
         with self._lock:
             self._worker_ready.set()
+            terminal = self._state in ("LOST", "RELEASED", "UNKNOWN")
+        if terminal:
+            self._stop_worker()
+            with self._lock:
+                self._raise_if_unknown()
+            raise LeaderLeaseLostError()
 
     def _stop_worker(self) -> None:
         with self._lock:
@@ -368,6 +374,7 @@ class _RedisLockLease:
         self._stop_event.set()
         if not self._worker_ready.wait(self._timing.renew + 0.1):
             with self._lock:
+                self._raise_if_unknown()
                 self._fail_unknown(LeaderBackendError())
         with self._lock:
             worker = self._worker
@@ -376,6 +383,7 @@ class _RedisLockLease:
         worker.join(self._timing.renew + 0.1)
         if worker.is_alive():
             with self._lock:
+                self._raise_if_unknown()
                 self._fail_unknown(LeaderBackendError())
         with self._lock:
             self._worker = None

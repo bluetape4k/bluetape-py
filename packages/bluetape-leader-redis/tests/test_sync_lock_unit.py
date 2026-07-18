@@ -937,6 +937,70 @@ def test_worker_start_publication_gap_allows_concurrent_release_cleanup(
     )
 
 
+def test_worker_start_after_release_deadline_cannot_return_unknown_handle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"]])
+    handle = new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.1)
+    )
+    assert handle is not None
+    start_entered = threading.Event()
+    allow_start = threading.Event()
+    release_done = threading.Event()
+    entry_failures: list[BaseException] = []
+    release_failures: list[BaseException] = []
+    real_start = threading.Thread.start
+
+    def gated_start(thread: threading.Thread) -> None:
+        if thread.name.startswith("bluetape-leader-renew-"):
+            start_entered.set()
+            assert allow_start.wait(0.5)
+        real_start(thread)
+
+    monkeypatch.setattr(threading.Thread, "start", gated_start)
+
+    def enter() -> None:
+        try:
+            handle.__enter__()
+        except BaseException as error:
+            entry_failures.append(error)
+
+    def release() -> None:
+        try:
+            handle.release()
+        except BaseException as error:
+            release_failures.append(error)
+        finally:
+            release_done.set()
+
+    enter_thread = threading.Thread(target=enter)
+    release_thread = threading.Thread(target=release)
+    enter_thread.start()
+    assert start_entered.wait(0.5)
+    release_thread.start()
+    assert release_done.wait(0.5)
+    assert len(release_failures) == 1
+    retained = release_failures[0]
+    assert isinstance(retained, LeaderBackendError)
+    allow_start.set()
+    enter_thread.join(0.5)
+    release_thread.join(0.5)
+
+    assert not enter_thread.is_alive() and not release_thread.is_alive()
+    assert entry_failures == [retained]
+    assert retained.__context__ is None
+    assert retained.__cause__ is None
+    assert [call[0] for call in commands.calls] == ["evalsha", "evalsha"]
+    with pytest.raises(LeaderBackendError) as later:
+        handle.is_held()
+    assert later.value is retained
+    assert not any(
+        thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+    )
+
+
 def test_worker_start_cleanup_failure_wins_and_enters_sanitized_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
