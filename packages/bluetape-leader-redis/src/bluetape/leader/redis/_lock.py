@@ -108,26 +108,28 @@ class _RedisLockLease:
             self._raise_if_unknown()
             if self._state in ("LOST", "RELEASED"):
                 return NotHeld()
-            duration = self._options.lease_time if lease_time is None else lease_time
-            ttl_ms = _duration_milliseconds(duration)
-            backend_failed = False
-            try:
-                raw = _run_script(
-                    self._commands,
-                    RENEW_SCRIPT,
-                    (self._lease_key,),
-                    (self._record.to_bytes(), str(ttl_ms).encode("ascii")),
-                )
-                status = _parse_status_response(raw, frozenset({"RENEWED", "NOT_HELD", "CORRUPT"}))
-            except Exception:
-                backend_failed = True
+        duration = self._options.lease_time if lease_time is None else lease_time
+        ttl_ms = _duration_milliseconds(duration)
+        backend_failed = False
+        try:
+            raw = _run_script(
+                self._commands,
+                RENEW_SCRIPT,
+                (self._lease_key,),
+                (self._record.to_bytes(), str(ttl_ms).encode("ascii")),
+            )
+            status = _parse_status_response(raw, frozenset({"RENEWED", "NOT_HELD", "CORRUPT"}))
+        except Exception:
+            backend_failed = True
+        with self._lock:
+            self._raise_if_unknown()
+            if self._state in ("LOST", "RELEASED"):
+                return NotHeld()
             if backend_failed:
-                self._raise_if_unknown()
                 failure = LeaderBackendError()
                 self._state = "UNKNOWN"
                 self._failure = failure
                 return RenewBackendFailure(failure)
-            self._raise_if_unknown()
             if status == "RENEWED":
                 return Renewed(None)
             if status == "NOT_HELD":
@@ -143,17 +145,21 @@ class _RedisLockLease:
             self._raise_if_unknown()
             if self._state in ("LOST", "RELEASED"):
                 return False
-            backend_failed = False
-            try:
-                raw = _run_script(
-                    self._commands,
-                    PROBE_SCRIPT,
-                    (self._lease_key,),
-                    (self._record.to_bytes(),),
-                )
-                status = _parse_status_response(raw, frozenset({"HELD", "NOT_HELD", "CORRUPT"}))
-            except Exception:
-                backend_failed = True
+        backend_failed = False
+        try:
+            raw = _run_script(
+                self._commands,
+                PROBE_SCRIPT,
+                (self._lease_key,),
+                (self._record.to_bytes(),),
+            )
+            status = _parse_status_response(raw, frozenset({"HELD", "NOT_HELD", "CORRUPT"}))
+        except Exception:
+            backend_failed = True
+        with self._lock:
+            self._raise_if_unknown()
+            if self._state in ("LOST", "RELEASED"):
+                return False
             if backend_failed:
                 self._fail_unknown(LeaderBackendError())
             if status == "HELD":
@@ -173,27 +179,35 @@ class _RedisLockLease:
 
     def _release(self, *, scoped: bool) -> None:
         with self._lock:
-            self._raise_if_unknown()
-            if self._state in ("LOST", "RELEASED"):
-                if scoped and self._state == "RELEASED":
-                    return
-                if scoped:
-                    raise LeaderLeaseLostError()
-                raise LeaderReleaseError()
-            uncertain = False
-            backend_failed = False
-            try:
-                status = self._dispatch_release()
-            except _UNCERTAIN_ERRORS:
-                uncertain = True
-            except Exception:
-                backend_failed = True
-            if uncertain:
-                self._reconcile_release(scoped=scoped)
+            if self._finish_terminal_release(scoped=scoped):
+                return
+        uncertain = False
+        backend_failed = False
+        try:
+            status = self._dispatch_release()
+        except _UNCERTAIN_ERRORS:
+            uncertain = True
+        except Exception:
+            backend_failed = True
+        if uncertain:
+            self._reconcile_release(scoped=scoped)
+            return
+        with self._lock:
+            if self._finish_terminal_release(scoped=scoped):
                 return
             if backend_failed:
                 self._fail_unknown(LeaderBackendError())
             self._finish_release_status(status, scoped=scoped)
+
+    def _finish_terminal_release(self, *, scoped: bool) -> bool:
+        self._raise_if_unknown()
+        if self._state not in ("LOST", "RELEASED"):
+            return False
+        if scoped and self._state == "RELEASED":
+            return True
+        if scoped:
+            raise LeaderLeaseLostError()
+        raise LeaderReleaseError()
 
     def _dispatch_release(self) -> str:
         remaining_ms = self._remaining_minimum_ms()
@@ -221,17 +235,20 @@ class _RedisLockLease:
             )
         except Exception:
             reconcile_failed = True
-        if reconcile_failed:
-            self._fail_unknown(LeaderBackendError())
-        if status == "ABSENT":
-            self._fail_unknown(LeaderReleaseError())
-        if status != "PRESENT" or record is None:
-            self._fail_unknown(LeaderBackendError())
-        if not hmac.compare_digest(record.owner_token, self._record.owner_token):
-            self._state = "LOST"
-            if scoped:
-                raise LeaderLeaseLostError()
-            raise LeaderReleaseError()
+        with self._lock:
+            if self._finish_terminal_release(scoped=scoped):
+                return
+            if reconcile_failed:
+                self._fail_unknown(LeaderBackendError())
+            if status == "ABSENT":
+                self._fail_unknown(LeaderReleaseError())
+            if status != "PRESENT" or record is None:
+                self._fail_unknown(LeaderBackendError())
+            if not hmac.compare_digest(record.owner_token, self._record.owner_token):
+                self._state = "LOST"
+                if scoped:
+                    raise LeaderLeaseLostError()
+                raise LeaderReleaseError()
         uncertain = False
         backend_failed = False
         try:
@@ -240,11 +257,14 @@ class _RedisLockLease:
             uncertain = True
         except Exception:
             backend_failed = True
-        if uncertain:
-            self._fail_unknown(LeaderReleaseError())
-        if backend_failed:
-            self._fail_unknown(LeaderBackendError())
-        self._finish_release_status(repeat_status, scoped=scoped)
+        with self._lock:
+            if self._finish_terminal_release(scoped=scoped):
+                return
+            if uncertain:
+                self._fail_unknown(LeaderReleaseError())
+            if backend_failed:
+                self._fail_unknown(LeaderBackendError())
+            self._finish_release_status(repeat_status, scoped=scoped)
 
     def _finish_release_status(self, status: str, *, scoped: bool) -> None:
         if status in ("DELETED", "MIN_TTL_APPLIED"):
@@ -337,7 +357,8 @@ class _RedisLockLease:
         self._stop_event.set()
         worker.join(self._timing.renew + 0.1)
         if worker.is_alive():
-            self._fail_unknown(LeaderBackendError())
+            with self._lock:
+                self._fail_unknown(LeaderBackendError())
         self._worker = None
 
     def _renew_loop(self) -> None:
@@ -424,10 +445,10 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
         deadline = started_ns + _duration_nanoseconds(options.wait_time)
         attempted = False
         while True:
-            if attempted and self._monotonic_ns() >= deadline:
+            acquired_ns = self._monotonic_ns()
+            if attempted and acquired_ns >= deadline:
                 return None
             attempted = True
-            acquired_ns = self._monotonic_ns()
             uncertain = False
             backend_failed = False
             try:
