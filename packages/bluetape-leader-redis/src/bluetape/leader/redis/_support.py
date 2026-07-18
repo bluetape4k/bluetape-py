@@ -450,6 +450,11 @@ def _validate_response_callbacks(client: object, options: Mapping[str, Any]) -> 
     )
     if len(actual) != len(expected):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    actual_names = tuple(actual)
+    if any(type(name) is not str for name in actual_names):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if any(name not in expected for name in actual_names):
+        raise TypeError(_UNSUPPORTED_CLIENT)
     for name, callback in expected.items():
         if actual.get(name) is not callback:
             raise TypeError(_UNSUPPORTED_CLIENT)
@@ -523,6 +528,15 @@ def _validate_event_dispatcher(value: object) -> None:
     if type(actual_mapping) is not dict or type(expected_mapping) is not dict:
         raise TypeError(_UNSUPPORTED_CLIENT)
     if len(actual_mapping) != len(expected_mapping):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    actual_events = tuple(actual_mapping)
+    expected_events = tuple(expected_mapping)
+    if any(type(event) is not type for event in actual_events):
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if any(
+        not any(actual_event is expected_event for expected_event in expected_events)
+        for actual_event in actual_events
+    ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     for event, expected_listeners in expected_mapping.items():
         actual_listeners = actual_mapping.get(event)
