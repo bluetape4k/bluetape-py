@@ -12,7 +12,11 @@ from ._values import LeaderLease
 
 @runtime_checkable
 class LockLease[LeaseT: LeaderLease](Protocol):
-    """A synchronous active lease handle."""
+    """A synchronous active lease handle.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     @property
     def lease(self) -> LeaseT: ...
@@ -37,7 +41,11 @@ class LockLease[LeaseT: LeaderLease](Protocol):
 
 @runtime_checkable
 class AsyncLockLease[LeaseT: LeaderLease](Protocol):
-    """An asynchronous active lease handle."""
+    """An asynchronous active lease handle.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     @property
     def lease(self) -> LeaseT: ...
@@ -62,7 +70,11 @@ class AsyncLockLease[LeaseT: LeaderLease](Protocol):
 
 @runtime_checkable
 class DistributedLock[LeaseT: LeaderLease](Protocol):
-    """A synchronous distributed-lock acquisition contract."""
+    """A synchronous distributed-lock acquisition contract.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     def try_acquire(
         self,
@@ -73,7 +85,11 @@ class DistributedLock[LeaseT: LeaderLease](Protocol):
 
 @runtime_checkable
 class AsyncDistributedLock[LeaseT: LeaderLease](Protocol):
-    """An asynchronous distributed-lock acquisition contract."""
+    """An asynchronous distributed-lock acquisition contract.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     async def try_acquire(
         self,
@@ -84,7 +100,11 @@ class AsyncDistributedLock[LeaseT: LeaderLease](Protocol):
 
 @runtime_checkable
 class LeaderElector[LeaseT: LeaderLease](Protocol):
-    """A synchronous scoped leader-action contract."""
+    """A synchronous scoped leader-action contract.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     def run_if_leader[T](
         self,
@@ -103,7 +123,11 @@ class LeaderElector[LeaseT: LeaderLease](Protocol):
 
 @runtime_checkable
 class AsyncLeaderElector[LeaseT: LeaderLease](Protocol):
-    """An asynchronous scoped leader-action contract."""
+    """An asynchronous scoped leader-action contract.
+
+    Runtime checking performs a shallow member-presence check only; it does not
+    validate callability, signatures, or generic arguments.
+    """
 
     async def run_if_leader[T](
         self,

@@ -150,6 +150,51 @@ def test_all_six_protocols_are_runtime_checkable() -> None:
         assert protocol._is_runtime_protocol is True
 
 
+def test_runtime_protocol_docstrings_state_the_shallow_checking_limit() -> None:
+    leader = load_leader()
+
+    for protocol in (
+        leader.LockLease,
+        leader.AsyncLockLease,
+        leader.DistributedLock,
+        leader.AsyncDistributedLock,
+        leader.LeaderElector,
+        leader.AsyncLeaderElector,
+    ):
+        documentation = inspect.getdoc(protocol)
+
+        assert documentation is not None
+        normalized = " ".join(documentation.split())
+        assert "shallow member-presence check" in normalized
+        assert "does not validate callability, signatures, or generic arguments" in normalized
+
+
+class NonCallableLockShape:
+    lease = 42
+    renew = 42
+    is_held = 42
+    assert_held = 42
+    release = 42
+    __enter__ = 42
+    __exit__ = 42
+
+
+def test_runtime_protocol_check_can_accept_non_callable_members() -> None:
+    leader = load_leader()
+
+    assert isinstance(NonCallableLockShape(), leader.LockLease)
+
+
+def test_subscripted_runtime_protocol_check_is_rejected() -> None:
+    leader = load_leader()
+
+    with pytest.raises(
+        TypeError,
+        match="Subscripted generics cannot be used with class and instance checks",
+    ):
+        isinstance(NonCallableLockShape(), leader.LockLease[FencedLeaderLease])
+
+
 def test_lock_lease_protocols_have_exact_sync_and_async_signatures() -> None:
     leader = load_leader()
 
