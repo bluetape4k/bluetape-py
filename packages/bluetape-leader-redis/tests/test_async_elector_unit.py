@@ -16,7 +16,6 @@ from bluetape.leader import (
     LeaderElectionOptions,
     LeaderExecutionError,
     LeaderLeaseLostError,
-    LeaderReleaseError,
     Skipped,
 )
 
@@ -27,8 +26,14 @@ def sample_lease() -> FencedLeaderLease:
 
 
 class FakeHandle:
-    def __init__(self, *, exit_error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        enter_error: BaseException | None = None,
+        exit_error: BaseException | None = None,
+    ) -> None:
         self._lease = sample_lease()
+        self.enter_error = enter_error
         self.exit_error = exit_error
         self.entered = False
         self.exits = 0
@@ -39,6 +44,8 @@ class FakeHandle:
         return self._lease
 
     async def __aenter__(self) -> FakeHandle:
+        if self.enter_error is not None:
+            raise self.enter_error
         self.entered = True
         return self
 
@@ -128,37 +135,68 @@ async def test_simple_api_reraises_original_action_error_after_safe_cleanup() ->
 
 
 @pytest.mark.parametrize(
-    "lifecycle_error",
-    [LeaderLeaseLostError(), LeaderBackendError(), LeaderReleaseError()],
+    "error_type",
+    [LeaderLeaseLostError, LeaderBackendError],
+    ids=["proof_not_held", "proof_backend_failure"],
 )
 @pytest.mark.asyncio
-async def test_success_never_hides_lifecycle_failure(lifecycle_error: Exception) -> None:
-    handle = FakeHandle(exit_error=lifecycle_error)
+async def test_entry_proof_failure_never_invokes_callback(
+    error_type: type[Exception],
+) -> None:
+    lifecycle_error = error_type()
+    handle = FakeHandle(enter_error=lifecycle_error)
+    invoked = False
 
-    async def succeed(lease: FencedLeaderLease) -> int:
-        return lease.fencing_token
+    async def action(lease: FencedLeaderLease) -> None:
+        nonlocal invoked
+        del lease
+        invoked = True
 
-    with pytest.raises(type(lifecycle_error)) as caught:
-        await elector_with(handle).run_if_leader_result("job", succeed)
+    with pytest.raises(error_type) as caught:
+        await elector_with(handle).run_if_leader_result("job", action)
 
     assert caught.value is lifecycle_error
+    assert invoked is False
+    assert handle.entered is False
+    assert handle.exits == 0
 
 
+@pytest.mark.parametrize(
+    ("scenario", "error_type"),
+    [
+        ("renew_loss", LeaderLeaseLostError),
+        ("renew_backend_failure", LeaderBackendError),
+        ("scoped_release_not_held", LeaderLeaseLostError),
+        ("corrupt_release", LeaderBackendError),
+        ("uncertain_release", LeaderBackendError),
+    ],
+)
+@pytest.mark.parametrize("action_fails", [False, True], ids=["success_action", "failed_action"])
 @pytest.mark.asyncio
-async def test_action_and_lifecycle_failure_raise_sanitized_composite() -> None:
-    action_error = ValueError("action")
-    lifecycle_error = LeaderBackendError()
+async def test_named_lifecycle_outcomes_apply_elector_failure_matrix(
+    scenario: str,
+    error_type: type[Exception],
+    action_fails: bool,
+) -> None:
+    lifecycle_error = error_type()
+    action_error = ValueError(f"{scenario} action")
     handle = FakeHandle(exit_error=lifecycle_error)
 
-    async def fail(lease: FencedLeaderLease) -> None:
-        del lease
-        raise action_error
+    async def action(lease: FencedLeaderLease) -> int:
+        if action_fails:
+            raise action_error
+        return lease.fencing_token
 
-    with pytest.raises(LeaderExecutionError) as caught:
-        await elector_with(handle).run_if_leader_result("job", fail)
+    expected = LeaderExecutionError if action_fails else error_type
+    with pytest.raises(expected) as caught:
+        await elector_with(handle).run_if_leader_result("job", action)
 
-    assert caught.value.action_cause is action_error
-    assert caught.value.lifecycle_cause is lifecycle_error
+    if action_fails:
+        assert caught.value.action_cause is action_error
+        assert caught.value.lifecycle_cause is lifecycle_error
+    else:
+        assert caught.value is lifecycle_error
+    assert handle.exits == 1
 
 
 @pytest.mark.asyncio
