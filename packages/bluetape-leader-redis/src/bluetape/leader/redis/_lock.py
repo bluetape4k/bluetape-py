@@ -13,8 +13,11 @@ from typing import Any, Never, Self
 from bluetape.leader import (
     DistributedLock,
     FencedLeaderLease,
+    InvalidLeaderOptionsError,
     LeaderBackendError,
     LeaderElectionOptions,
+    LeaderError,
+    LeaderExecutionError,
     LeaderLeaseLostError,
     LeaderReleaseError,
     LockLease,
@@ -65,6 +68,9 @@ class _RedisLockLease:
         "_options",
         "_record",
         "_state",
+        "_stop_event",
+        "_timing",
+        "_worker",
     )
 
     def __init__(
@@ -77,6 +83,7 @@ class _RedisLockLease:
         options: LeaderElectionOptions,
         monotonic_ns: Callable[[], int],
         acquired_ns: int,
+        timing: _Timing,
     ) -> None:
         self._commands = commands
         self._failure: LeaderBackendError | LeaderReleaseError | None = None
@@ -88,6 +95,9 @@ class _RedisLockLease:
         self._acquired_ns = acquired_ns
         self._state = "ACQUIRED"
         self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._timing = timing
+        self._worker: threading.Thread | None = None
 
     @property
     def lease(self) -> FencedLeaderLease:
@@ -150,6 +160,7 @@ class _RedisLockLease:
             raise LeaderLeaseLostError()
 
     def release(self) -> None:
+        self._stop_worker()
         self._release(scoped=False)
 
     def _release(self, *, scoped: bool) -> None:
@@ -237,6 +248,7 @@ class _RedisLockLease:
         if self._options.auto_renew:
             outcome = self.renew()
             if isinstance(outcome, Renewed):
+                self._start_worker()
                 return self
             if isinstance(outcome, NotHeld):
                 raise LeaderLeaseLostError()
@@ -251,7 +263,22 @@ class _RedisLockLease:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        self._release(scoped=True)
+        lifecycle_failure: LeaderError | None = None
+        try:
+            self._stop_worker()
+            self._release(scoped=True)
+        except LeaderError as error:
+            lifecycle_failure = error
+        if lifecycle_failure is None:
+            return
+        if exc is None:
+            raise lifecycle_failure from None
+        if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+            exc.add_note(str(lifecycle_failure))
+            return
+        if isinstance(exc, Exception):
+            raise LeaderExecutionError(exc, lifecycle_failure) from None
+        raise lifecycle_failure from None
 
     def __repr__(self) -> str:
         return "_RedisLockLease(<redacted>)"
@@ -260,6 +287,49 @@ class _RedisLockLease:
         if self._state == "UNKNOWN":
             assert self._failure is not None
             raise self._failure
+
+    def _start_worker(self) -> None:
+        worker = threading.Thread(
+            target=self._renew_loop,
+            name=f"bluetape-leader-renew-{id(self):x}",
+            daemon=False,
+        )
+        self._worker = worker
+        try:
+            worker.start()
+        except Exception:
+            if worker.is_alive():
+                self._fail_unknown(LeaderBackendError())
+            self._worker = None
+            self._release(scoped=True)
+            raise LeaderBackendError() from None
+
+    def _stop_worker(self) -> None:
+        worker = self._worker
+        if worker is None:
+            return
+        self._stop_event.set()
+        worker.join(self._timing.renew + 0.1)
+        if worker.is_alive():
+            self._fail_unknown(LeaderBackendError())
+        self._worker = None
+
+    def _renew_loop(self) -> None:
+        interval = self._options.renew_interval
+        assert interval is not None
+        seconds = interval.total_seconds()
+        while not self._stop_event.wait(seconds):
+            try:
+                outcome = self.renew()
+            except BaseException:
+                with self._lock:
+                    self._state = "UNKNOWN"
+                    self._failure = LeaderBackendError()
+                self._stop_event.set()
+                return
+            if isinstance(outcome, (NotHeld, RenewBackendFailure)):
+                self._stop_event.set()
+                return
 
 
 class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
@@ -311,6 +381,15 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
         lock_name: str,
         options: LeaderElectionOptions = LeaderElectionOptions(),  # noqa: B008
     ) -> LockLease[FencedLeaderLease] | None:
+        if options.auto_renew:
+            interval = options.renew_interval
+            assert interval is not None
+            interval_seconds = interval.total_seconds()
+            if not (
+                self._timing.renew < interval_seconds
+                and self._timing.renew + interval_seconds < options.lease_time.total_seconds()
+            ):
+                raise InvalidLeaderOptionsError()
         keys = _redis_keys(lock_name, self._prefix)
         owner_token = self._token_factory()
         ttl_ms = _duration_milliseconds(options.lease_time)
@@ -393,6 +472,7 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
             options=options,
             monotonic_ns=self._monotonic_ns,
             acquired_ns=acquired_ns,
+            timing=self._timing,
         )  # type: ignore[return-value]
 
     def __repr__(self) -> str:
