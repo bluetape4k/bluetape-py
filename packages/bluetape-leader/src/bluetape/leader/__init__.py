@@ -1,4 +1,4 @@
-"""Backend-neutral leader contract errors for bluetape-py."""
+"""Backend-neutral leader contracts for bluetape-py."""
 
 from pkgutil import extend_path
 

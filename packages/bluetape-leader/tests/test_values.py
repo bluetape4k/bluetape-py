@@ -1,5 +1,6 @@
 from dataclasses import FrozenInstanceError
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 import pytest
 from bluetape.leader import FencedLeaderLease, LeaderLease
@@ -18,6 +19,11 @@ class DatetimeSubclass(datetime):
 class IntSubclass(int):
     def __bool__(self) -> bool:
         raise AssertionError("hostile integer truthiness ran")
+
+
+class HostileTimezone(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:
+        raise AssertionError("hostile timezone offset ran")
 
 
 def make_lease(**changes: object) -> LeaderLease:
@@ -92,6 +98,30 @@ def test_observation_timestamps_must_be_aware_utc(field: str, value: datetime) -
         make_lease(**{field: value})
 
 
+@pytest.mark.parametrize(
+    "safe_utc",
+    [
+        datetime(2026, 7, 18, tzinfo=UTC),
+        datetime(2026, 7, 18, tzinfo=timezone(timedelta(0), "safe-zero")),
+        datetime(2026, 7, 18, tzinfo=ZoneInfo("UTC")),
+        datetime(2026, 7, 18, tzinfo=ZoneInfo("Etc/UTC")),
+    ],
+)
+def test_observation_timestamps_accept_safe_exact_stdlib_utc(
+    safe_utc: datetime,
+) -> None:
+    lease = make_lease(elected_at=safe_utc)
+
+    assert lease.elected_at is safe_utc
+
+
+def test_observation_timestamp_rejects_hostile_timezone_without_invoking_it() -> None:
+    hostile = datetime(2026, 7, 18, tzinfo=HostileTimezone())
+
+    with pytest.raises(ValueError, match="elected_at"):
+        make_lease(elected_at=hostile)
+
+
 def test_lease_values_are_frozen_slotted_and_redacted() -> None:
     lease = make_lease()
 
@@ -114,9 +144,12 @@ def test_fenced_lease_keeps_node_and_fence_distinct() -> None:
     assert lease.audit_leader_id == "42"
     assert lease.node_id == "node-a"
     assert lease.fencing_token == 42
+    assert not hasattr(lease, "__dict__")
     assert repr(lease) == "FencedLeaderLease(<redacted>)"
     assert "42" not in repr(lease)
     assert "node-a" not in repr(lease)
+    with pytest.raises(FrozenInstanceError):
+        lease.fencing_token = 43
 
 
 @pytest.mark.parametrize("fencing_token", [True, 0, -1, IntSubclass(1)])

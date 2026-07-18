@@ -65,6 +65,9 @@ class LeaderElectionOptions:
 
         interval = self.renew_interval
         if self.auto_renew and interval is None:
-            object.__setattr__(self, "renew_interval", self.lease_time / 3)
+            derived_interval = self.lease_time / 3
+            if derived_interval <= _ZERO:
+                raise InvalidLeaderOptionsError()
+            object.__setattr__(self, "renew_interval", derived_interval)
         elif interval is not None and not _ZERO < interval < self.lease_time:
             raise InvalidLeaderOptionsError()

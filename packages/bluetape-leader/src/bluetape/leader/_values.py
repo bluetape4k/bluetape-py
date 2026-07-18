@@ -1,8 +1,9 @@
 """Immutable backend-neutral leader lease snapshots."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timedelta, timezone
 from typing import final
+from zoneinfo import ZoneInfo
 
 
 def _require_exact_str(value: object, field_name: str) -> None:
@@ -15,7 +16,12 @@ def _require_optional_utc_datetime(value: object, field_name: str) -> None:
         return
     if type(value) is not datetime:
         raise TypeError(f"{field_name} must be an exact datetime or None")
-    if value.tzinfo is not UTC:
+    timezone_info = value.tzinfo
+    if type(timezone_info) is timezone or type(timezone_info) is ZoneInfo:
+        offset = timezone_info.utcoffset(value)
+    else:
+        raise ValueError(f"{field_name} must be an aware UTC datetime")
+    if offset != timedelta(0):
         raise ValueError(f"{field_name} must be an aware UTC datetime")
 
 
