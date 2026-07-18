@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from redis.exceptions import NoScriptError
 
-from ._support import _is_owner_token, _LeaseRecord
+from ._support import _is_canonical_fence, _is_owner_token, _LeaseRecord
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -212,7 +212,9 @@ def _response_parts(value: object) -> tuple[bytes, ...]:
 
 
 def _canonical_positive_decimal(value: bytes) -> bool:
-    return bool(value) and value[:1] in b"123456789" and value.isdigit()
+    if not value.isascii():
+        return False
+    return _is_canonical_fence(value.decode("ascii"))
 
 
 def _validate_dispatch(script: _Script, keys: tuple[bytes, ...], args: tuple[bytes, ...]) -> None:
