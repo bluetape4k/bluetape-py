@@ -291,6 +291,11 @@ class _AsyncRedisLockLease:
                 self._renew_task = asyncio.create_task(self._renew_loop())
             elif not await self.is_held():
                 raise LeaderLeaseLostError()
+        except (KeyboardInterrupt, SystemExit, GeneratorExit) as process_control:
+            _, cleanup_failure = await self._await_cleanup(scoped=True, first_cancel=None)
+            if cleanup_failure is not None:
+                process_control.add_note("leader lifecycle cleanup failed")
+            raise process_control
         except asyncio.CancelledError as first_cancel:
             first_cancel, cleanup_failure = await self._await_cleanup(
                 scoped=True, first_cancel=first_cancel
