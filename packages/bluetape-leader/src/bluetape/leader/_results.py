@@ -9,7 +9,7 @@ from ._values import LeaderLease, _require_optional_utc_datetime
 
 
 def _require_lease(value: object) -> None:
-    if not isinstance(value, LeaderLease):
+    if not issubclass(type(value), LeaderLease):
         raise TypeError("lease must be LeaderLease")
 
 
@@ -41,7 +41,7 @@ class ActionFailed[LeaseT: LeaderLease]:
     lease: LeaseT
 
     def __post_init__(self) -> None:
-        if not isinstance(self.cause, Exception):
+        if not issubclass(type(self.cause), Exception):
             raise TypeError("cause must be Exception")
         _require_lease(self.lease)
 

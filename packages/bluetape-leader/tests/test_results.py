@@ -34,6 +34,26 @@ class HostileValue:
         raise AssertionError("hostile str ran")
 
 
+class SpoofedLeaseClass:
+    def __init__(self) -> None:
+        self.class_property_reads = 0
+
+    @property
+    def __class__(self) -> type[LeaderLease]:
+        self.class_property_reads += 1
+        return LeaderLease
+
+
+class SpoofedExceptionClass:
+    def __init__(self) -> None:
+        self.class_property_reads = 0
+
+    @property
+    def __class__(self) -> type[Exception]:
+        self.class_property_reads += 1
+        return Exception
+
+
 class HostileControlSignal(BaseException):
     def __bool__(self) -> bool:
         raise AssertionError("hostile control truthiness ran")
@@ -85,6 +105,16 @@ def test_results_reject_non_lease_values_without_rendering_them(
     assert str(captured.value) == "lease must be LeaderLease"
 
 
+def test_elected_rejects_spoofed_lease_without_reading_instance_class_property() -> None:
+    leader = load_leader()
+    spoofed = SpoofedLeaseClass()
+
+    with pytest.raises(TypeError, match="lease must be LeaderLease"):
+        leader.Elected("value", spoofed)
+
+    assert spoofed.class_property_reads == 0
+
+
 def test_stateless_outcomes_are_singleton_like_immutable_values() -> None:
     leader = load_leader()
 
@@ -133,6 +163,16 @@ def test_action_failed_rejects_non_exception_control_signals_without_rendering(
         leader.ActionFailed(invalid_cause, sample_lease())
 
     assert str(captured.value) == "cause must be Exception"
+
+
+def test_action_failed_rejects_spoofed_exception_without_reading_class_property() -> None:
+    leader = load_leader()
+    spoofed = SpoofedExceptionClass()
+
+    with pytest.raises(TypeError, match="cause must be Exception"):
+        leader.ActionFailed(spoofed, sample_lease())
+
+    assert spoofed.class_property_reads == 0
 
 
 class UnsafeBackendError(LeaderBackendError):
