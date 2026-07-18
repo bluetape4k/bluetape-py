@@ -79,10 +79,21 @@ def test_duration_boundaries_and_ordering_are_rejected(values: dict[str, object]
         LeaderElectionOptions(**values)
 
 
-@pytest.mark.parametrize("node_id", ["", " ", "\t\n", "x" * 257, "가" * 86])
+@pytest.mark.parametrize(
+    "node_id",
+    ["", " ", "\t\n", "x" * 257, "가" * 85 + "ab", "가" * 86],
+)
 def test_invalid_node_ids_are_rejected(node_id: str) -> None:
     with pytest.raises(InvalidLeaderOptionsError, match="leader options are invalid"):
         LeaderElectionOptions(node_id=node_id)
+
+
+@pytest.mark.parametrize("node_id", ["x" * 256, "가" * 85 + "a"])
+def test_node_id_accepts_the_exact_256_utf8_byte_boundary(node_id: str) -> None:
+    options = LeaderElectionOptions(node_id=node_id)
+
+    assert len(node_id.encode()) == 256
+    assert options.node_id is node_id
 
 
 def test_accepted_node_id_is_preserved_without_normalization() -> None:
@@ -113,6 +124,11 @@ def test_auto_renew_derives_exact_third_only_when_interval_is_absent() -> None:
     assert derived.renew_interval == lease_time / 3
     assert explicit.renew_interval == timedelta(microseconds=2)
     assert disabled.renew_interval is None
+
+
+def test_auto_renew_rejects_a_derived_interval_that_rounds_to_zero() -> None:
+    with pytest.raises(InvalidLeaderOptionsError, match="leader options are invalid"):
+        LeaderElectionOptions(lease_time=timedelta(microseconds=1), auto_renew=True)
 
 
 def test_zero_wait_and_minimum_equal_to_lease_are_valid_boundaries() -> None:
