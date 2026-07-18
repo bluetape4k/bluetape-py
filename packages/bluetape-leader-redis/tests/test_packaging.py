@@ -33,12 +33,19 @@ def test_workspace_registers_the_adapter_distribution() -> None:
     assert "packages/bluetape-leader-redis" in root["tool"]["uv"]["workspace"]["members"]
 
 
-def test_adapter_namespace_exports_exact_sync_and_async_distributed_locks() -> None:
+def test_adapter_namespace_exports_exact_locks_and_electors() -> None:
     adapter = importlib.import_module("bluetape.leader.redis")
 
-    assert adapter.__all__ == ["RedisDistributedLock", "AsyncRedisDistributedLock"]
+    assert adapter.__all__ == [
+        "RedisDistributedLock",
+        "AsyncRedisDistributedLock",
+        "RedisLeaderElector",
+        "AsyncRedisLeaderElector",
+    ]
     assert adapter.AsyncRedisDistributedLock.__module__ == "bluetape.leader.redis._async_lock"
+    assert adapter.AsyncRedisLeaderElector.__module__ == "bluetape.leader.redis._async_elector"
     assert adapter.RedisDistributedLock.__module__ == "bluetape.leader.redis._lock"
+    assert adapter.RedisLeaderElector.__module__ == "bluetape.leader.redis._elector"
 
 
 def test_lock_resolves_exact_adapter_runtime_dependencies() -> None:
