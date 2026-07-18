@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import traceback
 
 import pytest
 from bluetape.leader import InvalidLockNameError
@@ -35,6 +36,21 @@ def test_identity_rejects_invalid_lock_name(name: object) -> None:
 def test_identity_accepts_exact_1024_utf8_bytes() -> None:
     keys = _redis_keys("é" * 512, "p")
     assert keys.lease.endswith(":lease")
+
+
+def test_identity_rejects_surrogate_without_exposing_original_value() -> None:
+    marker = "surrogate-canary-\ud800"
+
+    with pytest.raises(InvalidLockNameError) as caught:
+        _redis_keys(marker, "p")
+
+    error = caught.value
+    rendered = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+    assert error.args == ("lock name is invalid",)
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    assert marker not in repr(error)
+    assert marker not in rendered
 
 
 @pytest.mark.parametrize(

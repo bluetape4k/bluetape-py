@@ -161,6 +161,7 @@ def _validated_sync_client(client: redis.Redis) -> _Timing:
         raise TypeError(_UNSUPPORTED_CLIENT)
     _validate_sync_lock(pool._fork_lock)
     _validate_sync_lock(pool._lock)
+    _validate_empty_pool(pool)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
     _validate_response_callbacks(client, pool.connection_kwargs)
@@ -198,6 +199,7 @@ def _validated_async_client(client: async_redis.Redis) -> _Timing:
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
     _validate_async_lock(pool._lock)
+    _validate_empty_pool(pool)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
     _validate_response_callbacks(client, pool.connection_kwargs)
@@ -286,9 +288,13 @@ def _validate_pool(
     client_name = options.get("client_name")
     if client_name is not None and (type(client_name) is not str or not client_name):
         raise TypeError(_UNSUPPORTED_CLIENT)
-    for credential in (options.get("username"), options.get("password")):
-        if credential is not None and type(credential) not in (str, bytes):
+    username = options.get("username")
+    password = options.get("password")
+    if username is None:
+        if password is not None and not _nonempty_credential(password):
             raise TypeError(_UNSUPPORTED_CLIENT)
+    elif not _nonempty_credential(username) or not _nonempty_credential(password):
+        raise TypeError(_UNSUPPORTED_CLIENT)
 
     if connection_class in (SyncConnection, AsyncConnection):
         host = options.get("host")
@@ -325,7 +331,7 @@ def _validate_pool(
 
 def _handshake_commands(options: Mapping[str, Any]) -> tuple[str, ...]:
     commands: list[str] = []
-    has_auth = options.get("username") is not None or options.get("password") is not None
+    has_auth = options.get("password") is not None
     protocol = options.get("protocol")
     if has_auth and protocol == 3:
         commands.append("HELLO AUTH")
@@ -455,6 +461,20 @@ def _validate_async_lock(value: object) -> None:
         or vars(value) != {"_waiters": None, "_locked": False}
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _validate_empty_pool(value: object) -> None:
+    available = getattr(value, "_available_connections", None)
+    in_use = getattr(value, "_in_use_connections", None)
+    if type(available) is not list or available or type(in_use) is not set or in_use:
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    created = getattr(value, "_created_connections", 0)
+    if type(created) is not int or created != 0:
+        raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _nonempty_credential(value: object) -> bool:
+    return type(value) in (str, bytes) and len(value) > 0
 
 
 def _has_exact_attribute_names(value: object, expected: frozenset[str]) -> bool:
