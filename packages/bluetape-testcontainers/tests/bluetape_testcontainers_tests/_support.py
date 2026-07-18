@@ -1,5 +1,8 @@
 import socket
 from dataclasses import dataclass, field
+from typing import Any
+
+import docker
 
 
 @dataclass
@@ -80,3 +83,18 @@ def _read_exact(stream: socket.socket, size: int) -> bytes:
             raise AssertionError("Redis closed the connection")
         data.extend(chunk)
     return bytes(data)
+
+
+def published_host_ips(provider: Any, port: int) -> set[str]:
+    wrapped = provider.get_wrapped_container()
+    wrapped.reload()
+    bindings = wrapped.attrs["NetworkSettings"]["Ports"][f"{port}/tcp"]
+    return {binding["HostIp"] for binding in bindings}
+
+
+def assert_container_removed(container_id: str) -> None:
+    client = docker.from_env()
+    try:
+        assert client.containers.list(all=True, filters={"id": container_id}) == []
+    finally:
+        client.close()
