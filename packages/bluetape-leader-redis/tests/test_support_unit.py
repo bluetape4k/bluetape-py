@@ -1,13 +1,16 @@
 # ruff: noqa: RUF043
 from __future__ import annotations
 
+import asyncio
 import socket
+import threading
+import traceback
 from datetime import timedelta
 
 import pytest
 import redis
 from _support import safe_async_client, safe_sync_client
-from bluetape.leader import LeaderBackendError
+from bluetape.leader import LeaderBackendError, LeaderExecutionError, RenewBackendFailure
 from bluetape.leader.redis._support import (
     _duration_milliseconds,
     _LeaseRecord,
@@ -144,6 +147,48 @@ def test_rejected_client_has_no_io_for_shadowed_event_dispatch(
         validator(client)  # type: ignore[arg-type]
 
     assert observed == []
+
+
+@pytest.mark.parametrize(
+    ("client_factory", "target", "attribute"),
+    [
+        (safe_sync_client, "client", "single_connection_lock"),
+        (safe_sync_client, "pool", "_fork_lock"),
+        (safe_sync_client, "pool", "_lock"),
+        (safe_async_client, "client", "_single_conn_lock"),
+        (safe_async_client, "client", "_usage_lock"),
+        (safe_async_client, "pool", "_lock"),
+        (safe_sync_client, "client_dispatcher", "_lock"),
+        (safe_async_client, "pool_dispatcher", "_lock"),
+    ],
+)
+def test_rejected_client_has_no_io_for_mutated_lock_primitive(
+    client_factory: object,
+    target: str,
+    attribute: str,
+) -> None:
+    client = client_factory()  # type: ignore[operator]
+    subject = {
+        "client": client,
+        "pool": client.connection_pool,
+        "client_dispatcher": client._event_dispatcher,
+        "pool_dispatcher": client.connection_pool._event_dispatcher,
+    }[target]
+    if type(client) is redis.Redis or "dispatcher" in target:
+        lock = threading.RLock()
+        lock.acquire()
+    else:
+        lock = asyncio.Lock()
+        lock._locked = True
+    setattr(subject, attribute, lock)
+
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+    try:
+        with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+            validator(client)  # type: ignore[arg-type]
+    finally:
+        if type(lock) is type(threading.RLock()):
+            lock.release()
 
 
 @pytest.mark.parametrize(
@@ -312,6 +357,29 @@ async def test_sanitized_exception_graph_async_has_no_raw_backend_canary() -> No
         await _safe_backend_call_async(fail)
 
     _assert_sanitized(caught.value, marker)
+
+
+def test_sanitized_exception_graph_covers_traceback_and_composite_properties() -> None:
+    marker = "redis://user:secret@127.0.0.1:6379 owner-raw-canary"
+
+    def fail() -> None:
+        raise RuntimeError(marker)
+
+    with pytest.raises(LeaderBackendError) as caught:
+        _safe_backend_call(fail)
+
+    backend_error = caught.value
+    renewal = RenewBackendFailure(backend_error)
+    execution = LeaderExecutionError(ValueError("caller-owned action"), backend_error)
+    rendered = "".join(
+        traceback.format_exception(type(backend_error), backend_error, backend_error.__traceback__)
+    )
+
+    assert renewal.cause is backend_error
+    assert execution.lifecycle_cause is backend_error
+    assert marker not in rendered
+    assert marker not in repr(renewal)
+    assert marker not in repr(execution)
 
 
 def _assert_sanitized(error: LeaderBackendError, marker: str) -> None:

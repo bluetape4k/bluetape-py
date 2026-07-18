@@ -5,6 +5,7 @@ import socket
 import threading
 import time
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import BinaryIO
 
 import pytest
@@ -14,18 +15,29 @@ from bluetape.leader.redis._support import (
     _validated_async_client,
     _validated_sync_client,
 )
+from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 
 class RespServer(AbstractContextManager["RespServer"]):
-    def __init__(self, connections: int = 1, *, stall_after: int | None = None) -> None:
+    def __init__(
+        self,
+        connections: int = 1,
+        *,
+        stall_after: int | None = None,
+        unix_path: Path | None = None,
+    ) -> None:
         self._connections = connections
         self._stall_after = stall_after
-        self._listener = socket.socket()
-        self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._listener.bind(("127.0.0.1", 0))
+        self.unix_path = unix_path
+        self._listener = socket.socket(socket.AF_UNIX if unix_path is not None else socket.AF_INET)
+        if unix_path is None:
+            self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._listener.bind(("127.0.0.1", 0))
+        else:
+            self._listener.bind(str(unix_path))
         self._listener.listen()
-        self.port = self._listener.getsockname()[1]
+        self.port = self._listener.getsockname()[1] if unix_path is None else 0
         self.commands: list[list[tuple[bytes, ...]]] = []
         self.accepted = threading.Event()
         self._stop = threading.Event()
@@ -40,6 +52,8 @@ class RespServer(AbstractContextManager["RespServer"]):
         self._listener.close()
         self._thread.join(timeout=1)
         assert not self._thread.is_alive()
+        if self.unix_path is not None:
+            self.unix_path.unlink(missing_ok=True)
 
     def _serve(self) -> None:
         try:
@@ -129,6 +143,51 @@ def test_handshake_matrix_cold_and_reconnect_observe_exact_shape(
     assert timing.handshake_round_trips == len(expected) - 1
 
 
+@pytest.mark.parametrize("client_family", ["sync", "async"])
+@pytest.mark.parametrize("transport", ["tcp", "unix"])
+def test_handshake_matrix_covers_sync_async_numeric_tcp_and_unix(
+    client_family: str,
+    transport: str,
+    tmp_path: Path,
+) -> None:
+    unix_path = _unix_path(tmp_path) if transport == "unix" else None
+    with RespServer(connections=2, unix_path=unix_path) as server:
+        options = _server_options(server)
+        if client_family == "sync":
+            client = safe_sync_client(protocol=3, password="secret", db=1, **options)
+            timing = _validated_sync_client(client)
+            assert client.ping() is True
+            client.connection_pool.disconnect()
+            assert client.ping() is True
+            client.connection_pool.disconnect()
+        else:
+            timing = asyncio.run(_exercise_async_reconnect(options))
+
+    assert len(server.commands) == 2
+    assert server.commands[0] == server.commands[1]
+    assert timing.handshake_round_trips == len(server.commands[0]) - 1
+
+
+async def _exercise_async_reconnect(options: dict[str, object]) -> object:
+    client = safe_async_client(protocol=3, password="secret", db=1, **options)
+    timing = _validated_async_client(client)
+    assert await client.ping() is True
+    await client.connection_pool.disconnect()
+    assert await client.ping() is True
+    await client.connection_pool.disconnect()
+    return timing
+
+
+def _server_options(server: RespServer) -> dict[str, object]:
+    if server.unix_path is not None:
+        return {"unix_socket_path": str(server.unix_path)}
+    return {"host": "127.0.0.1", "port": server.port}
+
+
+def _unix_path(tmp_path: Path) -> Path:
+    return Path("/tmp") / f"bt-{tmp_path.name[-24:]}.sock"
+
+
 def _command_name(command: tuple[bytes, ...]) -> str:
     first = command[0].decode().upper()
     if first == "HELLO" and b"AUTH" in command:
@@ -153,6 +212,45 @@ def test_stalled_stage_sync_terminates_inside_computed_command_bound() -> None:
         client.connection_pool.disconnect()
 
     assert elapsed <= timing.command + 0.10
+
+
+@pytest.mark.parametrize("client_family", ["sync", "async"])
+@pytest.mark.parametrize("transport", ["tcp", "unix"])
+@pytest.mark.parametrize("stall_after", [0, 1, 2])
+def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
+    client_family: str,
+    transport: str,
+    stall_after: int,
+    tmp_path: Path,
+) -> None:
+    unix_path = _unix_path(tmp_path) if transport == "unix" else None
+    with RespServer(stall_after=stall_after, unix_path=unix_path) as server:
+        options = _server_options(server)
+        started = time.monotonic()
+        if client_family == "sync":
+            client = safe_sync_client(socket_connect_timeout=0.03, socket_timeout=0.03, **options)
+            timing = _validated_sync_client(client)
+            with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+                client.ping()
+            client.connection_pool.disconnect()
+        else:
+            timing = asyncio.run(_stalled_async_command(options))
+        elapsed = time.monotonic() - started
+
+    expected_connect_timeout = 5.0 if transport == "unix" else 0.03
+    assert timing.connect == pytest.approx(
+        expected_connect_timeout + timing.handshake_round_trips * 0.03
+    )
+    assert elapsed <= timing.command + 0.10
+
+
+async def _stalled_async_command(options: dict[str, object]) -> object:
+    client = safe_async_client(socket_connect_timeout=0.03, socket_timeout=0.03, **options)
+    timing = _validated_async_client(client)
+    with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+        await client.ping()
+    await client.connection_pool.disconnect()
+    return timing
 
 
 @pytest.mark.asyncio
