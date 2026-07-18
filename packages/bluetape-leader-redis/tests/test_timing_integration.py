@@ -26,10 +26,12 @@ class RespServer(AbstractContextManager["RespServer"]):
         self,
         connections: int = 1,
         *,
+        auth_username_fallback: bool = False,
         stall_after: int | None = None,
         unix_path: Path | None = None,
     ) -> None:
         self._connections = connections
+        self._auth_username_fallback = auth_username_fallback
         self._stall_after = stall_after
         self.unix_path = unix_path
         self._listener = socket.socket(socket.AF_UNIX if unix_path is not None else socket.AF_INET)
@@ -73,7 +75,16 @@ class RespServer(AbstractContextManager["RespServer"]):
                         if self._stall_after is not None and len(seen) > self._stall_after:
                             self._stop.wait(1)
                             break
-                        connection.sendall(_response(command))
+                        if (
+                            self._auth_username_fallback
+                            and command[0].upper() == b"AUTH"
+                            and len(command) == 3
+                        ):
+                            connection.sendall(
+                                b"-ERR wrong number of arguments for 'auth' command\r\n"
+                            )
+                        else:
+                            connection.sendall(_response(command))
                         if command[0].upper() == b"PING":
                             break
         except (OSError, ValueError):
@@ -125,7 +136,11 @@ def test_handshake_matrix_cold_and_reconnect_observe_exact_shape(
     tmp_path: Path,
 ) -> None:
     unix_path = _unix_path(tmp_path) if transport == "unix" else None
-    with RespServer(connections=2, unix_path=unix_path) as server:
+    with RespServer(
+        connections=2,
+        auth_username_fallback=auth == "username-password" and protocol == 2,
+        unix_path=unix_path,
+    ) as server:
         options = {
             **_server_options(server),
             **_shape_options(auth, protocol, client_name, db),
@@ -181,6 +196,55 @@ def _shape_options(
     elif auth == "username-password":
         options.update(username="user", password="secret")
     return options
+
+
+@pytest.mark.parametrize("client_family", ["sync", "async"])
+@pytest.mark.parametrize("transport", ["tcp", "unix"])
+def test_resp2_username_auth_fallback_is_inside_computed_connect_envelope(
+    client_family: str,
+    transport: str,
+    tmp_path: Path,
+) -> None:
+    unix_path = _unix_path(tmp_path) if transport == "unix" else None
+    with RespServer(auth_username_fallback=True, unix_path=unix_path) as server:
+        options = {
+            **_server_options(server),
+            **_shape_options("username-password", 2, None, 0),
+        }
+        timing = _exercise_once(client_family, options)
+
+    expected_handshake = [
+        "AUTH",
+        "AUTH",
+        "CLIENT SETINFO LIB-NAME",
+        "CLIENT SETINFO LIB-VER",
+    ]
+    if client_family == "async" and transport == "unix":
+        expected_handshake *= 2
+    assert [[_command_name(command) for command in commands] for commands in server.commands] == [
+        [*expected_handshake, "PING"]
+    ]
+    connect_timeout = 5.0 if transport == "unix" else 0.05
+    assert timing.connect == pytest.approx(connect_timeout + len(expected_handshake) * 0.05)
+    assert timing.handshake_round_trips == len(expected_handshake)
+
+
+def _exercise_once(client_family: str, options: dict[str, object]) -> _Timing:
+    if client_family == "sync":
+        client = safe_sync_client(**options)
+        timing = _validated_sync_client(client)
+        assert client.ping() is True
+        client.connection_pool.disconnect()
+        return timing
+    return asyncio.run(_exercise_async_once(options))
+
+
+async def _exercise_async_once(options: dict[str, object]) -> _Timing:
+    client = safe_async_client(**options)
+    timing = _validated_async_client(client)
+    assert await client.ping() is True
+    await client.connection_pool.disconnect()
+    return timing
 
 
 @pytest.mark.parametrize("client_family", ["sync", "async"])
@@ -328,7 +392,11 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
         expected_handshakes *= 2
     for stall_after in range(expected_handshakes + 1):
         unix_path = _unix_path(tmp_path) if transport == "unix" else None
-        with RespServer(stall_after=stall_after, unix_path=unix_path) as server:
+        with RespServer(
+            auth_username_fallback=auth == "username-password" and protocol == 2,
+            stall_after=stall_after,
+            unix_path=unix_path,
+        ) as server:
             options = {**_server_options(server), **shape}
             started = time.monotonic()
             timing = _exercise_stalled_command(client_family, options)

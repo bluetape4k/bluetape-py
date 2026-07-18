@@ -341,12 +341,21 @@ def _validate_pool(
 
 def _handshake_commands(options: Mapping[str, Any]) -> tuple[str, ...]:
     commands: list[str] = []
-    has_auth = options.get("password") is not None
+    username = options.get("username")
+    password = options.get("password")
+    has_auth = password is not None
     protocol = options.get("protocol")
     if has_auth and protocol == 3:
         commands.append("HELLO AUTH")
     elif has_auth:
         commands.append("AUTH")
+        if (
+            type(protocol) is int
+            and protocol == 2
+            and _nonempty_credential(username)
+            and _nonempty_credential(password)
+        ):
+            commands.append("AUTH")
     elif protocol == 3:
         commands.append("HELLO")
     if options.get("client_name") is not None:
