@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import math
+import threading
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
@@ -149,6 +151,7 @@ def _validated_sync_client(client: redis.Redis) -> _Timing:
         or client._single_connection_client is not False
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_sync_lock(client.single_connection_lock)
     pool = client.connection_pool
     if (
         type(pool) is not SyncConnectionPool
@@ -156,6 +159,8 @@ def _validated_sync_client(client: redis.Redis) -> _Timing:
         or pool.cache is not None
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_sync_lock(pool._fork_lock)
+    _validate_sync_lock(pool._lock)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
     _validate_response_callbacks(client, pool.connection_kwargs)
@@ -185,11 +190,14 @@ def _validated_async_client(client: async_redis.Redis) -> _Timing:
         or client.single_connection_client is not False
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_async_lock(client._single_conn_lock)
+    _validate_async_lock(client._usage_lock)
     pool = client.connection_pool
     if type(pool) is not AsyncConnectionPool or not _has_exact_attribute_names(
         pool, _ASYNC_POOL_ATTRIBUTES
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_async_lock(pool._lock)
     _validate_event_dispatcher(getattr(client, "_event_dispatcher", None))
     _validate_event_dispatcher(getattr(pool, "_event_dispatcher", None))
     _validate_response_callbacks(client, pool.connection_kwargs)
@@ -310,6 +318,8 @@ def _validate_pool(
             raise TypeError(_UNSUPPORTED_CLIENT)
 
     handshake = len(_handshake_commands(options))
+    if not sync and connection_class is AsyncUnixConnection:
+        handshake *= 2
     return _timing(handshake, connect_timeout, socket_timeout, pool_wait=0.0)
 
 
@@ -407,6 +417,9 @@ def _validate_event_dispatcher(value: object) -> None:
         value, frozenset({"_event_listeners_mapping", "_lock", "_async_lock"})
     ):
         raise TypeError(_UNSUPPORTED_CLIENT)
+    _validate_sync_lock(value._lock)
+    if value._async_lock is not None:
+        raise TypeError(_UNSUPPORTED_CLIENT)
     expected = EventDispatcher()
     actual_mapping = vars(value).get("_event_listeners_mapping")
     expected_mapping = vars(expected).get("_event_listeners_mapping")
@@ -425,6 +438,23 @@ def _validate_event_dispatcher(value: object) -> None:
                 actual_listener, expected_listener
             ):
                 raise TypeError(_UNSUPPORTED_CLIENT)
+
+
+def _validate_sync_lock(value: object) -> None:
+    if type(value) is not type(threading.RLock()) or value._is_owned():  # type: ignore[attr-defined]
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    if not value.acquire(blocking=False):  # type: ignore[attr-defined]
+        raise TypeError(_UNSUPPORTED_CLIENT)
+    value.release()  # type: ignore[attr-defined]
+
+
+def _validate_async_lock(value: object) -> None:
+    if (
+        type(value) is not asyncio.Lock
+        or value.locked()
+        or vars(value) != {"_waiters": None, "_locked": False}
+    ):
+        raise TypeError(_UNSUPPORTED_CLIENT)
 
 
 def _has_exact_attribute_names(value: object, expected: frozenset[str]) -> bool:

@@ -85,7 +85,10 @@ async def test_noscript_async_falls_back_once_without_script_load() -> None:
     wrapped = FakeCommands(evalsha_effects=[NoScriptError()], eval_effects=[[b"HELD"]])
 
     result = await _run_script_async(
-        AsyncFakeCommands(wrapped), PROBE_SCRIPT, (b"lease",), (b"record",)
+        AsyncFakeCommands(wrapped),
+        PROBE_SCRIPT,
+        (b"lease",),
+        (b"v1:" + b"A" * 32 + b":1",),
     )
 
     assert result == [b"HELD"]
@@ -97,7 +100,12 @@ def test_noscript_non_noscript_error_never_redispatches() -> None:
     commands = FakeCommands(evalsha_effects=[marker])
 
     with pytest.raises(TimeoutError) as caught:
-        _run_script(commands, PROBE_SCRIPT, (b"lease",), (b"record",))
+        _run_script(
+            commands,
+            PROBE_SCRIPT,
+            (b"lease",),
+            (b"v1:" + b"A" * 32 + b":1",),
+        )
 
     assert caught.value is marker
     assert [call[0] for call in commands.calls] == ["evalsha"]
@@ -140,6 +148,7 @@ def test_acquire_source_keeps_fence_as_canonical_string() -> None:
     assert "local fence = redis.call('GET', KEYS[2])" in source
     assert "tonumber" not in source
     assert "'PX', ARGV[2]" in source
+    assert "if previous == '9223372036854775807' then return {'CORRUPT'} end" in source
 
 
 def test_probe_accepts_only_atomic_contract_statuses() -> None:
@@ -192,3 +201,53 @@ def test_script_arguments_validate_before_dispatch() -> None:
         _validated_script_args("short", 1)
     with pytest.raises(ValueError, match="^Redis script argument is invalid$"):
         _validated_script_args("A" * 32, 0)
+    with pytest.raises(ValueError, match="^Redis script argument is invalid$"):
+        _validated_script_args("A" * 32, 9_223_372_036_854_775_808)
+
+
+@pytest.mark.parametrize(
+    ("script", "keys", "args"),
+    [
+        (ACQUIRE_SCRIPT, (b"lease", b"fence"), (b"short", b"1000")),
+        (ACQUIRE_SCRIPT, (b"lease", b"fence"), (b"A" * 32, b"01")),
+        (RENEW_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":1", b"0")),
+        (PROBE_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":9223372036854775808",)),
+        (RELEASE_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":1", b"+1")),
+    ],
+)
+def test_script_arguments_reject_noncanonical_values_before_sync_dispatch(
+    script: object,
+    keys: tuple[bytes, ...],
+    args: tuple[bytes, ...],
+) -> None:
+    commands = FakeCommands(evalsha_effects=[[b"OTHER"]])
+
+    with pytest.raises((TypeError, ValueError)):
+        _run_script(commands, script, keys, args)  # type: ignore[arg-type]
+
+    assert commands.calls == []
+
+
+@pytest.mark.asyncio
+async def test_script_arguments_reject_noncanonical_values_before_async_dispatch() -> None:
+    wrapped = FakeCommands(evalsha_effects=[[b"OTHER"]])
+
+    with pytest.raises((TypeError, ValueError)):
+        await _run_script_async(
+            AsyncFakeCommands(wrapped),
+            ACQUIRE_SCRIPT,
+            (b"lease", b"fence"),
+            (b"short", b"1000"),
+        )
+
+    assert wrapped.calls == []
+
+
+@pytest.mark.parametrize(
+    "script",
+    [ACQUIRE_SCRIPT, RENEW_SCRIPT, PROBE_SCRIPT, RECONCILE_SCRIPT, RELEASE_SCRIPT],
+)
+def test_script_source_rejects_fences_above_redis_signed_maximum(script: object) -> None:
+    source = script.source  # type: ignore[attr-defined]
+    assert "9223372036854775807" in source
+    assert "string.len(fence)" in source
