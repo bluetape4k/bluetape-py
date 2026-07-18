@@ -1,8 +1,36 @@
 import importlib
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
+PUBLIC_EXPORTS = [
+    "LeaderError",
+    "InvalidLeaderOptionsError",
+    "InvalidLockNameError",
+    "LeaderBackendError",
+    "LeaderLeaseLostError",
+    "LeaderReleaseError",
+    "LeaderExecutionError",
+    "LeaderElectionOptions",
+    "LeaderLease",
+    "FencedLeaderLease",
+    "Elected",
+    "Skipped",
+    "ActionFailed",
+    "LeaderRunResult",
+    "Renewed",
+    "NotHeld",
+    "RenewBackendFailure",
+    "RenewOutcome",
+    "LockLease",
+    "AsyncLockLease",
+    "DistributedLock",
+    "AsyncDistributedLock",
+    "LeaderElector",
+    "AsyncLeaderElector",
+]
 
 
 def load_pyproject(path: Path) -> dict[str, object]:
@@ -23,6 +51,39 @@ def test_core_distribution_is_stdlib_only_and_uses_uv_build() -> None:
         "build-backend": "uv_build",
     }
     assert metadata["tool"]["uv"]["build-backend"]["module-name"] == "bluetape.leader"
+
+
+def test_core_public_surface_has_exact_reviewed_order() -> None:
+    leader = importlib.import_module("bluetape.leader")
+
+    assert leader.__all__ == PUBLIC_EXPORTS
+
+
+def test_core_public_import_succeeds_when_redis_imports_are_blocked() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import importlib.abc
+import sys
+
+class BlockRedis(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname == "redis" or fullname.startswith("redis."):
+            raise AssertionError("bluetape.leader imported Redis")
+        return None
+
+sys.meta_path.insert(0, BlockRedis())
+import bluetape.leader
+""",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_workspace_registers_the_core_distribution() -> None:
