@@ -297,6 +297,17 @@ class _AsyncRedisLockLease:
                     _, cleanup_failure = await self._await_cleanup(scoped=True, first_cancel=None)
                     if cleanup_failure is None:
                         raise start_failure
+                    if isinstance(
+                        start_failure,
+                        (asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit),
+                    ):
+                        start_failure.add_note("leader lifecycle cleanup failed")
+                        raise start_failure
+                    if isinstance(
+                        cleanup_failure,
+                        (asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit),
+                    ):
+                        raise cleanup_failure from None
                     if isinstance(start_failure, Exception) and isinstance(
                         cleanup_failure, LeaderError
                     ):
@@ -339,6 +350,11 @@ class _AsyncRedisLockLease:
             if cleanup_failure is not None and cleanup_failure is not renew_failure:
                 first_cancel.add_note("leader lifecycle cleanup failed")
             raise first_cancel
+        if isinstance(
+            lifecycle_failure,
+            (asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit),
+        ):
+            raise lifecycle_failure
         if lifecycle_failure is None:
             return
         if isinstance(exc, Exception):
@@ -351,11 +367,25 @@ class _AsyncRedisLockLease:
         scoped: bool,
         first_cancel: asyncio.CancelledError | None,
     ) -> tuple[asyncio.CancelledError | None, BaseException | None]:
+        if self._state == "UNKNOWN":
+            assert self._failure is not None
+            return first_cancel, self._failure
         if self._cleanup_task is None:
             cleanup_coroutine = self._release(scoped=scoped)
             try:
                 self._cleanup_task = asyncio.create_task(cleanup_coroutine)
-            except BaseException:
+            except (
+                asyncio.CancelledError,
+                KeyboardInterrupt,
+                SystemExit,
+                GeneratorExit,
+            ) as control:
+                cleanup_coroutine.close()
+                failure = LeaderBackendError()
+                self._state = "UNKNOWN"
+                self._failure = failure
+                return first_cancel, control
+            except Exception:
                 cleanup_coroutine.close()
                 failure = LeaderBackendError()
                 self._state = "UNKNOWN"

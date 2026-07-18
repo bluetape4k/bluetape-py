@@ -17,6 +17,7 @@ from bluetape.leader import (
 )
 from bluetape.leader.redis._async_lock import AsyncRedisDistributedLock
 from bluetape.leader.redis._support import _Timing
+from redis.exceptions import NoScriptError
 
 
 class AsyncClock:
@@ -94,6 +95,20 @@ class CountingTask(asyncio.Task[Any]):
 class FakeTimer:
     def cancel(self) -> None:
         pass
+
+
+class FakeResultTask:
+    def __init__(self, error: BaseException) -> None:
+        self.error = error
+
+    def done(self) -> bool:
+        return True
+
+    def cancelled(self) -> bool:
+        return False
+
+    def result(self) -> None:
+        raise self.error
 
 
 TIMING = _Timing(0, 0.01, 0.02, 0.04, 0.06, 0.04, 0.04, 0.1)
@@ -355,7 +370,7 @@ async def test_renew_task_lifecycle_cancels_stall_by_absolute_terminal_deadline(
     with pytest.raises(LeaderBackendError):
         await entered.__aexit__(None, None, None)
 
-    assert handle._cleanup_task is not None and handle._cleanup_task.done()
+    assert handle._cleanup_task is None
     assert asyncio.all_tasks() == baseline
     assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
 
@@ -413,11 +428,9 @@ async def test_caller_cancellation_survives_timed_out_renew_and_restores_task_ba
         assert caught.value.args == ("first caller cancel",)
         assert caught.value.__notes__ == ["leader lifecycle renew failed"]
         assert handle._renew_task is not None and handle._renew_task.done()
-        assert handle._cleanup_task is not None and handle._cleanup_task.done()
+        assert handle._cleanup_task is None
         assert isinstance(handle._renew_task, CountingTask)
-        assert isinstance(handle._cleanup_task, CountingTask)
         assert handle._renew_task.cancel_calls <= 1
-        assert handle._cleanup_task.cancel_calls <= 1
         assert asyncio.all_tasks() == baseline
     finally:
         loop.set_task_factory(previous_factory)
@@ -662,6 +675,280 @@ async def test_global_task_start_failure_closes_both_coroutines_and_falls_back_u
     assert handle._renew_task is None
     assert handle._cleanup_task is None
     assert handle._state == "UNKNOWN"
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit],
+)
+@pytest.mark.asyncio
+async def test_cleanup_task_factory_control_stays_exact_and_unknown(
+    error_type: type[BaseException],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    marker = error_type("cleanup factory control")
+    captured: list[object] = []
+
+    def fail_cleanup(coroutine: object) -> asyncio.Task[object]:
+        captured.append(coroutine)
+        raise marker
+
+    monkeypatch.setattr(asyncio, "create_task", fail_cleanup)
+
+    with pytest.raises(BaseException) as caught:
+        await handle.release()
+
+    assert caught.value is marker
+    assert len(captured) == 1
+    assert inspect.getcoroutinestate(captured[0]) == inspect.CORO_CLOSED
+    assert handle._cleanup_task is None
+    assert handle._state == "UNKNOWN"
+    with pytest.raises(LeaderBackendError) as retained:
+        await handle.is_held()
+    assert retained.value is handle._failure
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit],
+)
+@pytest.mark.asyncio
+async def test_ordinary_renew_start_failure_yields_exact_cleanup_control(
+    error_type: type[BaseException],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"]])
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.01)
+    )
+    assert handle is not None
+    start_error = RuntimeError("renew start marker")
+    marker = error_type("cleanup control marker")
+    captured: list[object] = []
+
+    def fail_start_then_cleanup(coroutine: object) -> asyncio.Task[object]:
+        captured.append(coroutine)
+        if len(captured) == 1:
+            raise start_error
+        raise marker
+
+    monkeypatch.setattr(asyncio, "create_task", fail_start_then_cleanup)
+
+    with pytest.raises(BaseException) as caught:
+        await handle.__aenter__()
+
+    assert caught.value is marker
+    assert len(captured) == 2
+    assert all(inspect.getcoroutinestate(item) == inspect.CORO_CLOSED for item in captured)
+    assert handle._renew_task is None
+    assert handle._cleanup_task is None
+    assert handle._state == "UNKNOWN"
+    assert isinstance(handle._failure, LeaderBackendError)
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.parametrize("error_type", [KeyboardInterrupt, SystemExit, GeneratorExit])
+@pytest.mark.asyncio
+async def test_lifecycle_process_control_beats_ordinary_body_error(
+    error_type: type[BaseException],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = AsyncClock()
+    marker = error_type("lifecycle control")
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"HELD"]])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    entered = await handle.__aenter__()
+    fake_task = FakeResultTask(marker)
+
+    def return_control(coroutine: object) -> FakeResultTask:
+        coroutine.close()  # type: ignore[attr-defined]
+        return fake_task
+
+    monkeypatch.setattr(asyncio, "create_task", return_control)
+
+    with pytest.raises(BaseException) as caught:
+        await entered.__aexit__(ValueError, ValueError("body"), None)
+
+    assert caught.value is marker
+    assert handle._cleanup_task is fake_task
+
+
+@pytest.mark.parametrize(
+    "body_type",
+    [asyncio.CancelledError, KeyboardInterrupt, SystemExit, GeneratorExit],
+)
+@pytest.mark.asyncio
+async def test_prior_body_control_beats_later_lifecycle_control(
+    body_type: type[BaseException],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = AsyncClock()
+    body_marker = body_type("body control")
+    lifecycle_marker = KeyboardInterrupt("lifecycle control")
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"HELD"]])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    entered = await handle.__aenter__()
+    fake_task = FakeResultTask(lifecycle_marker)
+
+    def return_control(coroutine: object) -> FakeResultTask:
+        coroutine.close()  # type: ignore[attr-defined]
+        return fake_task
+
+    monkeypatch.setattr(asyncio, "create_task", return_control)
+
+    with pytest.raises(BaseException) as caught:
+        await entered.__aexit__(body_type, body_marker, None)
+
+    assert caught.value is body_marker
+    assert handle._cleanup_task is fake_task
+
+
+@pytest.mark.asyncio
+async def test_unknown_cleanup_reuses_retained_failure_without_task_or_io(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], TimeoutError("renew")])
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    outcome = await handle.renew()
+    assert isinstance(outcome, RenewBackendFailure)
+    retained = outcome.cause
+    calls = list(commands.calls)
+    monkeypatch.setattr(
+        asyncio,
+        "create_task",
+        lambda coroutine: pytest.fail("UNKNOWN cleanup created a task"),
+    )
+
+    with pytest.raises(LeaderBackendError) as caught:
+        await handle.__aexit__(None, None, None)
+
+    assert caught.value is retained
+    assert handle._failure is retained
+    assert handle._cleanup_task is None
+    assert commands.calls == calls
+
+
+@pytest.mark.parametrize(
+    ("stage", "trace"),
+    [
+        ("renew_evalsha", ["evalsha", "evalsha"]),
+        ("noscript_eval", ["evalsha", "evalsha", "eval"]),
+        ("reconcile_eval", ["evalsha", "eval"]),
+    ],
+)
+@pytest.mark.asyncio
+async def test_command_stage_cancellation_preserves_exact_error_and_task(
+    stage: str,
+    trace: list[str],
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    blocked = AsyncBlockingEffect([b"RENEWED"])
+
+    if stage == "renew_evalsha":
+        commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], blocked])
+        handle = await new_lock(commands, clock).try_acquire("job", options())
+        assert handle is not None
+        operation = handle.renew()
+    elif stage == "noscript_eval":
+        commands = AsyncCommands(
+            evalsha_effects=[[b"ACQUIRED", b"7"], NoScriptError("missing")],
+            eval_effects=[blocked],
+        )
+        handle = await new_lock(commands, clock).try_acquire("job", options())
+        assert handle is not None
+        operation = handle.renew()
+    else:
+        commands = AsyncCommands(
+            evalsha_effects=[TimeoutError("uncertain acquire")],
+            eval_effects=[blocked],
+        )
+        operation = new_lock(commands, clock).try_acquire("job", options())
+
+    task = asyncio.create_task(operation)
+    retained_task = task
+    await asyncio.wait_for(blocked.entered.wait(), 0.2)
+    task.cancel(f"first {stage} cancel")
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await task
+
+    assert len(blocked.cancellations) == 1
+    assert caught.value is blocked.cancellations[0]
+    assert caught.value.args == (f"first {stage} cancel",)
+    assert task is retained_task and retained_task.done()
+    assert [call[0] for call in commands.calls] == trace
+    assert asyncio.all_tasks() == baseline
+
+
+@pytest.mark.parametrize(
+    ("stage", "evalsha_effects", "eval_effects", "trace"),
+    [
+        (
+            "initial_release",
+            [[b"ACQUIRED", b"7"]],
+            [],
+            ["evalsha", "evalsha"],
+        ),
+        (
+            "same_owner_repeat_release",
+            [[b"ACQUIRED", b"7"], TimeoutError("uncertain release")],
+            [[b"PRESENT", b"v1:" + b"A" * 32 + b":7"]],
+            ["evalsha", "evalsha", "eval", "evalsha"],
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_release_stage_cancellation_reuses_cleanup_and_first_error(
+    stage: str,
+    evalsha_effects: list[object],
+    eval_effects: list[object],
+    trace: list[str],
+) -> None:
+    baseline = asyncio.all_tasks()
+    clock = AsyncClock()
+    blocked = AsyncBlockingEffect([b"DELETED"])
+    commands = AsyncCommands(
+        evalsha_effects=[*evalsha_effects, blocked],
+        eval_effects=eval_effects,
+    )
+    handle = await new_lock(commands, clock).try_acquire("job", options())
+    assert handle is not None
+    observed: list[asyncio.CancelledError] = []
+
+    async def owner() -> None:
+        try:
+            await handle.release()
+        except asyncio.CancelledError as error:
+            observed.append(error)
+            raise
+
+    owner_task = asyncio.create_task(owner())
+    await asyncio.wait_for(blocked.entered.wait(), 0.2)
+    cleanup_task = handle._cleanup_task
+    assert cleanup_task is not None
+    owner_task.cancel(f"first {stage} cancel")
+    asyncio.get_running_loop().call_soon(blocked.release.set)
+
+    with pytest.raises(asyncio.CancelledError) as caught:
+        await owner_task
+
+    assert observed == [caught.value]
+    assert caught.value.args == (f"first {stage} cancel",)
+    assert handle._cleanup_task is cleanup_task and cleanup_task.done()
+    assert blocked.cancellations == []
+    assert [call[0] for call in commands.calls] == trace
     assert asyncio.all_tasks() == baseline
 
 
