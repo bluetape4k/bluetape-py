@@ -151,7 +151,29 @@ scope in favor of caller-owned deployment tooling.
 - The pre-existing full-suite Redis benchmark startup failure remains a known
   baseline exception outside this design change.
 
-## Gate Result
+## Post-Approval Step 3-R Clarifications
+
+Implementation-plan review preserved the approved package/API boundary and
+made five safety rules executable:
+
+- non-auto-renew entry uses an atomic `TYPE`/`GET`/`PTTL` probe script so a
+  no-expiry record cannot authorize the context body;
+- an in-flight async Redis operation is cancelled once at `N/R` and must reach
+  terminal state by `N/R + 100ms`, proven against the pinned redis-py path; and
+- response-loss reconciliation atomically validates type, value, and positive
+  expiry in one fixed read-only `EVAL`, then compares the private owner in
+  Python;
+- missing or different-owner acquire reconciliation raises sanitized
+  `LeaderBackendError`; only an explicit acquire-script `CONTENDED` status is
+  normal contention; and
+- `LeaderBackendError` remains deliberately non-diagnostic, with suspected
+  condition recovery delegated to caller-owned Redis evidence.
+
+The six-lens implementation-plan review and reruns converged at P0=0/P1=0.
+Detailed evidence is recorded in
+`docs/review/2026-07-18-issue-17-leader-lock-contracts-plan-review.md`.
+
+## Original Specification Gate Result
 
 The written specification is internally converged and ready for user review.
 Implementation planning and production-code edits remain blocked until the
