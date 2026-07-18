@@ -229,6 +229,37 @@ def test_resp2_username_auth_fallback_is_inside_computed_connect_envelope(
     assert timing.handshake_round_trips == len(expected_handshake)
 
 
+@pytest.mark.parametrize("client_family", ["sync", "async"])
+@pytest.mark.parametrize("transport", ["tcp", "unix"])
+def test_default_protocol_hello_is_inside_computed_connect_envelope(
+    client_family: str,
+    transport: str,
+    tmp_path: Path,
+) -> None:
+    unix_path = _unix_path(tmp_path) if transport == "unix" else None
+    with RespServer(unix_path=unix_path) as server:
+        options = {
+            **_server_options(server),
+            **_shape_options("none", 3, None, 0),
+            "protocol": None,
+        }
+        timing = _exercise_once(client_family, options)
+
+    expected_handshake = [
+        "HELLO",
+        "CLIENT SETINFO LIB-NAME",
+        "CLIENT SETINFO LIB-VER",
+    ]
+    if client_family == "async" and transport == "unix":
+        expected_handshake *= 2
+    assert [[_command_name(command) for command in commands] for commands in server.commands] == [
+        [*expected_handshake, "PING"]
+    ]
+    connect_timeout = 5.0 if transport == "unix" else 0.05
+    assert timing.connect == pytest.approx(connect_timeout + len(expected_handshake) * 0.05)
+    assert timing.handshake_round_trips == len(expected_handshake)
+
+
 def _exercise_once(client_family: str, options: dict[str, object]) -> _Timing:
     if client_family == "sync":
         client = safe_sync_client(**options)

@@ -20,6 +20,7 @@ import redis.asyncio as async_redis
 from redis.backoff import NoBackoff
 from redis.client import CaseInsensitiveDict, get_response_callbacks
 from redis.connection import (
+    DEFAULT_RESP_VERSION,
     SENTINEL,
 )
 from redis.connection import (
@@ -345,6 +346,10 @@ def _handshake_commands(options: Mapping[str, Any]) -> tuple[str, ...]:
     password = options.get("password")
     has_auth = password is not None
     protocol = options.get("protocol")
+    if protocol is None:
+        if type(DEFAULT_RESP_VERSION) is not int or DEFAULT_RESP_VERSION != 3:
+            raise TypeError(_UNSUPPORTED_CLIENT)
+        protocol = DEFAULT_RESP_VERSION
     if has_auth and protocol == 3:
         commands.append("HELLO AUTH")
     elif has_auth:

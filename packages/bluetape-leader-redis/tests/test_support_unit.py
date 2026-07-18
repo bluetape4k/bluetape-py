@@ -718,8 +718,8 @@ def test_validated_client_accepts_numeric_tcp_and_unix_socket_shapes() -> None:
     sync_unix = _validated_sync_client(safe_sync_client(unix_socket_path="/tmp/redis.sock"))
     async_unix = _validated_async_client(safe_async_client(unix_socket_path="/tmp/redis.sock"))
 
-    assert sync_tcp.handshake_round_trips == 2
-    assert async_tcp.handshake_round_trips == 2
+    assert sync_tcp.handshake_round_trips == 3
+    assert async_tcp.handshake_round_trips == 3
     assert sync_unix.connect > sync_tcp.connect
     assert async_unix.connect > async_tcp.connect
 
