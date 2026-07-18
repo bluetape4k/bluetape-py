@@ -77,9 +77,7 @@ def test_wrapper_extras_and_test_clients_are_isolated() -> None:
 def test_root_meta_extra_stays_base_only() -> None:
     project = load_project(ROOT / "packages/bluetape/pyproject.toml")
 
-    assert project["optional-dependencies"]["testcontainers"] == [
-        "bluetape-testcontainers==0.1.0"
-    ]
+    assert project["optional-dependencies"]["testcontainers"] == ["bluetape-testcontainers==0.1.0"]
     assert "[aws]" not in project["optional-dependencies"]["testcontainers"][0]
     assert "[postgres]" not in project["optional-dependencies"]["testcontainers"][0]
 
