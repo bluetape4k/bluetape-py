@@ -36,7 +36,7 @@ def test_workspace_registers_the_adapter_distribution() -> None:
 def test_adapter_namespace_exports_exact_sync_and_async_distributed_locks() -> None:
     adapter = importlib.import_module("bluetape.leader.redis")
 
-    assert adapter.__all__ == ["AsyncRedisDistributedLock", "RedisDistributedLock"]
+    assert adapter.__all__ == ["RedisDistributedLock", "AsyncRedisDistributedLock"]
     assert adapter.AsyncRedisDistributedLock.__module__ == "bluetape.leader.redis._async_lock"
     assert adapter.RedisDistributedLock.__module__ == "bluetape.leader.redis._lock"
 

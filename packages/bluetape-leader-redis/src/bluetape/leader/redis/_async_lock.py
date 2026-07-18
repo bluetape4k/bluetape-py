@@ -63,7 +63,9 @@ class _AsyncRedisLockLease:
         "_monotonic",
         "_options",
         "_record",
+        "_renew_deadline",
         "_renew_task",
+        "_renew_wake",
         "_state",
         "_stop_event",
         "_timing",
@@ -92,7 +94,9 @@ class _AsyncRedisLockLease:
         self._failure: LeaderBackendError | LeaderReleaseError | None = None
         self._timing = timing
         self._stop_event = asyncio.Event()
+        self._renew_deadline: float | None = None
         self._renew_task: asyncio.Task[None] | None = None
+        self._renew_wake: asyncio.Future[bool] | None = None
         self._cleanup_task: asyncio.Task[None] | None = None
 
     @property
@@ -268,30 +272,38 @@ class _AsyncRedisLockLease:
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
         first_cancel = exc if isinstance(exc, asyncio.CancelledError) else None
-        first_cancel = await self._stop_renew_task(first_cancel)
-        self._cleanup_task = asyncio.create_task(self._release(scoped=True))
+        first_cancel, renew_failure = await self._stop_renew_task(first_cancel)
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._release(scoped=True))
         completed, first_cancel = await self._wait_task(
             self._cleanup_task, self._timing.release, first_cancel
         )
+        cleanup_failure: BaseException | None = None
         if not completed:
-            self._fail_unknown(LeaderBackendError())
-        lifecycle_failure: BaseException | None = None
-        if self._cleanup_task.cancelled():
+            cleanup_failure = LeaderBackendError()
+            self._state = "UNKNOWN"
+            self._failure = cleanup_failure
+        elif self._cleanup_task.cancelled():
             failure = LeaderBackendError()
             self._state = "UNKNOWN"
             self._failure = failure
-            lifecycle_failure = failure
+            cleanup_failure = failure
         else:
             try:
                 self._cleanup_task.result()
             except BaseException as error:
-                lifecycle_failure = error
+                cleanup_failure = error
+        lifecycle_failure = renew_failure or cleanup_failure
         if first_cancel is not None:
-            if lifecycle_failure is not None:
+            if renew_failure is not None:
+                first_cancel.add_note("leader lifecycle renew failed")
+            if cleanup_failure is not None and cleanup_failure is not renew_failure:
                 first_cancel.add_note("leader lifecycle cleanup failed")
             raise first_cancel
         if isinstance(exc, (KeyboardInterrupt, SystemExit, GeneratorExit)):
-            if lifecycle_failure is not None:
+            if renew_failure is not None:
+                exc.add_note("leader lifecycle renew failed")
+            if cleanup_failure is not None and cleanup_failure is not renew_failure:
                 exc.add_note("leader lifecycle cleanup failed")
             return
         if lifecycle_failure is None:
@@ -305,30 +317,98 @@ class _AsyncRedisLockLease:
         assert interval is not None
         seconds = interval.total_seconds()
         while not self._stop_event.is_set():
+            loop = asyncio.get_running_loop()
+            wake = loop.create_future()
+            self._renew_wake = wake
+            timer = loop.call_later(seconds, wake.set_result, False)
             try:
-                async with asyncio.timeout(seconds):
-                    await self._stop_event.wait()
+                stopped = await wake
+            finally:
+                timer.cancel()
+                self._renew_wake = None
+            if stopped:
                 return
-            except TimeoutError:
-                pass
-            outcome = await self.renew()
+            command_deadline = loop.time() + self._timing.renew
+            self._renew_deadline = command_deadline
+            try:
+                try:
+                    async with asyncio.timeout_at(command_deadline):
+                        outcome = await self.renew()
+                except TimeoutError:
+                    failure = LeaderBackendError()
+                    self._state = "UNKNOWN"
+                    self._failure = failure
+                    self._stop_event.set()
+                    return
+            finally:
+                self._renew_deadline = None
             if isinstance(outcome, (NotHeld, RenewBackendFailure)):
                 self._stop_event.set()
                 return
 
     async def _stop_renew_task(
         self, first_cancel: asyncio.CancelledError | None
-    ) -> asyncio.CancelledError | None:
+    ) -> tuple[asyncio.CancelledError | None, BaseException | None]:
         task = self._renew_task
         if task is None:
-            return first_cancel
+            return first_cancel, None
         self._stop_event.set()
-        completed, first_cancel = await self._wait_task(task, self._timing.renew, first_cancel)
+        wake = self._renew_wake
+        if wake is not None and not wake.done():
+            wake.set_result(True)
+        if self._renew_deadline is None:
+            completed, first_cancel = await self._wait_task(task, self._timing.renew, first_cancel)
+        else:
+            completed, first_cancel = await self._wait_task_until(
+                task, self._renew_deadline + 0.1, first_cancel
+            )
         if not completed:
-            self._fail_unknown(LeaderBackendError())
+            failure = LeaderBackendError()
+            self._state = "UNKNOWN"
+            self._failure = failure
+            return first_cancel, failure
         if task.cancelled():
-            self._fail_unknown(LeaderBackendError())
-        return first_cancel
+            failure = LeaderBackendError()
+            self._state = "UNKNOWN"
+            self._failure = failure
+            return first_cancel, failure
+        try:
+            task.result()
+        except BaseException as error:
+            return first_cancel, error
+        if self._state == "UNKNOWN":
+            assert self._failure is not None
+            return first_cancel, self._failure
+        return first_cancel, None
+
+    @staticmethod
+    async def _wait_task_until(
+        task: asyncio.Task[None],
+        terminal_deadline: float,
+        first_cancel: asyncio.CancelledError | None,
+    ) -> tuple[bool, asyncio.CancelledError | None]:
+        loop = asyncio.get_running_loop()
+        owner = asyncio.current_task()
+        assert owner is not None
+        while not task.done():
+            remaining = terminal_deadline - loop.time()
+            if remaining <= 0:
+                return False, first_cancel
+            try:
+                async with asyncio.timeout(remaining):
+                    await asyncio.shield(task)
+            except asyncio.CancelledError as caught:
+                if task.done():
+                    break
+                if first_cancel is None and owner.cancelling() > 0:
+                    first_cancel = caught
+            except TimeoutError:
+                return task.done(), first_cancel
+            except BaseException:
+                if task.done():
+                    break
+                raise
+        return True, first_cancel
 
     @staticmethod
     async def _wait_task(
