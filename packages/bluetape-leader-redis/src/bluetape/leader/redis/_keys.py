@@ -36,7 +36,14 @@ def _redis_keys(lock_name: str, prefix: str) -> _RedisKeys:
     safe_prefix = _validated_prefix(prefix)
     if type(lock_name) is not str or not lock_name.strip():
         raise InvalidLockNameError()
-    encoded = lock_name.encode("utf-8")
+    failure: InvalidLockNameError | None = None
+    try:
+        encoded = lock_name.encode("utf-8")
+    except UnicodeEncodeError:
+        failure = InvalidLockNameError()
+        encoded = b""
+    if failure is not None:
+        raise failure from None
     if len(encoded) > _MAX_LOCK_NAME_BYTES:
         raise InvalidLockNameError()
     digest = hashlib.sha256(encoded).hexdigest()

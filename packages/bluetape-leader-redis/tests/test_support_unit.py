@@ -53,6 +53,82 @@ def test_rejected_client_has_no_io_when_retry_is_enabled() -> None:
         _validated_async_client(safe_async_client(retry=async_redis.retry.Retry(NoBackoff(), 1)))
 
 
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("pool_state", ["available", "in-use"])
+def test_rejected_client_has_no_io_for_nonempty_pool_and_registered_callback(
+    client_factory: object,
+    pool_state: str,
+) -> None:
+    observed: list[str] = []
+
+    class Listener:
+        def connected(self, connection: object) -> None:
+            del connection
+            observed.append("called")
+
+    client = client_factory()  # type: ignore[operator]
+    connection = client.connection_pool.make_connection()
+    listener = Listener()
+    connection.register_connect_callback(listener.connected)
+    if pool_state == "available":
+        client.connection_pool._available_connections.append(connection)
+    else:
+        client.connection_pool._in_use_connections.add(connection)
+
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize(
+    ("username", "password"),
+    [
+        ("user", None),
+        ("", "secret"),
+        (b"", b"secret"),
+        (None, ""),
+        (None, b""),
+        ("user", ""),
+        (b"user", b""),
+    ],
+)
+def test_rejected_client_has_no_io_for_invalid_auth_shape(
+    client_factory: object,
+    username: object,
+    password: object,
+) -> None:
+    client = client_factory(username=username, password=password)  # type: ignore[operator]
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize(
+    ("username", "password"),
+    [
+        (None, None),
+        (None, "secret"),
+        (None, b"secret"),
+        ("user", "secret"),
+        (b"user", b"secret"),
+    ],
+)
+def test_validated_client_accepts_only_complete_auth_shapes(
+    client_factory: object,
+    username: object,
+    password: object,
+) -> None:
+    client = client_factory(username=username, password=password)  # type: ignore[operator]
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    assert validator(client).handshake_round_trips >= 2  # type: ignore[arg-type]
+
+
 def test_rejected_client_has_no_io_for_wrong_family_subclass_and_instance_hook() -> None:
     import redis
 
@@ -204,14 +280,21 @@ def test_rejected_client_has_no_io_for_mutated_lock_primitive(
         {"host": "redis.internal"},
     ],
 )
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
 def test_rejected_client_has_no_io_for_unbounded_or_opaque_configuration(
     overrides: dict[str, object],
+    client_factory: object,
 ) -> None:
+    client = client_factory(**overrides)  # type: ignore[operator]
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
     with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
-        _validated_sync_client(safe_sync_client(**overrides))
+        validator(client)  # type: ignore[arg-type]
 
 
-def test_rejected_client_has_no_io_for_callback_and_command_response_hook() -> None:
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_has_no_io_for_callback_and_command_response_hook(
+    client_factory: object,
+) -> None:
     callback_calls: list[str] = []
 
     def callback() -> tuple[str, str]:
@@ -220,19 +303,21 @@ def test_rejected_client_has_no_io_for_callback_and_command_response_hook() -> N
 
     from _support import HostileCallback
 
+    client = client_factory(credential_provider=HostileCallback(callback))  # type: ignore[operator]
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
     with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
-        _validated_sync_client(safe_sync_client(credential_provider=HostileCallback(callback)))
+        validator(client)  # type: ignore[arg-type]
 
-    client = safe_sync_client()
+    client = client_factory()  # type: ignore[operator]
     client.set_response_callback("EVALSHA", lambda value: value)
     with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
-        _validated_sync_client(client)
+        validator(client)  # type: ignore[arg-type]
 
-    event_client = safe_sync_client()
+    event_client = client_factory()  # type: ignore[operator]
     listeners = vars(event_client._event_dispatcher)["_event_listeners_mapping"]
     listeners[object] = [object()]
     with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
-        _validated_sync_client(event_client)
+        validator(event_client)  # type: ignore[arg-type]
 
     assert callback_calls == []
 

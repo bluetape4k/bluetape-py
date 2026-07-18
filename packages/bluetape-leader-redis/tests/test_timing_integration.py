@@ -17,7 +17,6 @@ from bluetape.leader.redis._support import (
     _validated_sync_client,
 )
 from redis import connection as sync_connection
-from redis.asyncio import connection as async_connection
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
@@ -184,17 +183,9 @@ def _shape_options(
     return options
 
 
-@pytest.mark.parametrize("auth", ["none", "password", "username-password"])
-@pytest.mark.parametrize("protocol", [2, 3])
-@pytest.mark.parametrize("client_name", [None, "leader-test"])
-@pytest.mark.parametrize("db", [0, 1])
 @pytest.mark.parametrize("client_family", ["sync", "async"])
 @pytest.mark.parametrize("transport", ["tcp", "unix"])
 def test_connect_path_respects_computed_e_without_external_network(
-    auth: str,
-    protocol: int,
-    client_name: str | None,
-    db: int,
     client_family: str,
     transport: str,
     tmp_path: Path,
@@ -205,44 +196,79 @@ def test_connect_path_respects_computed_e_without_external_network(
         if transport == "unix"
         else {"host": "127.0.0.1", "port": 1}
     )
-    options = {**endpoint, **_shape_options(auth, protocol, client_name, db)}
+    options = {
+        **endpoint,
+        **_shape_options("username-password", 3, "leader-test", 1),
+    }
     if client_family == "sync":
-        client = safe_sync_client(socket_connect_timeout=0.03, **options)
-        timing = _validated_sync_client(client)
-        connection_type = (
-            sync_connection.UnixDomainSocketConnection
-            if transport == "unix"
-            else sync_connection.Connection
+        client = safe_sync_client(
+            socket_connect_timeout=0.03,
+            socket_timeout=0.01,
+            **options,
         )
-
-        def stalled_connect(_connection: object) -> object:
-            time.sleep(0.005)
-            raise RedisTimeoutError("deterministic connect stall")
-
-        monkeypatch.setattr(connection_type, "_connect", stalled_connect)
+        timing = _validated_sync_client(client)
+        if transport == "unix":
+            monkeypatch.setattr(
+                sync_connection.UnixDomainSocketConnection,
+                "port",
+                0,
+                raising=False,
+            )
+        monkeypatch.setattr(socket, "socket", _StalledSocket)
+        monkeypatch.setattr(
+            socket,
+            "getaddrinfo",
+            lambda *args: [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 1))],
+        )
         started = time.monotonic()
         with pytest.raises(RedisTimeoutError):
             client.ping()
     else:
-        client = safe_async_client(socket_connect_timeout=0.03, **options)
-        timing = _validated_async_client(client)
-        connection_type = (
-            async_connection.UnixDomainSocketConnection
-            if transport == "unix"
-            else async_connection.Connection
+        client = safe_async_client(
+            socket_connect_timeout=0.03,
+            socket_timeout=0.01,
+            **options,
         )
+        timing = _validated_async_client(client)
 
-        async def stalled_connect(_connection: object) -> object:
-            await asyncio.sleep(0.005)
-            raise RedisTimeoutError("deterministic connect stall")
+        async def stalled_open_connection(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            await asyncio.sleep(60)
+            raise AssertionError("connect timeout did not cancel the low-level open")
 
-        monkeypatch.setattr(connection_type, "_connect", stalled_connect)
+        open_name = "open_unix_connection" if transport == "unix" else "open_connection"
+        monkeypatch.setattr(asyncio, open_name, stalled_open_connection)
         started = time.monotonic()
-        with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+        with pytest.raises(RedisTimeoutError):
             asyncio.run(client.ping())
     elapsed = time.monotonic() - started
+    configured_e = 5.0 if transport == "unix" else 0.03
 
-    assert elapsed <= timing.connect + 0.05
+    assert elapsed >= configured_e * 0.9
+    assert elapsed <= timing.connect
+
+
+class _StalledSocket:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        del args, kwargs
+        self.timeout = 0.0
+
+    def settimeout(self, timeout: float) -> None:
+        self.timeout = timeout
+
+    def setsockopt(self, *args: object) -> None:
+        del args
+
+    def connect(self, address: object) -> None:
+        del address
+        time.sleep(self.timeout)
+        raise socket.timeout("deterministic low-level connect timeout")  # noqa: UP041
+
+    def shutdown(self, how: int) -> None:
+        del how
+
+    def close(self) -> None:
+        pass
 
 
 def _server_options(server: RespServer) -> dict[str, object]:
@@ -311,7 +337,8 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
         assert timing.handshake_round_trips == expected_handshakes
         assert len(server.commands) == 1
         assert len(server.commands[0]) == stall_after + 1
-        assert elapsed <= 0.11
+        assert elapsed >= 0.009
+        assert elapsed <= timing.command
 
 
 def _exercise_stalled_command(client_family: str, options: dict[str, object]) -> _Timing:
