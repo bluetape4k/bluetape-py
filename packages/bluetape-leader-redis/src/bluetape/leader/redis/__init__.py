@@ -1,3 +1,5 @@
-"""Reserved Redis adapter namespace for bluetape leader contracts."""
+"""Redis adapter for bluetape leader contracts."""
 
-__all__: list[str] = []
+from ._lock import RedisDistributedLock
+
+__all__ = ["RedisDistributedLock"]
