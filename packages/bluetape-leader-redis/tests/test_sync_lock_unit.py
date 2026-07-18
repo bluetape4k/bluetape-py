@@ -845,7 +845,7 @@ def test_worker_join_deadline_returns_unknown_without_release_and_fixture_joins(
     assert len(commands.calls) == 3
 
 
-@pytest.mark.parametrize("late_effect", [[b"NOT_HELD"], TimeoutError("late secret")])
+@pytest.mark.parametrize("late_effect", [[b"NOT_HELD"], TimeoutError("late-renew-backend-marker")])
 def test_worker_join_deadline_unknown_cannot_be_overwritten_by_late_renew(
     late_effect: object,
 ) -> None:
@@ -876,6 +876,10 @@ def test_worker_join_deadline_unknown_cannot_be_overwritten_by_late_renew(
             worker.join(0.5)
 
     assert worker is not None and not worker.is_alive()
+    assert retained is not None
+    assert retained.__context__ is None
+    assert retained.__cause__ is None
+    assert "late-renew-backend-marker" not in "".join(traceback.format_exception(retained))
     terminal_calls = len(commands.calls)
     operations = [
         handle.renew,
@@ -888,6 +892,9 @@ def test_worker_join_deadline_unknown_cannot_be_overwritten_by_late_renew(
         with pytest.raises(LeaderBackendError) as later:
             operation()
         assert later.value is retained
+        assert later.value.__context__ is None
+        assert later.value.__cause__ is None
+        assert "late-renew-backend-marker" not in "".join(traceback.format_exception(later.value))
     assert len(commands.calls) == terminal_calls
 
 
