@@ -11,6 +11,9 @@ ERROR_EXPORTS = [
     "LeaderLeaseLostError",
     "LeaderReleaseError",
     "LeaderExecutionError",
+    "LeaderElectionOptions",
+    "LeaderLease",
+    "FencedLeaderLease",
 ]
 
 
