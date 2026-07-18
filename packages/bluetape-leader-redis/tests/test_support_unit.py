@@ -165,6 +165,73 @@ def test_rejected_client_has_no_io_for_hostile_response_callback_container(
 
 
 @pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+def test_rejected_client_checks_every_response_callback_key_before_lookup(
+    client_factory: object,
+) -> None:
+    observed: list[str] = []
+    client = client_factory()  # type: ignore[operator]
+    callbacks = client.response_callbacks
+    target = next(iter(callbacks))
+    callback = dict.__getitem__(callbacks, target)
+
+    class HostileKey:
+        def __hash__(self) -> int:
+            observed.append("hash")
+            return hash(target)
+
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+    dict.__delitem__(callbacks, target)
+    dict.__setitem__(callbacks, HostileKey(), callback)
+    observed.clear()
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
+@pytest.mark.parametrize("target", ["client", "pool"])
+def test_rejected_client_checks_every_event_mapping_key_before_lookup(
+    client_factory: object,
+    target: str,
+) -> None:
+    observed: list[str] = []
+    client = client_factory()  # type: ignore[operator]
+    dispatcher = (
+        client._event_dispatcher if target == "client" else client.connection_pool._event_dispatcher
+    )
+    mapping = vars(dispatcher)["_event_listeners_mapping"]
+    event = next(iter(mapping))
+    listeners = dict.__getitem__(mapping, event)
+
+    class HostileKey:
+        def __hash__(self) -> int:
+            observed.append("hash")
+            return hash(event)
+
+        def __eq__(self, other: object) -> bool:
+            del other
+            observed.append("eq")
+            return False
+
+    dict.__delitem__(mapping, event)
+    dict.__setitem__(mapping, HostileKey(), listeners)
+    observed.clear()
+
+    validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client
+    with pytest.raises(TypeError, match="^unsupported Redis client configuration$"):
+        validator(client)  # type: ignore[arg-type]
+
+    assert observed == []
+
+
+@pytest.mark.parametrize("client_factory", [safe_sync_client, safe_async_client])
 @pytest.mark.parametrize(
     "field",
     [
