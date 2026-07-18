@@ -8,6 +8,21 @@ dependencies = [
     "testcontainers>=4.14.2,<4.15",
 ]
 
+[project.optional-dependencies]
+postgres = ["testcontainers[postgres]>=4.14.2,<4.15"]
+aws = ["testcontainers[localstack]>=4.14.2,<4.15"]
+all = [
+    "testcontainers[postgres]>=4.14.2,<4.15",
+    "testcontainers[localstack]>=4.14.2,<4.15",
+]
+
+[dependency-groups]
+test = [
+    "boto3>=1,<2",
+    "psycopg[binary]>=3.2,<4",
+    "pytest>=8.4.0",
+]
+
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12"]
 build-backend = "uv_build"
