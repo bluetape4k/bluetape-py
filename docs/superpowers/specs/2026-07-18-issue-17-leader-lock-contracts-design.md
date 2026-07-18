@@ -406,10 +406,11 @@ Async equivalents use `await renew`, `await is_held`, `await assert_held`,
 single-release. Releasing twice raises a value-free `LeaderReleaseError`.
 
 `is_held()` returns immediately without Redis I/O for a locally released or
-already-lost handle. Otherwise it performs one owner-comparison backend round
-trip. Mismatch, expiry, or takeover returns `False`; malformed state and
-backend failure raise `LeaderBackendError`. `assert_held()` performs that same
-single probe and raises `LeaderLeaseLostError` on `False`. Both are
+already-lost handle. Otherwise it performs one bounded owner-comparison script
+operation. Mismatch, expiry, or takeover returns `False`; malformed state,
+missing expiry, and backend failure raise `LeaderBackendError`.
+`assert_held()` performs that same single probe and raises
+`LeaderLeaseLostError` on `False`. Both are
 point-in-time observations with an immediate TOCTOU window, not substitutes
 for fencing.
 
@@ -675,6 +676,17 @@ One Lua script compares the lease value byte-for-byte with the caller's private
 value and applies `PEXPIRE` only on equality. It returns `Renewed` on success
 and `NotHeld` on mismatch, expiry, or takeover. It never creates a missing key.
 
+### Probe
+
+One read-only Lua script atomically inspects type, value, and `PTTL`, strictly
+parses the canonical record, and compares the private expected record
+byte-for-byte. It returns `HELD`, `NOT_HELD`, or `CORRUPT`. Missing keys,
+expired keys, and a different canonical owner return `NOT_HELD`; wrong type,
+malformed records, and canonical records without a positive expiry return
+`CORRUPT`. It follows the same fixed `EVALSHA` then one `EVAL` fallback path,
+so one public probe is one bounded script operation with envelope `S`; it is
+not promised as one primitive Redis command round trip.
+
 ### Release
 
 One Lua script compares the lease value byte-for-byte and then either:
@@ -696,9 +708,14 @@ same proven mismatch or expiry to `LeaderLeaseLostError`, because its primary
 semantic is that protected execution outlived ownership. Corruption and
 backend uncertainty remain sanitized backend/lifecycle errors in both paths.
 
-Scripts use one fixed execution path: locally computed SHA-1 with `EVALSHA`,
-then exactly one full-source `EVAL` fallback on `NOSCRIPT`. The adapter does not
-call `SCRIPT LOAD`. Every key is passed through `KEYS`; scripts do not construct
+Acquire, probe, renew, and release scripts use one fixed execution path: locally
+computed SHA-1 with `EVALSHA`, then exactly one full-source `EVAL` fallback on
+`NOSCRIPT`. Response-loss reconciliation instead uses exactly one fixed-source,
+read-only `EVAL` command that atomically returns a strictly validated canonical
+record only when `TYPE` is string and `PTTL` is positive. A value-only `GET`
+cannot reject a persisted/no-expiry record, while an `EVALSHA` fallback would
+not fit the one-command reconciliation envelope. The adapter does not call
+`SCRIPT LOAD`. Every key is passed through `KEYS`; scripts do not construct
 dynamic Redis keys internally.
 
 ## Acquisition, Deadlines, and Command Uncertainty
@@ -719,12 +736,16 @@ dynamic Redis keys internally.
 - Authentication, protocol, parsing, script, connection, and configuration
   failures surface immediately as `LeaderBackendError`.
 - A command timeout or disconnect after dispatch can leave the acquire outcome
-  unknown. The adapter performs one bounded `GET` reconciliation, strictly
-  parses the returned record, and compares only its private owner-token field
-  with `hmac.compare_digest`. A match recovers the fencing token from that
-  record. Absence or a different canonical owner proves no current ownership;
-  malformed state or a second uncertain error fails closed. The acquire script
-  is never re-executed for the uncertain attempt.
+  unknown. The adapter performs one bounded fixed read-only `EVAL`
+  reconciliation over `TYPE`, `GET`, and `PTTL`, strictly parses the returned
+  canonical positive-TTL record, and compares only its private owner-token
+  field with `hmac.compare_digest`. A match recovers the fencing token from that
+  record. An absent record or a different canonical owner proves no current
+  ownership but not normal contention because the original backend response was
+  lost. Both therefore raise sanitized `LeaderBackendError`; malformed state,
+  missing expiry, or a second uncertain error also fails closed. Only an
+  explicit `CONTENDED` script status is normal contention. The acquire script is
+  never re-executed for the uncertain attempt.
 - Renew and release operations are owner-conditional and idempotent with
   respect to another owner's state. After an uncertain release, absence means
   cleanup outcome is uncertain, different ownership means the old lease is no
@@ -732,10 +753,14 @@ dynamic Redis keys internally.
   owner-conditional release script with remaining minimum time recomputed from
   the original monotonic acquisition instant. A returned `DELETED` or
   `MIN_TTL_APPLIED` proves logical release; a second lost response remains
-  uncertain. Explicit callers receive
-  `LeaderReleaseError` unless successful execution is proven; scoped cleanup
-  follows the failure matrix below. The adapter never issues an unconditional
-  delete.
+  uncertain. A repeat `NOT_HELD` proves loss; a repeat `CORRUPT` or ordinary
+  backend failure remains backend uncertainty. Explicit callers receive
+  `LeaderReleaseError` for proven loss, absence, or a second lost response and
+  `LeaderBackendError` for corruption/backend failure. Scoped cleanup maps
+  proven loss to `LeaderLeaseLostError`, absence or a second lost response to
+  `LeaderReleaseError`, and corruption/backend failure to
+  `LeaderBackendError`, before applying the failure-precedence matrix below.
+  The adapter never issues an unconditional delete.
 - The package does not promise recovery after process death. Redis TTL is the
   cleanup mechanism for abandoned leases.
 
@@ -768,7 +793,7 @@ ACQUIRED -> ENTERED -> RELEASED
   entry, and entry after `LOST`/`RELEASED` fail without starting a worker;
 - before yielding to caller code, first entry proves current ownership: with
   auto-renew it performs one synchronous/awaited owner-checked renew and
-  requires `Renewed`; without auto-renew it performs one owner comparison;
+  requires `Renewed`; without auto-renew it performs one bounded probe script;
   proven expiry/takeover enters `LOST`, backend uncertainty enters `UNKNOWN`,
   and the context body never starts;
 - proof mismatch enters `LOST` without release; proof/backend uncertainty may
@@ -830,9 +855,11 @@ must pass its fencing token into each downstream write.
 7. record an incoming cancellation, shield the cleanup task, and if shielding
    raises again, re-await that same retained task until its `R + 100ms`
    cleanup deadline;
-8. at either task deadline, cancel that exact retained task once and await its
-   terminal cancellation before continuing; the supported official redis-py
-   coroutine path must be cancellation-terminating or construction fails;
+8. if an in-flight renew/release operation has not completed by its `N`/`R`
+   command envelope, cancel that exact retained task once and require terminal
+   cancellation by `N + 100ms` / `R + 100ms`; the supported official redis-py
+   coroutine path must be cancellation-terminating in the pinned-version stall
+   proof or delivery returns to design review;
 9. after both retained tasks have completed or reached terminal cancellation,
    re-raise the original `asyncio.CancelledError`.
 
@@ -979,6 +1006,16 @@ English and Korean package READMEs must remain behaviorally aligned and show:
 15. a lease-loss runbook that blocks stale work and verifies downstream atomic
     fencing without printing the lease value.
 
+`LeaderBackendError` is deliberately non-diagnostic: it has no raw cause,
+endpoint, command, operation, or failure-kind field. Connection/pool timeout,
+permission denial, protocol failure, and corrupt state therefore cannot be
+reliably distinguished from the package exception alone. The operator table
+must say which caller-owned Redis health, ACL, pool, and server evidence to
+inspect for each suspected condition; application code branches only on the
+documented leader result/error classes. Safe caller-owned metrics may label the
+public operation and outcome observed at the call site, never a guessed backend
+cause or caller value.
+
 Examples must not print lock names, lease internals, credentials, or exception
 causes directly. README examples are executed by focused tests.
 
@@ -1030,7 +1067,8 @@ causes directly. README examples are executed by focused tests.
   handle lifecycle;
 - delayed first entry after expiry, takeover, and backend failure for sync and
   async; no context body starts without a successful entry ownership proof;
-- cancellation during renew, `EVALSHA`, fallback `EVAL`, reconciliation `GET`,
+- cancellation during renew, `EVALSHA`, fallback `EVAL`, read-only
+  reconciliation `EVAL`,
   and repeated release; repeated cancellation, deadline cancellation, and
   pending-task-zero assertions;
 - terminal `UNKNOWN` transitions and no-I/O behavior for every public handle

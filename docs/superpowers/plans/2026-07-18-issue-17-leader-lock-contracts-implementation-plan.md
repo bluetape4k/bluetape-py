@@ -85,6 +85,7 @@
 | Real Redis evidence | `packages/bluetape-leader-redis/tests/test_*_integration.py` |
 | Wheel/meta evidence | `packages/bluetape/tests/test_leader_wheel_isolation.py`, `test_leader_readmes.py` |
 | Publish classifier | `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`, `docs/release/pypi-preflight.md` |
+| Required PR/push CI | `.github/workflows/ci.yml` dedicated `leader-redis` job with no-skip JUnit assertion |
 | User/contributor docs | both package README pairs, root README pairs, `docs/package-layout.md`, `WIP.md`, `CHANGELOG.md` |
 | Review and lesson evidence | `docs/review/2026-07-18-issue-17-leader-lock-contracts-*.md`, `docs/lessons/2026-07-18-issue-17-leader-lock-contracts.md` |
 
@@ -183,6 +184,7 @@ class _Timing:
     command: float      # P
     script: float       # S = 2P
     acquire: float      # A = S + P
+    probe: float        # S
     renew: float        # N = S
     release: float      # R = 2S + P
 ```
@@ -194,6 +196,50 @@ The adapter uses these exact keys and record:
 <prefix>:{<sha256(lock_name UTF-8)>}:fence
 v1:<32-character token_urlsafe(24)>:<canonical positive decimal fence>
 ```
+
+The four concrete constructors are fixed and own no client shutdown:
+
+```python
+class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
+    def __init__(
+        self,
+        client: redis.Redis,
+        *,
+        prefix: str = "bluetape-leader",
+    ) -> None: ...
+
+
+class AsyncRedisDistributedLock(AsyncDistributedLock[FencedLeaderLease]):
+    def __init__(
+        self,
+        client: redis.asyncio.Redis,
+        *,
+        prefix: str = "bluetape-leader",
+    ) -> None: ...
+
+
+class RedisLeaderElector(LeaderElector[FencedLeaderLease]):
+    def __init__(
+        self,
+        client: redis.Redis,
+        *,
+        prefix: str = "bluetape-leader",
+    ) -> None: ...
+
+
+class AsyncRedisLeaderElector(AsyncLeaderElector[FencedLeaderLease]):
+    def __init__(
+        self,
+        client: redis.asyncio.Redis,
+        *,
+        prefix: str = "bluetape-leader",
+    ) -> None: ...
+```
+
+Each elector constructs exactly one corresponding internal lock from the
+borrowed client and prefix. Constructor tests use `inspect.signature`, prove
+wrong-family/subclass/proxy rejection before I/O, and prove neither class closes
+the borrowed client.
 
 ## Task 1: Register both packages and implement the sanitized error boundary
 
@@ -228,13 +274,25 @@ v1:<32-character token_urlsafe(24)>:<canonical positive decimal fence>
 ```python
 def test_backend_error_does_not_retain_raw_cause() -> None:
     marker = "redis://user:secret@127.0.0.1:6379 owner-123"
-    raw = RuntimeError(marker)
-
     error = LeaderBackendError()
 
     assert str(error) == "leader backend operation failed"
     assert marker not in repr(error)
     assert not hasattr(error, "cause")
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    assert getattr(error, "__notes__", []) == []
+
+
+def test_composite_redacts_both_properties_from_representation() -> None:
+    action = RuntimeError("caller-value-canary")
+    lifecycle = LeaderBackendError()
+    error = LeaderExecutionError(action, lifecycle)
+
+    assert error.action_cause is action
+    assert error.lifecycle_cause is lifecycle
+    assert repr(error) == "LeaderExecutionError(<redacted>)"
+    assert "caller-value-canary" not in repr(error)
 
 
 def test_meta_defaults_remain_core_only(meta_pyproject: dict[str, object]) -> None:
@@ -321,7 +379,8 @@ git commit -m "Establish separate leader contracts before backend behavior" \
 - Modify `packages/bluetape-leader/src/bluetape/leader/__init__.py`
 
 - [ ] **Step 1: Write RED validation and preservation tests.** Cover exact
-  built-in types, zero/negative/order boundaries, whitespace-only and oversized
+  built-in types, hostile subclasses/custom truthiness, zero/negative/order
+  boundaries, whitespace-only and oversized
   node ID, positive sub-millisecond core acceptance, frozen/slotted values,
   aware UTC observations, physical-node/fencing separation, and fixed redacted
   repr.
@@ -371,6 +430,12 @@ class LeaderElectionOptions:
     def __post_init__(self) -> None:
         _require_exact_timedelta(self.wait_time, "wait_time")
         _require_exact_timedelta(self.lease_time, "lease_time")
+        _require_exact_timedelta(self.min_lease_time, "min_lease_time")
+        _require_exact_bool(self.auto_renew, "auto_renew")
+        if self.renew_interval is not None:
+            _require_exact_timedelta(self.renew_interval, "renew_interval")
+        if self.node_id is not None:
+            _require_exact_str(self.node_id, "node_id")
         if self.wait_time < timedelta(0) or self.lease_time <= timedelta(0):
             raise InvalidLeaderOptionsError()
         if not timedelta(0) <= self.min_lease_time <= self.lease_time:
@@ -421,7 +486,7 @@ git commit -m "Separate leader identity from fencing capability" \
 - [ ] **Step 1: Write RED result/protocol tests.** Cover `Elected(None)` versus
   singleton-like `Skipped`, sanitized renewal failure typing, generic
   `FencedLeaderLease` propagation through runtime stubs, exact signatures,
-  context methods, cancellation-friendly async methods, and final 25-symbol
+  context methods, cancellation-friendly async methods, and final 24-symbol
   export order.
 
 ```python
@@ -449,7 +514,8 @@ Expected: FAIL because results, aliases, protocols, and final exports are absent
 
 - [ ] **Step 3: Implement the generic public contract exactly.** Use Python
   3.13 type-parameter syntax, `@runtime_checkable`, no method bodies beyond
-  protocol ellipses, and no Redis import.
+  protocol ellipses, `types.TracebackType` for context exits, and no Redis
+  import.
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -479,7 +545,12 @@ class LockLease[LeaseT: LeaderLease](Protocol):
     def assert_held(self) -> None: ...
     def release(self) -> None: ...
     def __enter__(self) -> Self: ...
-    def __exit__(self, exc_type, exc, traceback) -> None: ...
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
 
 
 @runtime_checkable
@@ -492,7 +563,12 @@ class AsyncLockLease[LeaseT: LeaderLease](Protocol):
     async def assert_held(self) -> None: ...
     async def release(self) -> None: ...
     async def __aenter__(self) -> Self: ...
-    async def __aexit__(self, exc_type, exc, traceback) -> None: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None: ...
 
 
 @runtime_checkable
@@ -554,7 +630,7 @@ runtime-checkable without importing Redis.
 
 ```bash
 uv run pytest packages/bluetape-leader -v
-uv run python -c 'import bluetape.leader as m; assert len(m.__all__) == 25'
+uv run python -c 'import bluetape.leader as m; assert m.__all__ == ["LeaderError", "InvalidLeaderOptionsError", "InvalidLockNameError", "LeaderBackendError", "LeaderLeaseLostError", "LeaderReleaseError", "LeaderExecutionError", "LeaderElectionOptions", "LeaderLease", "FencedLeaderLease", "Elected", "Skipped", "ActionFailed", "LeaderRunResult", "Renewed", "NotHeld", "RenewBackendFailure", "RenewOutcome", "LockLease", "AsyncLockLease", "DistributedLock", "AsyncDistributedLock", "LeaderElector", "AsyncLeaderElector"]'
 uv run ruff check packages/bluetape-leader
 ```
 
@@ -584,14 +660,21 @@ git commit -m "Make fencing capability explicit across leader contracts" \
 - Create `packages/bluetape-leader-redis/tests/test_keys_unit.py`
 - Create `packages/bluetape-leader-redis/tests/test_support_unit.py`
 - Create `packages/bluetape-leader-redis/tests/test_scripts_unit.py`
+- Create `packages/bluetape-leader-redis/tests/test_timing_integration.py`
 
-- [ ] **Step 1: Write RED validation/key/record/timing tests.** Cover exact sync
+- [ ] **Step 1: Prepare fixtures and record the validation/key/record/timing
+  coverage inventory.** Do not author behavior assertions yet. The inventory
+  must cover exact sync
   and async client types, exact built-in prefix/name, 1,024-byte name bound,
   64-byte prefix allowlist, NFC/NFD distinction, same hash tag, static auth,
-  zero retry/health check, numeric IP/Unix socket, rejected TLS/hostname/custom
-  pool/callback/provider/hook, positive millisecond conversion, fixed maximum
-  handshake count, H/E/P/S/A/N/R arithmetic, 32-character owner token, strict
-  record parse, and canary-safe failures.
+  zero retry/health check, numeric IP/Unix socket, rejected TLS/hostname,
+  URL-derived or custom pool/callback/provider/hook, positive millisecond
+  conversion, fixed maximum
+  handshake count, H/E/P/S/A/N/R arithmetic, exact public constructor
+  signatures, 32-character owner token, strict record parse, and canary-safe
+  failures. Monkeypatch DNS resolution, socket connect, credential callbacks,
+  and command dispatch with hostile sentinels and prove every rejected client
+  shape fails before any sentinel runs.
 
 ```python
 def test_keys_share_hash_tag_without_raw_name() -> None:
@@ -608,7 +691,19 @@ def test_retry_enabled_client_is_rejected(bounded_client_kwargs: dict[str, objec
         _validated_sync_client(client)
 ```
 
-- [ ] **Step 2: Write RED script-runner and classified-status tests.** The fake
+Enumerate the complete supported handshake-shape matrix: no auth, password
+auth, or username/password auth; RESP2 or RESP3; client name absent/present;
+database zero/nonzero; numeric TCP or Unix socket. Arbitrary safe values within
+one shape do not add a command. Force cold connect and reconnect for every
+shape and observe the exact AUTH/HELLO, CLIENT SETNAME, built-in CLIENT SETINFO,
+and SELECT response sequence. A caller-owned stalled RESP/TCP fixture pauses
+connect, each handshake response, and a primitive command response separately
+to prove `E` and `P`; derive `S/A/N/R` from those witnessed bounds. Reject any
+pinned redis-py configuration whose command path or finite pool wait cannot be
+observed and bounded before Task 5.
+
+- [ ] **Step 2: Prepare the fake script runner and record the status coverage
+  inventory.** Do not author behavior assertions yet. The fake
   command runner records calls and injects `NoScriptError`, response loss,
   wrong type, malformed value, no TTL, counter at `2^53`, signed overflow,
   owner mismatch, minimum-TTL release, and raw-error canaries.
@@ -621,21 +716,51 @@ def test_script_runner_falls_back_once_without_script_load() -> None:
     assert commands.calls == ["evalsha", "eval"]
 ```
 
-- [ ] **Step 3: Run RED and confirm missing internal primitives.**
+Use this ordered micro-cycle ledger. For each row, first run the selector and
+create only that row's focused test, record the intended assertion failure, add
+only the named production behavior, rerun that selector GREEN, then rerun its
+owning file before advancing. The example tests above are authored only when
+their ledger row becomes active.
+
+| Cycle | Focused selector | Minimum GREEN behavior |
+|---|---|---|
+| 4A | `test_support_unit.py -k rejected_client_has_no_io` | exact client/config/signature validation before DNS, callback, connect, or command |
+| 4B | `test_keys_unit.py -k identity` | exact name/prefix validation and SHA-256 same-slot keys |
+| 4C | `test_support_unit.py -k record` | strict private slotted record parse/format and fixed redacted repr |
+| 4D | `test_support_unit.py -k timing_arithmetic` | integer millisecond conversion and H/E/P/S/A/N/R formulas |
+| 4E | `test_timing_integration.py -k handshake_matrix` | cold/reconnect command-shape observation for every supported configuration |
+| 4F | `test_timing_integration.py -k stalled_stage` | connect/handshake/command stall terminates inside the computed bound; cancelled async redis-py command reaches terminal state within 100ms |
+| 4G | `test_scripts_unit.py -k noscript` | locally hashed `EVALSHA` plus exactly one `EVAL`, never `SCRIPT LOAD` |
+| 4H | `test_scripts_unit.py -k acquire` | atomic acquire statuses, fence validation, and string-safe counter readback |
+| 4I | `test_scripts_unit.py -k probe` | atomic HELD/NOT_HELD/CORRUPT type/value/PTTL probe |
+| 4J | `test_scripts_unit.py -k reconcile` | one direct read-only EVAL validates type/value/positive PTTL and never falls back |
+| 4K | `test_scripts_unit.py -k renew` | exact-owner renew without creation or redispatch |
+| 4L | `test_scripts_unit.py -k release` | exact-owner delete/minimum-TTL statuses without unconditional delete |
+| 4M | `test_support_unit.py -k sanitized_exception_graph` | raw backend canary absent from the entire public exception graph |
+| 4N | `test_support_unit.py -k owner_token` | one private `token_urlsafe(24)` value per logical `try_acquire` call |
+
+- [ ] **Step 3: Start the ordered ledger with one focused RED.** Begin at 4A
+  with the exact command form below. Do not author 4B until 4A has received its
+  minimum implementation in Step 4, passed GREEN, and passed its owning file;
+  then repeat that RED -> Step 4 minimum GREEN cycle through 4N.
 
 ```bash
-uv run pytest packages/bluetape-leader-redis/tests/test_keys_unit.py packages/bluetape-leader-redis/tests/test_support_unit.py packages/bluetape-leader-redis/tests/test_scripts_unit.py -v
+uv run pytest packages/bluetape-leader-redis/tests/test_support_unit.py -k rejected_client_has_no_io -v
 ```
 
-Expected: FAIL on missing internal modules/functions.
+After all rows, run the four owning files together and require PASS.
 
-- [ ] **Step 4: Implement validation, record parsing, timing, and fixed Lua.**
-  Keep raw exceptions in the failing frame only and raise sanitized errors
-  `from None`. Use locally computed SHA-1, `EVALSHA`, then one `EVAL` fallback.
+- [ ] **Step 4: Implement each ledger row minimally, then return to Step 3 for
+  the next RED.** For the active row only, implement validation, record parsing,
+  timing, or fixed Lua as specified below.
+  Keep raw exceptions in the failing frame only. Construct the sanitized error
+  while handling the raw exception, leave the `except` block, and only then
+  raise the sanitized error `from None`, so `__context__` is also absent. Use
+  locally computed SHA-1, `EVALSHA`, then one `EVAL` fallback.
   The acquire script validates an existing string record plus positive PTTL,
   validates the fence key, calls `INCR`, rereads the canonical decimal with
   `GET`, writes `v1:owner:fence` with `PX`, and returns the fence as a string.
-  Store the following three scripts as fixed module constants; their only
+  Store the following five scripts as fixed module constants; their only
   inputs are the listed `KEYS` and `ARGV` values.
 
 ```lua
@@ -672,10 +797,41 @@ if lease_type ~= 'string' then return {'CORRUPT'} end
 local current = redis.call('GET', KEYS[1])
 local owner, fence = string.match(current, '^v1:([%w_-]+):([1-9][0-9]*)$')
 if not owner or string.len(owner) ~= 32 then return {'CORRUPT'} end
-if redis.call('PTTL', KEYS[1]) <= 0 then return {'CORRUPT'} end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -1 then return {'CORRUPT'} end
+if ttl <= 0 then return {'NOT_HELD'} end
 if current ~= ARGV[1] then return {'NOT_HELD'} end
 redis.call('PEXPIRE', KEYS[1], ARGV[2])
 return {'RENEWED'}
+```
+
+```lua
+-- PROBE: KEYS[1]=lease, ARGV[1]=expected_record
+local lease_type = redis.call('TYPE', KEYS[1]).ok
+if lease_type == 'none' then return {'NOT_HELD'} end
+if lease_type ~= 'string' then return {'CORRUPT'} end
+local current = redis.call('GET', KEYS[1])
+local owner, fence = string.match(current, '^v1:([%w_-]+):([1-9][0-9]*)$')
+if not owner or string.len(owner) ~= 32 then return {'CORRUPT'} end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -1 then return {'CORRUPT'} end
+if ttl <= 0 then return {'NOT_HELD'} end
+if current ~= ARGV[1] then return {'NOT_HELD'} end
+return {'HELD'}
+```
+
+```lua
+-- RECONCILE: KEYS[1]=lease; dispatched once with direct EVAL, never EVALSHA
+local lease_type = redis.call('TYPE', KEYS[1]).ok
+if lease_type == 'none' then return {'ABSENT'} end
+if lease_type ~= 'string' then return {'CORRUPT'} end
+local current = redis.call('GET', KEYS[1])
+local owner, fence = string.match(current, '^v1:([%w_-]+):([1-9][0-9]*)$')
+if not owner or string.len(owner) ~= 32 then return {'CORRUPT'} end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -1 then return {'CORRUPT'} end
+if ttl <= 0 then return {'ABSENT'} end
+return {'PRESENT', current}
 ```
 
 ```lua
@@ -687,7 +843,9 @@ if lease_type ~= 'string' then return {'CORRUPT'} end
 local current = redis.call('GET', KEYS[1])
 local owner, fence = string.match(current, '^v1:([%w_-]+):([1-9][0-9]*)$')
 if not owner or string.len(owner) ~= 32 then return {'CORRUPT'} end
-if redis.call('PTTL', KEYS[1]) <= 0 then return {'CORRUPT'} end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl == -1 then return {'CORRUPT'} end
+if ttl <= 0 then return {'NOT_HELD'} end
 if current ~= ARGV[1] then return {'NOT_HELD'} end
 if ARGV[2] == '0' then
   redis.call('DEL', KEYS[1])
@@ -698,14 +856,32 @@ return {'MIN_TTL_APPLIED'}
 ```
 
 The Python runner validates the owner token and canonical millisecond arguments
-before dispatch. A separate one-command `GET` probe strictly parses the same
-record and uses `hmac.compare_digest` only for the private owner field. No Lua
-script constructs a key or converts a fencing token through a Lua number.
+before dispatch. The probe follows the bounded `EVALSHA -> EVAL` script
+operation. Response-lost acquire/release reconciliation dispatches the fixed
+read-only reconciliation source through exactly one direct `EVAL`, then uses
+`hmac.compare_digest` only for the private owner field. This keeps the
+reconciliation at `P`, atomically rejects no-expiry state, and never falls back
+or redispatches after another lost response. No Lua script constructs a key or
+converts a fencing token through a Lua number.
+
+The private entropy seam calls `secrets.token_urlsafe(24)` exactly once per
+logical `try_acquire()` call. Contention retries and that call's single
+response-loss reconciliation retain the same 32-character value; the next
+public acquisition call receives a different value. The caller cannot inject
+or read it, and the private record/handle types are slotted with fixed redacted
+representations.
+
+The redaction test raises a raw canary exception through the real sync and async
+backend conversion helpers. It walks `args`, `__cause__`, `__context__`, notes,
+`str`, `repr`, and formatted traceback; it also checks
+`RenewBackendFailure.cause` and `LeaderExecutionError.lifecycle_cause`. The raw
+canary must be absent everywhere. `action_cause` remains the documented caller
+exception and is tested only for representation redaction.
 
 - [ ] **Step 5: Run GREEN, redaction scan, and Ruff.**
 
 ```bash
-uv run pytest packages/bluetape-leader-redis/tests/test_keys_unit.py packages/bluetape-leader-redis/tests/test_support_unit.py packages/bluetape-leader-redis/tests/test_scripts_unit.py -v
+uv run pytest packages/bluetape-leader-redis/tests/test_keys_unit.py packages/bluetape-leader-redis/tests/test_support_unit.py packages/bluetape-leader-redis/tests/test_scripts_unit.py packages/bluetape-leader-redis/tests/test_timing_integration.py -v
 uv run ruff check packages/bluetape-leader-redis
 uv run ruff format --check packages/bluetape-leader-redis
 ```
@@ -734,9 +910,11 @@ git commit -m "Bound Redis ownership before exposing a lock" \
 - Create `packages/bluetape-leader-redis/tests/test_sync_lock_unit.py`
 - Modify `packages/bluetape-leader-redis/src/bluetape/leader/redis/__init__.py`
 
-- [ ] **Step 1: Write RED acquire/deadline/reconciliation tests.** Cover one
+- [ ] **Step 1: Record the acquire/deadline/reconciliation coverage inventory.**
+  Do not author its behavior assertions before the matching ledger row. Cover one
   attempt at zero wait, 40-60ms deterministic jitter, no post-deadline dispatch,
-  `wait_time + A`, contention-only retry, same token reused, exact owner-field
+  `wait_time + A`, contention-only retry, one token per public acquisition call,
+  exact owner-field
   response-loss recovery, absent/different/malformed/second-uncertain outcomes,
   and no script redispatch.
 
@@ -744,22 +922,65 @@ git commit -m "Bound Redis ownership before exposing a lock" \
 def test_uncertain_acquire_recovers_matching_owner_without_redispatch() -> None:
     runner = FakeRunner(
         acquire_effects=[TimeoutError("marker")],
-        get_effects=[b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:9"],
+        reconcile_effects=[
+            ("PRESENT", b"v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:9")
+        ],
     )
     lock = new_sync_lock(runner=runner, token="A" * 32)
     handle = lock.try_acquire("job", short_options())
     assert handle is not None
     assert handle.lease.fencing_token == 9
     assert runner.acquire_calls == 1
+    assert runner.reconcile_calls == [("eval", "lease-key")]
 ```
 
-- [ ] **Step 2: Write RED handle-state and manual operation tests.** Cover
-  `ACQUIRED/ENTERED/LOST/RELEASED/UNKNOWN`, one-round-trip probe, renew status,
-  direct release status, same-owner uncertain release repeat, minimum lease,
+- [ ] **Step 2: Record the handle-state/manual-operation coverage inventory.**
+  Do not author its behavior assertions before the matching ledger row. Cover
+  `ACQUIRED/ENTERED/LOST/RELEASED/UNKNOWN`, one bounded probe script, renew
+  status, direct release status, full uncertain-release matrix, minimum lease,
   double release, delayed entry proof, worker-start failure cleanup, no-I/O
   terminal methods, safe repr, and borrowed client remaining open.
 
-- [ ] **Step 3: Write RED scoped worker tests.** Use a controlled runner and
+The release response-loss matrix is exact for sync and later mirrored by async.
+The public error below is the lifecycle result before the outer action/body
+failure-precedence matrix composes it into `LeaderExecutionError` when needed:
+
+| Read-only reconciliation result | Follow-up or repeat result | Terminal state | Direct `release()` | Scoped cleanup |
+|---|---|---|---|---|
+| canonical same owner | recompute remaining minimum TTL from the original monotonic acquisition instant; repeat returns `DELETED` or `MIN_TTL_APPLIED` | `RELEASED` | success | success |
+| canonical same owner | repeat returns `NOT_HELD` | `LOST` | `LeaderReleaseError` | `LeaderLeaseLostError` |
+| canonical same owner | repeat returns `CORRUPT` or an ordinary backend failure | `UNKNOWN` | `LeaderBackendError` | `LeaderBackendError` |
+| canonical same owner | repeat response is also lost | `UNKNOWN` | `LeaderReleaseError` | `LeaderReleaseError` |
+| missing | no script redispatch | `UNKNOWN` | `LeaderReleaseError` | `LeaderReleaseError` |
+| canonical different owner | no script redispatch; never delete or shorten successor | `LOST` | `LeaderReleaseError` | `LeaderLeaseLostError` |
+| malformed/wrong type/no expiry | no script redispatch | `UNKNOWN` | `LeaderBackendError` | `LeaderBackendError` |
+| reconciliation transport failure | no script redispatch | `UNKNOWN` | `LeaderBackendError` | `LeaderBackendError` |
+
+Every row asserts the complete command trace, including absence of unconditional
+`DEL`. A renew timeout/disconnect never redispatches its script: it enters
+`UNKNOWN`, retains one value-free lifecycle error, and every later
+renew/release/probe/entry call raises it without new Redis I/O.
+
+Acquire uncertainty has its own exact table:
+
+| Failing stage | Read-only reconciliation result | Public result | Command trace |
+|---|---|---|---|
+| `EVALSHA` response loss | canonical same owner with positive TTL | acquired handle with recovered fence | one `EVALSHA`, one read-only `EVAL`; no acquire redispatch |
+| `NOSCRIPT -> EVAL` response loss | canonical same owner with positive TTL | acquired handle with recovered fence | one `EVALSHA`, one mutating `EVAL`, one read-only `EVAL`; no further script |
+| either response loss | absent or canonical different owner | raised `LeaderBackendError` after proving no ownership | one bounded read-only `EVAL`; no script redispatch |
+| either response loss | malformed/wrong type/no expiry | raised `LeaderBackendError` | one bounded read-only `EVAL`; no script redispatch |
+| either response loss | reconciliation timeout/disconnect | raised `LeaderBackendError` | one read-only `EVAL`; no redispatch |
+
+Renew uncertainty covers response loss after `EVALSHA` and after the NOSCRIPT
+fallback `EVAL`; both enter `UNKNOWN` without reconciliation or redispatch and
+reuse the same retained lifecycle error for every later no-I/O method.
+Sync and async elector tests prove missing and different-owner acquire
+reconciliations are raised and never converted to `Skipped`; only an explicit
+script `CONTENDED` status is `None`/`Skipped`.
+
+- [ ] **Step 3: Prepare controlled runner/clock fixtures and record the scoped
+  worker coverage inventory.** Do not author worker behavior assertions before
+  their ledger row. Use a controlled runner and
   fake monotonic clock to prove one non-daemon worker per entered auto-renew
   handle, initial renew before body, interruptible interval wait, loss/backend
   terminal state, `N + 100ms` join, release after join only, manual release
@@ -776,15 +997,41 @@ def test_context_proves_ownership_before_body() -> None:
     assert handle.state_name_for_test == "LOST"
 ```
 
-- [ ] **Step 4: Run RED for missing sync lock.**
+Use this ordered micro-cycle ledger, witnessing RED then minimum GREEN for one
+row at a time. Create only the active row's focused test, rerun
+`test_sync_lock_unit.py` after its GREEN, and do not author later-row tests
+before the current row is GREEN:
+
+| Cycle | Focused selector | Minimum GREEN behavior |
+|---|---|---|
+| 5A | `-k zero_wait` | one acquire dispatch with monotonic deadline |
+| 5B | `-k contention_retry` | capped 40-60ms jitter and no post-deadline dispatch |
+| 5C | `-k uncertain_acquire` | one direct read-only EVAL reconciliation with no acquire redispatch |
+| 5D | `-k manual_state` | ACQUIRED operations and terminal no-I/O transitions |
+| 5E | `-k entry_proof` | probe/initial renew succeeds before body or body never starts |
+| 5F | `-k uncertain_renew` | terminal UNKNOWN without renew redispatch |
+| 5G | `-k uncertain_release` | complete table above and original-instant minimum TTL |
+| 5H | `-k worker_lifecycle` | one non-daemon worker, interruptible wait, bounded join |
+| 5I | `-k worker_start_failure` | start-before-live failure proves no worker exists before owner-checked cleanup |
+| 5J | `-k worker_crash` | unexpected worker exit is retained as sanitized failure and terminal UNKNOWN |
+| 5K | `-k worker_join_deadline` | exit returns by outer deadline, forbids release/success, and retains UNKNOWN |
+| 5L | `-k state_operation_matrix` | every state × operation, re-entry, concurrent entry, and terminal no-I/O rule |
+| 5M | `-k process_control` | exact KeyboardInterrupt/SystemExit/GeneratorExit survives bounded cleanup |
+| 5N | `-k context_failure_matrix` | body/loss/backend/release precedence without masking |
+
+- [ ] **Step 4: Start the sync ledger with one focused RED.** Begin at 5A using
+  the exact selector form below. Add only its Step 5 behavior, rerun GREEN and
+  the owning file, then repeat that cycle through 5N.
 
 ```bash
 uv run pytest packages/bluetape-leader-redis/tests/test_sync_lock_unit.py -v
 ```
 
-Expected: FAIL on missing `RedisDistributedLock` and handle behavior.
+The first row initially fails on missing `RedisDistributedLock`; later rows
+must fail on their intended missing behavior rather than import/setup errors.
 
-- [ ] **Step 5: Implement the minimum sync lock and internal handle.** Keep the
+- [ ] **Step 5: Implement only the active sync ledger row, then return for the
+  next RED.** Keep the
   public class generic as `DistributedLock[FencedLeaderLease]`; keep concrete
   handle type private. Use `time.monotonic_ns`, `threading.Event`, one named
   non-daemon thread, a private mutex only for local state transitions, and no
@@ -809,6 +1056,28 @@ def __enter__(self) -> Self:
     self._start_worker_if_enabled()
     return self
 ```
+
+The state-operation matrix parameterizes
+`ACQUIRED/ENTERED/LOST/RELEASED/UNKNOWN` against renew, probe/is-held,
+assert-held, release, enter, and exit for both sync and async parity. It adds
+two-thread/two-task concurrent first entry, re-entry, entry after every terminal
+state, explicit release inside context, and idempotent later exit. Every cell
+asserts state, exact exception/result, command trace, worker/task count, and
+terminal no-I/O behavior.
+
+Fault-injected start, crash, and stuck-worker tests are distinct. A start
+failure may release only after proving no worker is alive. An unexpected crash
+is retained as a sanitized lifecycle failure. A worker exceeding `N + 100ms`
+makes context exit return inside a separate outer deadline, enters `UNKNOWN`,
+never dispatches release, and forbids action success. Its fixture always
+unblocks and joins the injected worker in `finally` so the test process cannot
+hang; later calls reuse the retained error without I/O.
+
+Direct manual contexts and both electors inject the exact same
+`KeyboardInterrupt`, `SystemExit`, and `GeneratorExit` objects with successful
+and failed cleanup. The original object remains primary, cleanup failure adds
+only value-free evidence, no result wrapper is produced, all owned workers/tasks
+terminate, and borrowed clients remain usable.
 
 - [ ] **Step 6: Run GREEN, repeat leak-sensitive tests, and commit.**
 
@@ -836,13 +1105,16 @@ results. Do not add `pytest-repeat` or any other dependency for repetition.
 - Create `packages/bluetape-leader-redis/tests/test_async_lock_unit.py`
 - Modify `packages/bluetape-leader-redis/src/bluetape/leader/redis/__init__.py`
 
-- [ ] **Step 1: Write RED async parity tests.** Mirror sync acquisition,
+- [ ] **Step 1: Record the async parity coverage inventory.** Do not author its
+  behavior assertions before the matching ledger row. Mirror sync acquisition,
   contention, owner recovery, state, delayed entry, probe, renew, release,
   minimum TTL, and terminal no-I/O behavior using `AsyncMock`/controlled await
   points rather than timing sleeps.
 
-- [ ] **Step 2: Write RED retained-task cancellation tests.** Cover cancellation
-  during renew, `EVALSHA`, fallback `EVAL`, reconciliation `GET`, initial
+- [ ] **Step 2: Prepare controlled await fixtures and record the retained-task
+  cancellation coverage inventory.** Do not author cancellation behavior
+  assertions before their ledger row. Cover cancellation
+  during renew, `EVALSHA`, fallback `EVAL`, read-only reconciliation `EVAL`, initial
   release, same-owner repeat release, repeated outer cancellation, deadline
   cancellation, one retained task identity, and `asyncio.all_tasks()` returning
   to baseline before the caller receives `CancelledError`.
@@ -864,35 +1136,85 @@ async def test_cancelled_exit_reawaits_the_same_cleanup_task() -> None:
     assert handle.pending_owned_tasks_for_test == 0
 ```
 
-- [ ] **Step 3: Run RED for missing async lock.**
+Use this ordered micro-cycle ledger. Each row must show its own intended RED,
+minimum GREEN, and owning-file regression before the next row begins. Create
+only the active row's test; later-row tests remain unwritten until the active
+row is GREEN:
+
+| Cycle | Focused selector | Minimum GREEN behavior |
+|---|---|---|
+| 6A | `-k async_zero_wait` | awaited acquisition and contention parity |
+| 6B | `-k async_uncertain_acquire` | retained call plus one awaited read-only EVAL reconciliation |
+| 6C | `-k async_state_and_entry` | delayed-entry proof and terminal no-I/O states |
+| 6D | `-k async_uncertain_renew` | no redispatch and terminal UNKNOWN |
+| 6E | `-k async_uncertain_release` | complete sync release-loss table with one retained repeat |
+| 6F | `-k renew_task_lifecycle` | one retained renew task and absolute `N + 100ms` terminal deadline |
+| 6G | `-k incoming_cancellation` | original cancellation identity survives bounded cleanup |
+| 6H | `-k repeated_cancellation` | repeated outer cancellation re-awaits the same task without resetting deadline |
+| 6I | `-k release_deadline` | one cancel at `R`, terminal by `R + 100ms`, zero pending tasks |
+| 6J | `-k async_context_failure_matrix` | cancellation/process-control/action/lifecycle precedence |
+
+- [ ] **Step 3: Start the async ledger with one focused RED.** Begin at 6A,
+  implement only its Step 4 behavior, rerun GREEN and the owning file, then
+  repeat that cycle through 6J.
 
 ```bash
 uv run pytest packages/bluetape-leader-redis/tests/test_async_lock_unit.py -v
 ```
 
-Expected: FAIL on missing `AsyncRedisDistributedLock` and async handle.
+The first row fails on the missing async lock; subsequent rows must fail on the
+named missing behavior rather than import/setup errors.
 
-- [ ] **Step 4: Implement async lock with retained structured tasks.** Use the
+- [ ] **Step 4: Implement only the active async ledger row, then return for the
+  next RED.** Use the
   event-loop monotonic clock, `asyncio.Event`, and exactly one renew task plus
-  one cleanup task per scope. At `N + 100ms` or `R + 100ms`, cancel the owned
-  task once and await terminal cancellation. Never create a task without
-  storing its reference first.
+  one cleanup task per scope. Compute one absolute command deadline when the
+  operation starts; repeated caller cancellation never resets it. If the task
+  is still pending at `N` or `R`, cancel that exact task once and require it to
+  reach terminal state by the already-fixed `N + 100ms` or `R + 100ms`
+  deadline. Never create a task without storing its reference first.
 
 ```python
-async def _await_owned(task: asyncio.Task[T], timeout: float) -> T:
-    try:
-        return await asyncio.wait_for(asyncio.shield(task), timeout)
-    except TimeoutError:
-        task.cancel()
+async def _wait_owned_until[T](
+    task: asyncio.Task[T],
+    *,
+    deadline: float,
+    first_cancel: asyncio.CancelledError | None,
+) -> tuple[bool, asyncio.CancelledError | None]:
+    loop = asyncio.get_running_loop()
+    owner = asyncio.current_task()
+    assert owner is not None
+    while not task.done():
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return False, first_cancel
         try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        raise LeaderBackendError() from None
+            await asyncio.wait_for(asyncio.shield(task), remaining)
+        except TimeoutError:
+            return task.done(), first_cancel
+        except asyncio.CancelledError as caught:
+            if first_cancel is None and owner.cancelling() > 0:
+                first_cancel = caught
+            if task.done():
+                break
+    return True, first_cancel
 ```
 
-Preserve an already incoming `CancelledError`, finish bounded cleanup, attach
-only a value-free note for cleanup failure, then re-raise the original object.
+The lifecycle owner calls `_wait_owned_until` with the absolute `N`/`R`
+deadline. On `False`, it calls `task.cancel()` exactly once, then calls the same
+helper with the precomputed terminal deadline `started + N/R + 0.100`; no new
+task and no new relative timeout is created. The pinned redis-py stalled-command
+test from Task 4 must prove terminal cancellation within that margin before
+Task 6 may proceed. If it fails, return to design review: Python cannot both
+hard-bound and synchronously eliminate a cancellation-resistant arbitrary
+coroutine. After `task.done()` is true, read its result synchronously, classify
+cleanup, attach only a value-free note when needed, and re-raise the first
+incoming `CancelledError` object.
+
+The repeated-cancellation RED matrix includes a same-event-loop-turn race that
+cancels both the lifecycle owner and owned cleanup task. It proves cancellation
+origin from `owner.cancelling()`, re-raises the exact first caller cancellation
+object, calls owned-task cancel at most once, and leaves zero pending tasks.
 
 - [ ] **Step 5: Run GREEN, repeat cancellation matrix, and commit.**
 
@@ -972,22 +1294,24 @@ def run_if_leader_result[T](
     handle = self._lock.try_acquire(lock_name, options)
     if handle is None:
         return Skipped()
-    lease = handle.lease
+    result_lease: FencedLeaderLease | None = None
     action_value: T | None = None
     action_error: Exception | None = None
     try:
         with handle as held:
+            result_lease = held.lease
             try:
-                action_value = action(held.lease)
+                action_value = action(result_lease)
             except Exception as caught:
                 action_error = caught
     except LeaderError as lifecycle_error:
         if action_error is not None:
             raise LeaderExecutionError(action_error, lifecycle_error) from None
         raise
+    assert result_lease is not None
     if action_error is not None:
-        return ActionFailed(action_error, lease)
-    return Elected(cast(T, action_value), lease)
+        return ActionFailed(action_error, result_lease)
+    return Elected(cast(T, action_value), result_lease)
 ```
 
 The implementation retains the action value/error, exits the context, and only
@@ -1027,11 +1351,36 @@ git commit -m "Report leader action outcomes only after proven cleanup" \
   close both borrowed clients in the fixture, and generate unique logical names
   without exposing them in assertion output.
 
+  Mark the package tests `testcontainers`, fail collection when
+  `PYTEST_XDIST_WORKER` is present, and run the dedicated CI command in one
+  pytest process. The module owns one isolated Redis container/DB; no other test
+  may share it. Every sync/async client, ACL user, commandstats client,
+  executor, gate, and contender task is registered before use and released in
+  `yield`/`finally` cleanup.
+
 ```python
 @pytest.fixture(scope="module")
 def redis_endpoint() -> Iterator[tuple[str, int]]:
     with RedisServer() as server:
         numeric_host = str(ip_address(socket.gethostbyname(server.host)))
+        deadline = time.monotonic() + 15.0
+        while True:
+            probe = redis.Redis(
+                host=numeric_host,
+                port=server.port,
+                socket_connect_timeout=0.10,
+                socket_timeout=0.05,
+            )
+            try:
+                if probe.ping():
+                    break
+            except redis.RedisError:
+                pass
+            finally:
+                probe.close()
+            if time.monotonic() >= deadline:
+                pytest.fail("Redis readiness deadline exceeded")
+            time.sleep(0.05)
         yield numeric_host, server.port
 
 
@@ -1040,13 +1389,20 @@ def sync_client(host: str, port: int) -> redis.Redis:
         host=host,
         port=port,
         decode_responses=False,
-        socket_connect_timeout=0.2,
-        socket_timeout=0.2,
+        socket_connect_timeout=0.10,
+        socket_timeout=0.05,
         retry_on_timeout=False,
         retry_on_error=[],
         health_check_interval=0,
     )
 ```
+
+The readiness client is caller-owned and closed on every loop iteration; record
+startup duration separately from adapter assertions. Integration timing uses
+the observed `H`, `E = 0.10 + H * 0.05`, `P = E + 0.05`, `S = 2P`, `N = S`,
+and `R = 2S + P`. The long-action case uses `lease_time=2.0s`,
+`renew_interval=0.4s`, action duration `6.1s`, and an `8.0s` outer deadline;
+it first asserts `N + 0.4 < 2.0` for that client's observed handshake shape.
 
 - [ ] **Step 2: Write real sync/async lifecycle tests.** Cover acquire, renew,
   release, reacquire, owner mismatch, natural expiry, successor takeover,
@@ -1054,11 +1410,93 @@ def sync_client(host: str, port: int) -> redis.Redis:
   action failure, delayed entry, malformed/no-TTL/wrong-type state, NOSCRIPT
   fallback, counter at `2^53`, overflow, and borrowed clients remaining usable.
 
+Every real lifecycle test has an explicit outer deadline derived from its
+`A/N/R` envelope plus a fixed scheduling margin. Sync cases run blocking work
+behind a timed future/thread boundary and always release gates plus bounded-join
+helpers in `finally`; async cases use one absolute `asyncio.timeout` and cancel
+then await every retained test task in `finally`. Timeout messages identify
+only the phase, never a lock/key/token/client value.
+
+Hang-sensitive real sync lifecycle and 16x10 contention scenarios execute in a
+spawned child process, not the pytest process that owns the deadline. The child
+creates its own borrowed clients and returns exactly one fixed, secret-free
+terminal record through a queue:
+
+```python
+@dataclass(frozen=True, slots=True)
+class ChildResult:
+    scenario_id: Literal["sync-lifecycle", "sync-contention"]
+    status: Literal["passed", "failed"]
+    public_outcome: Literal[
+        "elected", "skipped", "action-failed", "backend-error",
+        "lease-lost", "release-error", "execution-error",
+    ]
+    action_count: int
+    fencing_relation: Literal["strictly-increasing", "not-applicable"]
+    lease_cleanup: Literal["released", "ttl-only", "not-applicable"]
+    worker_delta: int
+    task_delta: int
+    borrowed_client_usable: bool
+    failure_kind: Literal["none", "assertion", "unexpected-public-outcome"]
+```
+
+No message, traceback, exception args, lock/key/token/client value, or raw
+fencing number crosses the process boundary. The child converts a caught
+assertion only to `failure_kind="assertion"` and exits nonzero; unexpected raw
+exceptions produce a nonzero exit without serialization. The parent requires
+exit code zero, exactly one terminal record, `status="passed"`, the scenario's
+expected public outcome category, exact action count/fencing relation,
+lease-key cleanup, zero worker/task delta, and usable borrowed client. Missing,
+duplicate, malformed, failed, or unexpected-category records and every abnormal
+exit fail the test after cleanup.
+
+The parent enforces the computed deadline; on expiry it terminates and
+joins the child, opens/cleans parent-owned fixtures, and reports only the phase.
+Controlled in-process worker tests remain acceptable because their `finally`
+blocks always unblock and join injected threads. This subprocess boundary
+prevents an implementation deadlock or non-daemon worker leak from hanging the
+pytest/CI process until the workflow timeout.
+
+Add the exact stale-owner sequence for sync and async: old handle acquires,
+expires, successor acquires, then old renew and release run. Assert the successor
+record bytes are unchanged, its PTTL only decreases with elapsed time rather
+than being extended/shortened by the old handle, and the old command trace
+never reports successful `PEXPIRE` or `DEL`.
+
+Create a temporary ACL user with only the documented `EVALSHA`, `EVAL`, `GET`
+and in-script `TYPE`, `PTTL`, `INCR`, `SET`, `PEXPIRE`, `DEL` permissions plus
+the leader prefix key pattern. Prove lifecycle success, then prove `SCRIPT
+LOAD`, an unrelated command, and a key outside the prefix are denied. Remove the
+test user in fixture cleanup; credentials never enter assertion text.
+
+Run that ACL proof across the pinned connection-shape matrix from Task 4. The
+default shape grants only adapter commands. RESP negotiation, non-default DB,
+client name, and connection metadata shapes add only the exact conditional
+HELLO/SELECT/CLIENT subcommand permissions witnessed by the handshake test;
+document that mapping without credential values. Arbitrary commands, unrelated
+keys, `SCRIPT LOAD`, and out-of-prefix access remain denied in every shape.
+
 - [ ] **Step 3: Write quantitative contender/fencing tests.** For sync and async
-  separately, run 16 contenders across 10 generations, assert exactly one
-  action per generation, strictly increasing fence tokens, completion inside
-  the computed envelope, command count below
-  `1 + ceil(wait_time / 0.040)`, and zero extra workers/tasks after every run.
+  separately, prewarm scripts with a sacrificial logical name, then run 16
+  contenders across 10 generations. Start each generation behind a barrier
+  with `wait_time=0`; the winner holds its context until all 15 losers have
+  returned, and only then releases. Assert exactly 16 acquire attempts, one
+  action, strictly increasing fence tokens, each call inside its computed
+  envelope, and zero extra workers/tasks after every generation. Measure
+  `EVALSHA`/`EVAL`/`GET` deltas with a separate caller-owned `INFO commandstats`
+  client so owner tokens and command arguments are never observed or logged.
+
+Each generation has one absolute `A + R + scheduling_margin` deadline. Sync
+uses timed `Barrier.wait`, loser-event waits, and `Future.result`; on failure it
+opens every gate, requests cancellation, performs non-blocking executor
+shutdown, and bounded-joins all contender threads in `finally`. Async wraps
+barrier, winner gate, and gather in one `asyncio.timeout`; `finally` opens gates,
+cancels unfinished contenders, awaits all with `return_exceptions=True`, and
+asserts the pre-generation pending-task baseline.
+
+For nonzero-wait unit cases, use integer monotonic arithmetic:
+`max_attempts = 1 if wait_ns == 0 else ceil_div(wait_ns, 40_000_000)` and assert
+`attempts <= max_attempts`; assert exactly one attempt separately at zero wait.
 
 ```python
 def assert_strict_generations(results: list[list[int]]) -> None:
@@ -1072,6 +1510,11 @@ def assert_strict_generations(results: list[list[int]]) -> None:
   test resource stores `high_watermark` and payload together, accepts only
   `incoming > stored`, rejects equal replay and stale predecessor, and contrasts
   a deliberately non-atomic check/write test marked as unsupported evidence.
+  After storing a high watermark, use an admin-only test hook to delete or roll
+  back the Redis fence counter, acquire a lower token, and prove the downstream
+  atomic write rejects it. This is evidence that counter persistence is a
+  prerequisite for Redis monotonic issuance and downstream high-watermark
+  enforcement is the final stale-write guard.
 
 - [ ] **Step 5: Run RED against incomplete real behavior, then GREEN.** Before
   any integration correction, run the smallest failing test and record the
@@ -1084,7 +1527,8 @@ uv run pytest packages/bluetape-leader-redis/tests/test_concurrency_integration.
 ```
 
 Expected final result: all Issue #17 integration tests PASS with no leaked
-threads, tasks, keys owned by completed contexts, or clients.
+threads, tasks, clients, or lease keys for proven-released contexts. Fencing
+counter keys remain present and are never reset or deleted by production code.
 
 - [ ] **Step 6: Commit real Redis evidence.**
 
@@ -1115,13 +1559,19 @@ git commit -m "Prove Redis lease safety under real contention" \
 - Modify `CHANGELOG.md`
 - Modify `packages/bluetape/pyproject.toml`
 - Modify root `pyproject.toml`
+- Modify `.github/workflows/ci.yml`
 - Modify `uv.lock`
 
 - [ ] **Step 1: Write RED isolated-wheel and README tests.** Build wheels and
   prove: core-only installs without redis-py; adapter installs exact core+Redis;
   meta `leader` and `leader-redis` extras; default remains core-only; no root
   `bluetape/__init__.py`; exact exports; EN/KO examples execute; EN/KO headings,
-  warning tables, and unsupported-scope entries stay aligned.
+  warning tables, and unsupported-scope entries stay aligned. Assign stable
+  scenario IDs for install, constructor, contention, precise result, identity,
+  fencing, cancellation, manual lifecycle, unsupported topology, migration,
+  rollback, operator action table, and deployment checklist. Assert both
+  languages contain the same scenario set and normalized option/API calls, not
+  merely matching headings.
 
 ```python
 def test_default_meta_wheel_does_not_install_leader(tmp_path: Path) -> None:
@@ -1154,6 +1604,68 @@ Expected: FAIL on incomplete README examples, meta metadata, or isolation probes
   coordination identity migration, counter restore/high-watermark, safe signals,
   lease-loss runbook, rollback, and deferred Redlock/group/strategic/backends.
 
+The aligned docs include these executable caller contracts:
+
+- warn that `run_if_leader()` returns `None` both for contention and for a
+  successful action returning `None`; require `run_if_leader_result()` whenever
+  `T` may be `None`, with exhaustive `Elected`/`Skipped`/`ActionFailed` examples;
+- show guarded sync and async contexts, and reject documentation that uses
+  `with lock.try_acquire(...)` or `async with await lock.try_acquire(...)`
+  without first checking for `None`;
+- state that `try_acquire()` starts no renewer, `auto_renew=True` begins only
+  after context entry re-proves ownership, and the acquire-to-enter delay is
+  covered only by the original TTL;
+- show manual non-context sync/async use with explicit renew/checkpoints and
+  `finally` release, alongside a lifecycle table contrasting it with scoped
+  automatic renewal/cleanup;
+- show async lock and elector cancellation that re-raises `CancelledError`
+  after bounded owned cleanup and closes the borrowed client only in caller
+  scope;
+- include an identity table: `node_id` is physical caller identity,
+  `audit_leader_id` is correlation text, and only integer `fencing_token`
+  participates in downstream stale-write rejection;
+- name a structured operator action table and deployment checklist. The
+  checklist covers exact client construction, writable standalone primary,
+  ACL, finite timeouts, TLS/hostname rejection, counter persistence/restore,
+  downstream high-watermark, and rollback to an identical coordination
+  identity.
+
+The migration, restore, loss, and rollback procedures are ordered contracts,
+not topic-only prose. EN/KO semantic tests require these exact steps:
+
+1. stop every old and new contender and block new protected work;
+2. prove the old lease absent without deleting or printing its value;
+3. read and preserve every downstream resource high-watermark;
+4. restore or seed the authoritative Redis counter strictly above the maximum
+   downstream high-watermark;
+5. configure every contender with one identical prefix, digest derivation,
+   suffix set, and record version;
+6. restart all contenders on that one coordination identity, then re-enable
+   protected work.
+
+The lease-loss runbook blocks new protected work, lets atomic downstream
+fencing reject/abort stale writes, inspects caller-owned evidence, and never
+deletes/resets coordination keys or prints lease values. Rollback removes
+adapter usage/extras while leaving counters and expired lease keys intact; it
+must not reintroduce a writer holding a token below a preserved downstream
+high-watermark.
+
+`LeaderBackendError` is intentionally non-diagnostic and exposes no backend
+cause kind. EN/KO operator rows for suspected connection/pool timeout,
+permission denial, protocol failure, and corruption must direct operators to
+caller-owned Redis health, ACL, pool, and server evidence rather than branch on
+or guess from the exception. Safe call-site signals label only public operation
+and outcome categories and never names, IDs, keys, prefixes, tokens, or a
+guessed backend cause.
+
+Semantic parity tests require both languages to state that mutual exclusion is
+only against one authoritative writable primary; asynchronous failover,
+partitions, promotion, proxy/multi-primary routing, Sentinel, and Cluster can
+violate that assumption. The exact caller-owned signal set is acquire
+outcome/latency, renewal latency/loss, release failure, pool timeout, command
+failure, and reconnect. Lock names, node/audit IDs, owner tokens, Redis
+keys/prefixes, and fencing tokens are forbidden as log fields or metric labels.
+
 ```python
 handle = lock.try_acquire("daily-job", options)
 if handle is not None:
@@ -1167,11 +1679,26 @@ if handle is not None:
 The docs must state that `update_if_newer` compares and commits high-watermark
 plus business data in one transaction; it is not a check-then-write example.
 
-- [ ] **Step 4: Update workspace status and release boundary.** Mark Issue #17
+- [ ] **Step 4: Wire required Redis leader CI, then update workspace status and
+  release boundary.** Add a dedicated `leader-redis` required PR/push job with
+  a job timeout, Docker runtime check, focused `--group test` sync, unit tests,
+  and one non-xdist serial `-m testcontainers` invocation. Emit JUnit XML and
+  assert collected tests are greater than zero with zero failures, errors, and
+  skips. This is required because the generic job explicitly excludes
+  `testcontainers` and the existing `redis-provider` job owns only
+  `bluetape-cache-redis`.
+
+  Mark Issue #17
   implemented in WIP/CHANGELOG only after all targeted tests pass. Register
   `leader` in meta `dev`/`all`; keep `leader-redis` explicit-only like
-  `cache-redis`; keep default dependencies unchanged. Do not add a dedicated CI
-  workflow because generic workspace commands discover both packages.
+  `cache-redis`; keep default dependencies unchanged. The job remains in the
+  existing `ci.yml`; do not create another workflow file.
+
+  Nightly CI is evidence-backed `N/A`: the repository has no scheduled workflow
+  and the full Redis leader integration suite is required on every PR/push
+  instead. Coverage aggregation is evidence-backed `N/A`: the repository has
+  no coverage plugin/reporting contract; do not add a dependency or invent a
+  percentage in Issue #17. Record both decisions in the plan-review artifact.
 
 - [ ] **Step 5: Run GREEN, build, metadata, and parity verification.**
 
@@ -1182,6 +1709,7 @@ uv build --all-packages
 uv run pytest packages/bluetape-leader packages/bluetape-leader-redis packages/bluetape/tests/test_leader_wheel_isolation.py packages/bluetape/tests/test_leader_readmes.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
 uv run ruff check .
 uv run ruff format --check .
+actionlint
 git diff --check
 ```
 
