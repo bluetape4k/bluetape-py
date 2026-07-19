@@ -81,3 +81,12 @@ def test_composite_preserves_causes_but_redacts_its_representation() -> None:
     assert str(error) == "leader action and lifecycle both failed"
     assert repr(error) == "LeaderExecutionError(<redacted>)"
     assert "caller-value-canary" not in repr(error)
+
+
+def test_composite_rejects_non_exception_action_and_unsanitized_lifecycle_causes() -> None:
+    leader = load_leader()
+
+    with pytest.raises(TypeError, match=r"^action_cause must be Exception$"):
+        leader.LeaderExecutionError("caller-value", leader.LeaderBackendError())
+    with pytest.raises(TypeError, match=r"^lifecycle_cause must be LeaderError$"):
+        leader.LeaderExecutionError(RuntimeError("caller-value"), RuntimeError("secret"))
