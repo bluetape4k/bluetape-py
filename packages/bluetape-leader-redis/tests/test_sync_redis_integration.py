@@ -42,6 +42,12 @@ pytestmark = TESTCONTAINERS_MARK
 
 _SHORT_LEASE = 0.20
 _POLL_INTERVAL = 0.01
+_ACL_SHAPES = [
+    (protocol, client_name, database)
+    for protocol in (2, 3)
+    for client_name in (None, "leader-test")
+    for database in (0, 1)
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,14 +415,25 @@ def test_fence_counter_is_exact_above_2_to_53_and_overflow_fails_closed(
         assert admin.get(overflow_fence) == b"9223372036854775807"
 
 
-def test_default_acl_shape_grants_only_adapter_commands_and_prefix(
+@pytest.mark.parametrize("protocol,client_name,database", _ACL_SHAPES)
+def test_acl_matrix_grants_only_shape_specific_adapter_commands(
     redis_endpoint: RedisEndpoint,
     clean_redis_database: None,
+    protocol: int,
+    client_name: str | None,
+    database: int,
 ) -> None:
     del clean_redis_database
-    username = f"leader-acl-{os.getpid()}"
+    username = f"leader-acl-{os.getpid()}-{protocol}-{int(client_name is not None)}-{database}"
     password = "leader-acl-fixed-password"
     prefix = "leader-acl"
+    conditional_permissions = []
+    if protocol == 3:
+        conditional_permissions.append("+hello")
+    if client_name is not None:
+        conditional_permissions.append("+client|setname")
+    if database != 0:
+        conditional_permissions.append("+select")
     with borrowed_sync_client(redis_endpoint) as admin:
         admin.execute_command(
             "ACL",
@@ -436,14 +453,18 @@ def test_default_acl_shape_grants_only_adapter_commands_and_prefix(
             "+pexpire",
             "+del",
             "+client|setinfo",
+            *conditional_permissions,
         )
         restricted = new_sync_client(
             redis_endpoint,
             username=username,
             password=password,
-            protocol=2,
+            protocol=protocol,
+            client_name=client_name,
+            db=database,
         )
         logical_name = unique_logical_name("acl-default")
+        keys = leader_keys(logical_name, prefix)
         try:
             handle = RedisDistributedLock(restricted, prefix=prefix).try_acquire(
                 logical_name, _options()
@@ -458,6 +479,7 @@ def test_default_acl_shape_grants_only_adapter_commands_and_prefix(
                 restricted.ping()
             with pytest.raises(redis.exceptions.NoPermissionError):
                 restricted.get(b"outside-prefix")
+            clean_sync_keys(restricted, keys)
         finally:
             restricted.close()
             admin.execute_command("ACL", "DELUSER", username)
