@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from bluetape.leader import (
+    InvalidLeaderOptionsError,
     LeaderBackendError,
     LeaderElectionOptions,
     LeaderExecutionError,
@@ -131,13 +132,18 @@ def options(
     )
 
 
-def new_lock(commands: AsyncCommands, clock: AsyncClock) -> AsyncRedisDistributedLock:
+def new_lock(
+    commands: AsyncCommands,
+    clock: AsyncClock,
+    *,
+    jitter: float = 0.05,
+) -> AsyncRedisDistributedLock:
     return AsyncRedisDistributedLock._for_test(
         commands,
         TIMING,
         monotonic=clock.monotonic,
         sleep=clock.sleep,
-        jitter=lambda: 0.05,
+        jitter=lambda: jitter,
         token_factory=lambda: "A" * 32,
     )
 
@@ -164,6 +170,45 @@ async def test_async_zero_wait_contention_dispatches_once_without_sleep() -> Non
 
     assert [call[0] for call in commands.calls] == ["evalsha"]
     assert clock.sleeps == []
+
+
+@pytest.mark.asyncio
+async def test_async_contention_retry_has_a_bounded_nonzero_wait_attempt_count() -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"CONTENDED"], [b"CONTENDED"], [b"CONTENDED"]])
+
+    assert (
+        await new_lock(commands, clock, jitter=0.04).try_acquire("job", options(wait=0.1)) is None
+    )
+
+    assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
+    assert clock.sleeps == [0.04, 0.04, pytest.approx(0.02)]
+
+
+@pytest.mark.asyncio
+async def test_async_worker_lifecycle_rejects_unprovable_renew_timing_before_io() -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+
+    with pytest.raises(InvalidLeaderOptionsError):
+        await new_lock(commands, clock).try_acquire(
+            "job", options(lease=1.0, auto_renew=True, renew_interval=0.03)
+        )
+
+    assert commands.calls == []
+
+
+@pytest.mark.asyncio
+async def test_async_derived_renew_interval_is_rounded_down_at_redis_boundary() -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+
+    handle = await new_lock(commands, clock).try_acquire(
+        "job", options(lease=1.000001, auto_renew=True)
+    )
+
+    assert handle is not None
+    assert handle._options.renew_interval == timedelta(milliseconds=333)
 
 
 @pytest.mark.asyncio

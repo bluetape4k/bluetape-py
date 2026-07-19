@@ -852,6 +852,16 @@ def test_worker_lifecycle_rejects_unprovable_renew_timing_before_io() -> None:
     assert commands.calls == []
 
 
+def test_derived_renew_interval_is_rounded_down_at_the_redis_boundary() -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+
+    handle = new_lock(commands, clock).try_acquire("job", options(lease=1.000001, auto_renew=True))
+
+    assert handle is not None
+    assert handle._options.renew_interval == timedelta(milliseconds=333)
+
+
 def test_worker_start_failure_proves_no_worker_before_owner_checked_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -878,6 +888,44 @@ def test_worker_start_failure_proves_no_worker_before_owner_checked_cleanup(
         thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
     )
     assert handle.is_held() is False
+
+
+def test_worker_start_process_control_after_real_start_stops_worker_and_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"DELETED"]])
+    handle = new_lock(commands, clock).try_acquire(
+        "job", options(auto_renew=True, renew_interval=0.1)
+    )
+    assert handle is not None
+    marker = KeyboardInterrupt("worker start control")
+    real_start = threading.Thread.start
+
+    def start_then_interrupt(thread: threading.Thread) -> None:
+        real_start(thread)
+        raise marker
+
+    monkeypatch.setattr(threading.Thread, "start", start_then_interrupt)
+
+    try:
+        with pytest.raises(KeyboardInterrupt) as caught:
+            handle.__enter__()
+
+        assert caught.value is marker
+        assert handle.is_held() is False
+        assert handle._worker is None
+        assert not any(
+            thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate()
+        )
+        assert [call[0] for call in commands.calls] == ["evalsha", "evalsha", "evalsha"]
+    finally:
+        handle._stop_event.set()
+        worker = handle._worker
+        if worker is not None:
+            worker.join(0.5)
+        if handle._state not in ("LOST", "RELEASED", "UNKNOWN"):
+            handle.release()
 
 
 def test_worker_start_publication_gap_allows_concurrent_release_cleanup(
