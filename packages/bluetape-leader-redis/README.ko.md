@@ -25,6 +25,11 @@ Adapter는 아직 connection을 열지 않은 정확한 redis-py client만 받�
 hostname, retrying client, health check, credential callback, connection hook,
 custom response callback, proxy, subclass, 이미 사용한 pool은 I/O 전에 거부합니다.
 
+`bluetape-leader-redis`는 TLS를 지원하지 않습니다. 가능하면 로컬 Unix socket을
+우선하십시오. TCP가 필요하다면 평문 TCP는 호출자가 통제하는 보호된 네트워크에서만
+사용하십시오. 평문 TCP에서는 네트워크 관찰자가 Redis 자격 증명, owner token,
+capability 역할을 하는 lock material을 볼 수 있습니다.
+
 <!-- sync-constructor-example -->
 ```python
 import redis
@@ -277,6 +282,10 @@ log field나 metric label로 사용하면 안 됩니다.
 - [ ] `redis==8.0.1`을 pin하고 numeric IP 또는 Unix socket, 유한한 양수 timeout,
   zero retry로 새 exact sync/async client를 구성합니다. TLS, hostname, health check,
   callback, event hook, custom response callback을 사용하지 않습니다.
+- [ ] TLS를 지원하지 않습니다. 가능하면 로컬 Unix socket을 우선하고, 평문 TCP는
+  호출자가 통제하는 보호된 네트워크에서만 허용합니다. 평문 TCP에서는 네트워크
+  관찰자가 Redis 자격 증명, owner token, capability 역할을 하는 lock material을 볼
+  수 있습니다.
 - [ ] 현재 검증된 server major인 Redis Server 8에 배포합니다. 다른 major를
   지원한다고 선언하기 전에 complete integration suite로 검증합니다.
 - [ ] 모든 contender를 하나의 writable standalone primary로 routing하고 Sentinel,
