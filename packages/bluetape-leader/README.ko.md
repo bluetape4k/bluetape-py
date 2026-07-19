@@ -211,3 +211,10 @@ reply, fence 값이 포함되지 않습니다. `LeaderBackendError`는 의도적
 담지 않으며 backend cause kind를 노출하지 않습니다. `str`, `repr`, traceback,
 note에서 원인을 추측하지 말고 caller가 소유한 backend health와 telemetry를 별도로
 확인하십시오.
+
+`LeaderExecutionError`는 일반 caller action과 lifecycle cleanup이 모두 실패했음을
+뜻합니다. `action_cause`는 caller-owned `Exception`을 보존하고,
+`lifecycle_cause`는 ownership safety failure를 나타내는 정제된 `LeaderError`입니다.
+두 cause를 모두 처리하는 명시적 caller policy가 없다면 composite를 그대로 전파하십시오.
+처리할 때는 안전한 exception type으로 두 attribute를 분류하고, 값이나 text를 log/parse하지
+말며 lifecycle failure를 버리지 마십시오.
