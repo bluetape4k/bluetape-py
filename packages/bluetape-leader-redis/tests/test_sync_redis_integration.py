@@ -614,7 +614,6 @@ def test_acl_matrix_grants_only_shape_specific_adapter_commands(
             "+set",
             "+pexpire",
             "+del",
-            "+client|setinfo",
             *conditional_permissions,
         )
         authentication: dict[str, object] = {}
