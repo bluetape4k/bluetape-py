@@ -13,7 +13,9 @@ from queue import Empty
 from typing import Any, Literal
 
 import pytest
-from _support import (
+from bluetape.leader import LeaderElectionOptions
+from bluetape.leader.redis import AsyncRedisDistributedLock, RedisDistributedLock
+from leader_redis_test_support import (
     TESTCONTAINERS_MARK,
     RedisEndpoint,
     assert_task_baseline,
@@ -30,8 +32,6 @@ from _support import (
     task_baseline,
     unique_logical_name,
 )
-from bluetape.leader import LeaderElectionOptions
-from bluetape.leader.redis import AsyncRedisDistributedLock, RedisDistributedLock
 
 __all__ = ["clean_redis_database", "redis_endpoint"]
 
