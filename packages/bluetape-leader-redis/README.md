@@ -6,6 +6,8 @@ English | [한국어](README.ko.md)
 `bluetape-leader`. It implements bounded sync and asyncio distributed locks and
 leader electors for one authoritative writable Redis primary. The distribution
 depends only on `bluetape-leader==0.1.0` and `redis==8.0.1` at runtime.
+The tested server compatibility target is Redis Server 8. Other server major
+versions are outside this first-slice support contract until separately proven.
 
 PyPI publication is currently on hold. The install commands describe the
 public shape after publication.
@@ -171,6 +173,13 @@ missing, rolled back, or cannot be proven above all preserved watermarks, keep
 writers stopped. Never “repair” the state by deleting an active lease or
 lowering downstream state.
 
+The Redis signed-integer ceiling is `9223372036854775807`. Acquisition fails
+closed when the counter reaches that value. If either the counter or a
+downstream watermark reaches the ceiling, no integer token can be restored
+strictly above it. Keep writers stopped and migrate the protected store to a
+new, downstream-recognized coordination epoch with compound epoch/token
+ordering; changing only the Redis prefix or resetting the counter is unsafe.
+
 ## Lease-loss runbook
 
 When renewal loss, owner mismatch, corruption, or an uncertain release occurs:
@@ -220,10 +229,14 @@ cause.
 - [ ] Pin `redis==8.0.1` and construct a fresh exact sync or async client with a
   numeric IP or Unix socket, finite positive timeouts, zero retry, no TLS,
   hostname, health check, callback, event hook, or custom response callback.
+- [ ] Deploy against Redis Server 8, the currently tested server major; qualify
+  another major with the complete integration suite before declaring support.
 - [ ] Route all contenders to one writable standalone primary; reject
   Sentinel, Cluster, proxies, promotion, and multi-primary routing.
 - [ ] Apply and test the minimal ACL, including out-of-prefix denial.
 - [ ] Persist, back up, and restore the fence counter with protected data.
+- [ ] Monitor counter headroom below `9223372036854775807`; at exhaustion, keep
+  writers stopped until a downstream-recognized epoch migration is complete.
 - [ ] Make every protected store atomically compare and commit its
   high-watermark with business data.
 - [ ] Exercise contention, cancellation, lease loss, release failure, and
