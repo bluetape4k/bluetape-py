@@ -122,18 +122,20 @@ Manual 방식은 명시적인 checkpoint가 필요하고 모든 release 경로�
 
 <!-- manual-lifecycle-example -->
 ```python
-from bluetape.leader import NotHeld, RenewBackendFailure
+from bluetape.leader import LeaderLeaseLostError, NotHeld, RenewBackendFailure
 
 
 def run_manual(lock, options, value):
     handle = lock.try_acquire("daily-job", options)
     if handle is None:
         return False
+    handle.assert_held()
+    renewed = handle.renew()
+    if isinstance(renewed, NotHeld):
+        raise LeaderLeaseLostError()
+    if isinstance(renewed, RenewBackendFailure):
+        raise renewed.cause
     try:
-        handle.assert_held()
-        renewed = handle.renew()
-        if isinstance(renewed, (NotHeld, RenewBackendFailure)):
-            return False
         update_if_newer(value, fencing_token=handle.lease.fencing_token)
         return True
     finally:
@@ -144,16 +146,23 @@ async def run_manual_async(lock, options, value):
     handle = await lock.try_acquire("daily-job", options)
     if handle is None:
         return False
+    await handle.assert_held()
+    renewed = await handle.renew()
+    if isinstance(renewed, NotHeld):
+        raise LeaderLeaseLostError()
+    if isinstance(renewed, RenewBackendFailure):
+        raise renewed.cause
     try:
-        await handle.assert_held()
-        renewed = await handle.renew()
-        if isinstance(renewed, (NotHeld, RenewBackendFailure)):
-            return False
         await update_if_newer_async(value, fencing_token=handle.lease.fencing_token)
         return True
     finally:
         await handle.release()
 ```
+
+`NotHeld` 또는 `RenewBackendFailure` 뒤에는 `release()`를 호출하지 마십시오.
+Handle은 이미 terminal 또는 uncertain 상태이며, 명시적 release는 renewal outcome을
+lifecycle 예외로 바꿉니다. 예제는 action/release block에 들어가기 전에 해당하는
+정제된 lifecycle error를 발생시킵니다.
 
 `is_held()`는 관찰일 뿐 reservation이 아닙니다. Probe 직후 다른 process가 획득할 수
 있으므로 check-then-write에는 TOCTOU race가 있습니다. `assert_held()`를 checkpoint로

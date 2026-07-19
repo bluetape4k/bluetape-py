@@ -124,18 +124,20 @@ path.
 
 <!-- manual-lifecycle-example -->
 ```python
-from bluetape.leader import NotHeld, RenewBackendFailure
+from bluetape.leader import LeaderLeaseLostError, NotHeld, RenewBackendFailure
 
 
 def run_manual(lock, options, value):
     handle = lock.try_acquire("daily-job", options)
     if handle is None:
         return False
+    handle.assert_held()
+    renewed = handle.renew()
+    if isinstance(renewed, NotHeld):
+        raise LeaderLeaseLostError()
+    if isinstance(renewed, RenewBackendFailure):
+        raise renewed.cause
     try:
-        handle.assert_held()
-        renewed = handle.renew()
-        if isinstance(renewed, (NotHeld, RenewBackendFailure)):
-            return False
         update_if_newer(value, fencing_token=handle.lease.fencing_token)
         return True
     finally:
@@ -146,16 +148,23 @@ async def run_manual_async(lock, options, value):
     handle = await lock.try_acquire("daily-job", options)
     if handle is None:
         return False
+    await handle.assert_held()
+    renewed = await handle.renew()
+    if isinstance(renewed, NotHeld):
+        raise LeaderLeaseLostError()
+    if isinstance(renewed, RenewBackendFailure):
+        raise renewed.cause
     try:
-        await handle.assert_held()
-        renewed = await handle.renew()
-        if isinstance(renewed, (NotHeld, RenewBackendFailure)):
-            return False
         await update_if_newer_async(value, fencing_token=handle.lease.fencing_token)
         return True
     finally:
         await handle.release()
 ```
+
+Do not call `release()` after `NotHeld` or `RenewBackendFailure`: the handle is
+already terminal or uncertain, and explicit release would replace that renewal
+outcome with a lifecycle exception. The example raises the corresponding
+sanitized lifecycle error before entering the action/release block.
 
 `is_held()` is an observation, not a reservation. Another process can acquire
 after the probe, so check-then-write has a TOCTOU race. Use `assert_held()` as a
