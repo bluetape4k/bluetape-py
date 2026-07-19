@@ -47,6 +47,7 @@ from ._support import (
     _new_owner_token,
     _Timing,
     _validated_async_client,
+    _validated_redis_options,
 )
 
 _DEFAULT_PREFIX = "bluetape-leader"
@@ -629,6 +630,7 @@ class AsyncRedisDistributedLock(AsyncDistributedLock[FencedLeaderLease]):
         lock_name: str,
         options: LeaderElectionOptions = LeaderElectionOptions(),  # noqa: B008
     ) -> AsyncLockLease[FencedLeaderLease] | None:
+        options = _validated_redis_options(options, self._timing)
         keys = _redis_keys(lock_name, self._prefix)
         owner_token = self._token_factory()
         ttl_ms = _duration_milliseconds(options.lease_time)

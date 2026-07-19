@@ -403,7 +403,7 @@ async def test_renew_task_lifecycle_cancels_stall_by_absolute_terminal_deadline(
     stalled = AsyncBlockingEffect([b"RENEWED"])
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled])
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     entered = await handle.__aenter__()
@@ -438,7 +438,7 @@ async def test_caller_cancellation_survives_timed_out_renew_and_restores_task_ba
         stalled = AsyncBlockingEffect([b"RENEWED"])
         commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled])
         handle = await new_lock(commands, clock).try_acquire(
-            "job", options(auto_renew=True, renew_interval=0.01)
+            "job", options(auto_renew=True, renew_interval=0.1)
         )
         assert handle is not None
         body_started = asyncio.Event()
@@ -489,7 +489,7 @@ async def test_successful_auto_renew_clears_command_deadline_before_exit() -> No
         evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"RENEWED"], [b"DELETED"]]
     )
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     entered = await handle.__aenter__()
@@ -531,7 +531,7 @@ async def test_renew_timer_callback_ignores_same_turn_stop(
         clock = AsyncClock()
         commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], [b"DELETED"]])
         handle = await new_lock(commands, clock).try_acquire(
-            "job", options(auto_renew=True, renew_interval=0.01)
+            "job", options(auto_renew=True, renew_interval=0.1)
         )
         assert handle is not None
         entered = await handle.__aenter__()
@@ -563,7 +563,7 @@ async def test_entry_cancellation_awaits_one_cleanup_and_preserves_identity(
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], blocked_proof, blocked_cleanup])
     handle = await new_lock(commands, clock).try_acquire(
         "job",
-        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+        options(auto_renew=auto_renew, renew_interval=0.1 if auto_renew else None),
     )
     assert handle is not None
     observed: list[asyncio.CancelledError] = []
@@ -613,7 +613,7 @@ async def test_entry_process_control_awaits_one_cleanup_and_preserves_identity(
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], blocked_proof, blocked_cleanup])
     handle = await new_lock(commands, clock).try_acquire(
         "job",
-        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+        options(auto_renew=auto_renew, renew_interval=0.1 if auto_renew else None),
     )
     assert handle is not None
     retained: list[asyncio.Task[None]] = []
@@ -652,7 +652,7 @@ async def test_renew_task_start_failure_closes_coroutine_and_settles_cleanup(
     clock = AsyncClock()
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], release_response])
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     start_error = RuntimeError("renew start marker")
@@ -695,7 +695,7 @@ async def test_global_task_start_failure_closes_both_coroutines_and_falls_back_u
     clock = AsyncClock()
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"]])
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     start_error = RuntimeError("renew start marker")
@@ -771,7 +771,7 @@ async def test_ordinary_renew_start_failure_yields_exact_cleanup_control(
     clock = AsyncClock()
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"]])
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     start_error = RuntimeError("renew start marker")
@@ -1005,7 +1005,7 @@ async def test_explicit_release_waits_for_inflight_renew_and_exit_reuses_cleanup
         evalsha_effects=[[b"ACQUIRED", b"7"], [b"RENEWED"], stalled_renew, [b"DELETED"]]
     )
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     entered = await handle.__aenter__()
@@ -1045,7 +1045,7 @@ async def test_explicit_release_preserves_first_cancellation_and_retained_cleanu
         ]
     )
     handle = await new_lock(commands, clock).try_acquire(
-        "job", options(auto_renew=True, renew_interval=0.01)
+        "job", options(auto_renew=True, renew_interval=0.1)
     )
     assert handle is not None
     entered = await handle.__aenter__()
@@ -1095,7 +1095,7 @@ async def test_entry_proof_cannot_deliver_handle_after_concurrent_release(
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"], stale_proof, [b"DELETED"]])
     handle = await new_lock(commands, clock).try_acquire(
         "job",
-        options(auto_renew=auto_renew, renew_interval=0.01 if auto_renew else None),
+        options(auto_renew=auto_renew, renew_interval=0.1 if auto_renew else None),
     )
     assert handle is not None
 
