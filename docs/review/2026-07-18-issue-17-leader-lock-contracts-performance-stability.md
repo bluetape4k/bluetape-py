@@ -1,7 +1,7 @@
 # Issue #17 leader lock performance and stability evidence
 
 Date: 2026-07-19 KST
-Implementation evidence head: `f93e4e057cac6cd0994f6a2a6b3438921a515e4d`
+Implementation evidence head: `2f6cf37657ea86ee148e87ac023d91eb9a7e51e4`
 
 ## Bounded timing model
 

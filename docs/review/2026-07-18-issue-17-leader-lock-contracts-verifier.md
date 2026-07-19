@@ -1,7 +1,7 @@
 # Issue #17 leader lock verifier map
 
 Date: 2026-07-19 KST
-Pre-evidence implementation head: `f93e4e057cac6cd0994f6a2a6b3438921a515e4d`
+Pre-evidence implementation head: `2f6cf37657ea86ee148e87ac023d91eb9a7e51e4`
 
 Status: **READY FOR EXACT-HEAD VERIFICATION**. This file maps the approved
 criteria but does not pre-claim the independent verifier verdict.
