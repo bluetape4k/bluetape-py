@@ -594,7 +594,7 @@ class AsyncRedisDistributedLock(AsyncDistributedLock[FencedLeaderLease]):
         "_token_factory",
     )
 
-    def __init__(self, client: async_redis.Redis, prefix: str = _DEFAULT_PREFIX) -> None:
+    def __init__(self, client: async_redis.Redis, *, prefix: str = _DEFAULT_PREFIX) -> None:
         self._commands = client
         self._prefix = _validated_prefix(prefix)
         self._timing = _validated_async_client(client)

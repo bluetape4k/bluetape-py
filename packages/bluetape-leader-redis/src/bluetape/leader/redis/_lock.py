@@ -431,7 +431,7 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
         "_token_factory",
     )
 
-    def __init__(self, client: redis.Redis, prefix: str = _DEFAULT_PREFIX) -> None:
+    def __init__(self, client: redis.Redis, *, prefix: str = _DEFAULT_PREFIX) -> None:
         self._commands = client
         self._prefix = _validated_prefix(prefix)
         self._timing = _validated_sync_client(client)

@@ -214,3 +214,10 @@ owner records, backend replies, and fence values. `LeaderBackendError` is
 intentionally non-diagnostic and does not expose a backend cause kind. Inspect
 caller-owned backend health and telemetry outside the exception instead of
 guessing its cause from `str`, `repr`, traceback, or notes.
+
+`LeaderExecutionError` means an ordinary caller action and its lifecycle
+cleanup both failed. Its `action_cause` retains the caller-owned `Exception`;
+its `lifecycle_cause` is a sanitized `LeaderError` and is the ownership-safety
+failure. Propagate the composite unless the caller has an explicit policy for
+both causes. If handled, classify the two attributes by safe exception type;
+do not log their values, parse their text, or discard the lifecycle failure.

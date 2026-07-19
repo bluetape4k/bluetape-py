@@ -63,7 +63,7 @@ from redis.asyncio.retry import Retry as AsyncRetry
 from bluetape.leader.redis import AsyncRedisDistributedLock
 
 
-async def build():
+async def main(options, value):
     client = async_redis.Redis(
         host="127.0.0.1",
         port=6379,
@@ -74,11 +74,22 @@ async def build():
         retry=AsyncRetry(NoBackoff(), 0),
         retry_on_error=[],
     )
-    lock = AsyncRedisDistributedLock(client)
-    return client, lock
+    try:
+        lock = AsyncRedisDistributedLock(client)
+        handle = await lock.try_acquire("daily-job", options)
+        if handle is None:
+            return False
+        async with handle as held:
+            await update_if_newer_async(
+                value,
+                fencing_token=held.lease.fencing_token,
+            )
+        return True
+    finally:
+        await client.aclose()
 
 
-client, lock = asyncio.run(build())
+# asyncio.run(main(options, value))
 ```
 
 Local Unix socket은 redis-py의 `unix_socket_path` option으로 정확한 sync/async
@@ -97,6 +108,46 @@ Local Unix socket은 redis-py의 `unix_socket_path` option으로 정확한 sync/
 
 이들은 client를 닫지 않습니다. 모든 lock/elector 작업이 terminal 상태가 된 다음
 caller-owned sync/async scope에서 정확히 한 번 닫으십시오.
+
+<!-- elector-example -->
+```python
+from bluetape.leader import ActionFailed, Elected, Skipped
+from bluetape.leader.redis import AsyncRedisLeaderElector, RedisLeaderElector
+
+
+def sync_action():
+    return "completed"
+
+
+async def async_action():
+    return "completed"
+
+
+def result_value(result):
+    if isinstance(result, Elected):
+        return result.value
+    if isinstance(result, Skipped):
+        return None
+    if isinstance(result, ActionFailed):
+        raise result.cause
+    raise AssertionError("unreachable leader result")
+
+
+def run_sync(client, options):
+    elector = RedisLeaderElector(client)
+    result = elector.run_if_leader_result("daily-job", sync_action, options)
+    return result_value(result)
+
+
+async def run_async(client, options):
+    elector = AsyncRedisLeaderElector(client)
+    result = await elector.run_if_leader_result("daily-job", async_action, options)
+    return result_value(result)
+```
+
+Elector도 client를 borrow합니다. 위 예제처럼 async client를 하나의 caller-owned event-loop
+scope에서 생성, 사용, 종료하십시오. 임시 `asyncio.run()` loop 밖으로 반환해 나중에
+operation을 수행하면 안 됩니다.
 
 <!-- leader-scenario:fencing -->
 ## Fencing으로 stale write 차단
