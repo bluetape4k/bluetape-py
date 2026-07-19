@@ -433,7 +433,7 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
     expected_handshakes = len(_handshake_commands(shape))
     if client_family == "async" and transport == "unix":
         expected_handshakes *= 2
-    for stall_after in range(expected_handshakes + 1):
+    for stall_after in range(expected_handshakes):
         unix_path = _unix_path(tmp_path) if transport == "unix" else None
         with RespServer(
             auth_username_fallback=auth == "username-password" and protocol == 2,
@@ -444,16 +444,29 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
             started = time.monotonic()
             timing = _exercise_stalled_command(client_family, options)
             elapsed = time.monotonic() - started
-            assert server.wait_for_command_count(stall_after + 1, timeout=1.0)
+            assert server.wait_for_command_count(stall_after + 1, timeout=0.1)
 
         assert timing.handshake_round_trips == expected_handshakes
         assert len(server.commands) == 1
         assert len(server.commands[0]) == stall_after + 1
         assert elapsed >= 0.009
-        if stall_after < expected_handshakes:
-            assert elapsed <= timing.connect
-        else:
-            assert elapsed <= timing.command
+        assert elapsed <= timing.connect
+
+    unix_path = _unix_path(tmp_path) if transport == "unix" else None
+    with RespServer(
+        auth_username_fallback=auth == "username-password" and protocol == 2,
+        stall_after=expected_handshakes,
+        unix_path=unix_path,
+    ) as server:
+        options = {**_server_options(server), **shape}
+        timing, elapsed = _exercise_stalled_primitive(client_family, options)
+        assert server.wait_for_command_count(expected_handshakes + 1, timeout=1.0)
+
+    assert timing.handshake_round_trips == expected_handshakes
+    assert len(server.commands) == 1
+    assert len(server.commands[0]) == expected_handshakes + 1
+    assert elapsed >= 0.009
+    assert elapsed <= timing.command
 
 
 def _exercise_stalled_command(client_family: str, options: dict[str, object]) -> _Timing:
@@ -474,6 +487,53 @@ async def _stalled_async_command(options: dict[str, object]) -> _Timing:
         await client.ping()
     await client.connection_pool.disconnect()
     return timing
+
+
+def _exercise_stalled_primitive(
+    client_family: str, options: dict[str, object]
+) -> tuple[_Timing, float]:
+    if client_family == "sync":
+        client = safe_sync_client(socket_connect_timeout=0.01, socket_timeout=0.01, **options)
+        timing = _validated_sync_client(client)
+        pool = client.connection_pool
+        pool.connection_kwargs["socket_timeout"] = 0.5
+        try:
+            connection = pool.get_connection()
+        finally:
+            pool.connection_kwargs["socket_timeout"] = 0.01
+        connection.socket_timeout = 0.01
+        assert connection._sock is not None
+        connection._sock.settimeout(0.01)
+        connection._parser._buffer.socket_timeout = 0.01
+        pool.release(connection)
+        started = time.monotonic()
+        with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+            client.ping()
+        elapsed = time.monotonic() - started
+        pool.disconnect()
+        return timing, elapsed
+    return asyncio.run(_stalled_async_primitive(options))
+
+
+async def _stalled_async_primitive(
+    options: dict[str, object],
+) -> tuple[_Timing, float]:
+    client = safe_async_client(socket_connect_timeout=0.01, socket_timeout=0.01, **options)
+    timing = _validated_async_client(client)
+    pool = client.connection_pool
+    pool.connection_kwargs["socket_timeout"] = 0.5
+    try:
+        connection = await pool.get_connection()
+    finally:
+        pool.connection_kwargs["socket_timeout"] = 0.01
+    connection.socket_timeout = 0.01
+    await pool.release(connection)
+    started = time.monotonic()
+    with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+        await client.ping()
+    elapsed = time.monotonic() - started
+    await pool.disconnect()
+    return timing, elapsed
 
 
 @pytest.mark.asyncio
