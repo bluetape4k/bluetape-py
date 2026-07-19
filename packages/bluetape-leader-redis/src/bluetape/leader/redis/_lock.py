@@ -13,7 +13,6 @@ from typing import Any, Never, Self
 from bluetape.leader import (
     DistributedLock,
     FencedLeaderLease,
-    InvalidLeaderOptionsError,
     LeaderBackendError,
     LeaderElectionOptions,
     LeaderError,
@@ -49,6 +48,7 @@ from ._support import (
     _LeaseRecord,
     _new_owner_token,
     _Timing,
+    _validated_redis_options,
     _validated_sync_client,
 )
 
@@ -343,20 +343,31 @@ class _RedisLockLease:
         with self._lock:
             self._worker = worker
             self._worker_ready.clear()
-        start_failed = False
+        start_failure: BaseException | None = None
         try:
             worker.start()
-        except Exception:
-            start_failed = True
-        if start_failed:
+        except BaseException as error:
+            start_failure = error
+        if start_failure is not None:
             with self._lock:
-                if worker.is_alive():
-                    self._worker_ready.set()
-                    self._fail_unknown(LeaderBackendError())
-                self._worker = None
+                started = worker.is_alive()
                 self._worker_ready.set()
-            self._release(scoped=True)
-            raise LeaderBackendError()
+                if not started:
+                    self._worker = None
+            lifecycle_failure: LeaderError | None = None
+            try:
+                if started:
+                    self._stop_worker()
+                self._release(scoped=True)
+            except LeaderError as error:
+                lifecycle_failure = error
+            if isinstance(start_failure, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                if lifecycle_failure is not None:
+                    start_failure.add_note("leader lifecycle cleanup failed")
+                raise start_failure
+            if lifecycle_failure is not None:
+                raise lifecycle_failure from None
+            raise LeaderBackendError() from None
         with self._lock:
             self._worker_ready.set()
             terminal = self._state in ("LOST", "RELEASED", "UNKNOWN")
@@ -456,15 +467,7 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
         lock_name: str,
         options: LeaderElectionOptions = LeaderElectionOptions(),  # noqa: B008
     ) -> LockLease[FencedLeaderLease] | None:
-        if options.auto_renew:
-            interval = options.renew_interval
-            assert interval is not None
-            interval_seconds = interval.total_seconds()
-            if not (
-                self._timing.renew < interval_seconds
-                and self._timing.renew + interval_seconds < options.lease_time.total_seconds()
-            ):
-                raise InvalidLeaderOptionsError()
+        options = _validated_redis_options(options, self._timing)
         keys = _redis_keys(lock_name, self._prefix)
         owner_token = self._token_factory()
         ttl_ms = _duration_milliseconds(options.lease_time)

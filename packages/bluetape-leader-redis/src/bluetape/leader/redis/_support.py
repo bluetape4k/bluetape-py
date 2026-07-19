@@ -8,12 +8,16 @@ import math
 import os
 import threading
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from secrets import token_urlsafe
 from typing import Any, Never
 
-from bluetape.leader import LeaderBackendError
+from bluetape.leader import (
+    InvalidLeaderOptionsError,
+    LeaderBackendError,
+    LeaderElectionOptions,
+)
 
 import redis
 import redis.asyncio as async_redis
@@ -146,6 +150,29 @@ class _Timing:
     probe: float
     renew: float
     release: float
+
+
+def _validated_redis_options(
+    options: LeaderElectionOptions,
+    timing: _Timing,
+) -> LeaderElectionOptions:
+    if not options.auto_renew:
+        return options
+    interval = options.renew_interval
+    assert interval is not None
+    if interval == options.lease_time / 3:
+        try:
+            interval = timedelta(milliseconds=_duration_milliseconds(interval))
+        except ValueError:
+            raise InvalidLeaderOptionsError() from None
+        options = replace(options, renew_interval=interval)
+    interval_seconds = interval.total_seconds()
+    if not (
+        timing.renew < interval_seconds
+        and timing.renew + interval_seconds < options.lease_time.total_seconds()
+    ):
+        raise InvalidLeaderOptionsError()
+    return options
 
 
 def _validated_sync_client(client: redis.Redis) -> _Timing:
