@@ -69,6 +69,22 @@ Redis fence counter만 backup해도 downstream high-watermark보다 작게 복�
 복구할 수 없다. Downstream이 이해하는 새 epoch와 compound ordering으로 migration하거나
 writer를 영구 중지해야 한다.
 
+### Fence counter의 TTL 자체를 corruption으로 취급한다
+
+Redis `INCR`는 기존 key의 TTL을 제거하지 않는다. 따라서 외부 운영 도구나 잘못된 복구
+절차가 fence counter에 TTL을 붙이면 acquire가 더 큰 token을 한 번 발급한 뒤 counter가
+만료되고, 다음 acquire가 1부터 다시 시작할 수 있다. 값의 형식과 상한만 검사해서는
+fencing 불변조건을 지킬 수 없다. 기존 counter는 Lua acquire 안에서 `PTTL == -1`까지
+원자적으로 확인하고, TTL이 있거나 상태가 불명확하면 lease를 만들지 않고 fail-closed해야
+한다. Sync와 async adapter 모두 실제 Redis로 counter와 lease가 변경되지 않음을 증명한다.
+
+### TLS 미지원은 배포 보안 조건이다
+
+TLS를 거부하는 exact-client 정책은 단순한 호환성 제한이 아니다. TCP를 사용하면 Redis
+자격 증명, owner token, capability 역할을 하는 lock material이 암호화되지 않는다. 공개
+constructor 안내와 deployment checklist는 TCP를 호출자가 통제하는 보호 네트워크로
+제한하고 가능한 경우 로컬 Unix socket을 우선하도록 같은 문구로 고정해야 한다.
+
 ### Manual lifecycle 예제도 failure precedence를 실행해야 한다
 
 `renew()` 실패에서 `return False`를 쓰고 `finally: release()`를 두면 terminal/unknown

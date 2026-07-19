@@ -46,3 +46,18 @@ pre-evidence ledger and does not pre-claim the immutable-head verifier verdict.
 All review-discovered P0/P1 findings are closed before the evidence commit.
 Fresh canonical commands and an independent verifier must still run at the
 unchanged evidence head.
+
+## Post-PR correction loop (PR #83)
+
+Hosted CI and a fresh security lens challenged the pre-PR evidence after the
+pull request was created. These findings belong to the later exact-head gate;
+they do not rewrite the historical review range above.
+
+| Priority | Lens | Finding | Repair | Status |
+|---|---|---|---|---|
+| P1 | Performance/stability | On Linux async TCP, a 10 ms timeout could expire during the final handshake response before the intended primitive `PING` was emitted; a post-timeout observation wait could not repair that ordering | Separate handshake-stage stalls from the primitive-response case, pre-establish the exact connection with a bounded 500 ms setup timeout, restore the validated 10 ms response timeout, then issue and observe the primitive before teardown | Local timing matrix `206 passed`; hosted CI rerun pending |
+| P0 | Security | An externally expiring fence counter retained its TTL across `INCR`, then disappeared and allowed a lower fencing token to be reissued | Require an existing fence key to have `PTTL == -1` before incrementing; otherwise return `CORRUPT` without creating a lease | Lua RED/GREEN plus sync/async real Redis regressions passed; exact-head review pending |
+| P1 | Security/operator | TLS rejection was documented as a compatibility boundary but the public constructor and deployment guidance did not state the confidentiality consequence of plaintext TCP | Require caller-controlled protected networking for TCP, prefer a local Unix socket, and warn that credentials, owner tokens and capability-bearing lock material are visible to network observers | Bilingual README regression `5 passed`; exact-head review pending |
+
+The correction loop remains open until the new exact head passes hosted CI and
+all six post-PR review lenses with P0=0/P1=0.
