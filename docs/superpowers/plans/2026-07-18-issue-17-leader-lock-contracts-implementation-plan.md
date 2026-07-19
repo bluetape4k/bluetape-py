@@ -253,12 +253,12 @@ the borrowed client.
 - Create `packages/bluetape-leader/src/bluetape/leader/_errors.py`
 - Create `packages/bluetape-leader/src/bluetape/leader/__init__.py`
 - Create `packages/bluetape-leader/tests/test_errors.py`
-- Create `packages/bluetape-leader/tests/test_packaging.py`
+- Create `packages/bluetape-leader/tests/test_leader_packaging.py`
 - Create `packages/bluetape-leader-redis/pyproject.toml`
 - Create `packages/bluetape-leader-redis/README.md`
 - Create `packages/bluetape-leader-redis/README.ko.md`
 - Create `packages/bluetape-leader-redis/src/bluetape/leader/redis/__init__.py`
-- Create `packages/bluetape-leader-redis/tests/test_packaging.py`
+- Create `packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py`
 - Modify root `pyproject.toml`
 - Modify `packages/bluetape/pyproject.toml`
 - Modify `packages/bluetape-benchmark/tests/test_benchmark_packaging.py`
@@ -321,7 +321,7 @@ def test_meta_defaults_remain_core_only(meta_pyproject: dict[str, object]) -> No
 - [ ] **Step 2: Run RED and confirm missing distributions/errors.**
 
 ```bash
-uv run pytest packages/bluetape-leader/tests/test_errors.py packages/bluetape-leader/tests/test_packaging.py packages/bluetape-leader-redis/tests/test_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
+uv run pytest packages/bluetape-leader/tests/test_errors.py packages/bluetape-leader/tests/test_leader_packaging.py packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
 ```
 
 Expected: FAIL because the package directories, error symbols, workspace
@@ -362,7 +362,7 @@ sources are complete.
 ```bash
 uv lock
 uv sync --all-packages --all-extras --all-groups --python 3.13.14 --locked
-uv run pytest packages/bluetape-leader/tests/test_errors.py packages/bluetape-leader/tests/test_packaging.py packages/bluetape-leader-redis/tests/test_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
+uv run pytest packages/bluetape-leader/tests/test_errors.py packages/bluetape-leader/tests/test_leader_packaging.py packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py packages/bluetape-benchmark/tests/test_benchmark_packaging.py -v
 uv run ruff check packages/bluetape-leader packages/bluetape-leader-redis
 ```
 
@@ -492,9 +492,9 @@ git commit -m "Separate leader identity from fencing capability" \
 - Create `packages/bluetape-leader/src/bluetape/leader/_results.py`
 - Create `packages/bluetape-leader/src/bluetape/leader/_contracts.py`
 - Create `packages/bluetape-leader/tests/test_results.py`
-- Create `packages/bluetape-leader/tests/test_contracts.py`
+- Create `packages/bluetape-leader/tests/test_leader_contracts.py`
 - Modify `packages/bluetape-leader/src/bluetape/leader/__init__.py`
-- Modify `packages/bluetape-leader/tests/test_packaging.py`
+- Modify `packages/bluetape-leader/tests/test_leader_packaging.py`
 
 - [ ] **Step 1: Write RED result/protocol tests.** Cover `Elected(None)` versus
   singleton-like `Skipped`, sanitized renewal failure typing, generic
@@ -520,7 +520,7 @@ def test_renew_backend_failure_accepts_only_sanitized_error() -> None:
 - [ ] **Step 2: Run RED for missing results/contracts.**
 
 ```bash
-uv run pytest packages/bluetape-leader/tests/test_results.py packages/bluetape-leader/tests/test_contracts.py packages/bluetape-leader/tests/test_packaging.py -v
+uv run pytest packages/bluetape-leader/tests/test_results.py packages/bluetape-leader/tests/test_leader_contracts.py packages/bluetape-leader/tests/test_leader_packaging.py -v
 ```
 
 Expected: FAIL because results, aliases, protocols, and final exports are absent.
@@ -1254,7 +1254,7 @@ git commit -m "Await every asyncio lease task before leaving its scope" \
 - Create `packages/bluetape-leader-redis/tests/test_sync_elector_unit.py`
 - Create `packages/bluetape-leader-redis/tests/test_async_elector_unit.py`
 - Modify `packages/bluetape-leader-redis/src/bluetape/leader/redis/__init__.py`
-- Modify `packages/bluetape-leader-redis/tests/test_packaging.py`
+- Modify `packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py`
 
 - [ ] **Step 1: Write RED result matrix tests.** Cover contention without action,
   `None` action result, ordinary action exception, process-control propagation,
@@ -1287,7 +1287,7 @@ def test_action_and_release_uncertainty_raise_composite() -> None:
 - [ ] **Step 3: Run RED for missing electors.**
 
 ```bash
-uv run pytest packages/bluetape-leader-redis/tests/test_sync_elector_unit.py packages/bluetape-leader-redis/tests/test_async_elector_unit.py packages/bluetape-leader-redis/tests/test_packaging.py -v
+uv run pytest packages/bluetape-leader-redis/tests/test_sync_elector_unit.py packages/bluetape-leader-redis/tests/test_async_elector_unit.py packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py -v
 ```
 
 Expected: FAIL on missing elector implementations and exports.
@@ -1335,7 +1335,7 @@ implementation returns from inside its lock context.
 - [ ] **Step 5: Run GREEN, exact exports, and commit.**
 
 ```bash
-uv run pytest packages/bluetape-leader-redis/tests/test_sync_elector_unit.py packages/bluetape-leader-redis/tests/test_async_elector_unit.py packages/bluetape-leader-redis/tests/test_packaging.py -v
+uv run pytest packages/bluetape-leader-redis/tests/test_sync_elector_unit.py packages/bluetape-leader-redis/tests/test_async_elector_unit.py packages/bluetape-leader-redis/tests/test_leader_redis_packaging.py -v
 uv run python -c 'import bluetape.leader.redis as m; assert len(m.__all__) == 4'
 uv run ruff check packages/bluetape-leader-redis
 git add packages/bluetape-leader-redis
@@ -1560,8 +1560,8 @@ git commit -m "Prove Redis lease safety under real contention" \
 
 **Files:**
 
-- Create `packages/bluetape-leader/tests/test_readme_examples.py`
-- Create `packages/bluetape-leader-redis/tests/test_readme_examples.py`
+- Create `packages/bluetape-leader/tests/test_leader_readme_examples.py`
+- Create `packages/bluetape-leader-redis/tests/test_leader_redis_readme_examples.py`
 - Create `packages/bluetape/tests/test_leader_wheel_isolation.py`
 - Create `packages/bluetape/tests/test_leader_readmes.py`
 - Modify both leader package README pairs
@@ -1603,7 +1603,7 @@ def test_leader_core_wheel_imports_without_redis(tmp_path: Path) -> None:
 
 ```bash
 uv build --all-packages
-uv run pytest packages/bluetape-leader/tests/test_readme_examples.py packages/bluetape-leader-redis/tests/test_readme_examples.py packages/bluetape/tests/test_leader_wheel_isolation.py packages/bluetape/tests/test_leader_readmes.py -v
+uv run pytest packages/bluetape-leader/tests/test_leader_readme_examples.py packages/bluetape-leader-redis/tests/test_leader_redis_readme_examples.py packages/bluetape/tests/test_leader_wheel_isolation.py packages/bluetape/tests/test_leader_readmes.py -v
 ```
 
 Expected: FAIL on incomplete README examples, meta metadata, or isolation probes.

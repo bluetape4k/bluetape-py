@@ -9,7 +9,6 @@ from datetime import timedelta
 
 import pytest
 import redis
-from _support import safe_async_client, safe_sync_client
 from bluetape.leader import LeaderBackendError, LeaderExecutionError, RenewBackendFailure
 from bluetape.leader.redis._support import (
     _duration_milliseconds,
@@ -21,6 +20,7 @@ from bluetape.leader.redis._support import (
     _validated_async_client,
     _validated_sync_client,
 )
+from leader_redis_test_support import safe_async_client, safe_sync_client
 
 
 def test_rejected_client_has_no_io(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -691,7 +691,7 @@ def test_rejected_client_has_no_io_for_callback_and_command_response_hook(
         callback_calls.append("called")
         raise AssertionError("callback executed")
 
-    from _support import HostileCallback
+    from leader_redis_test_support import HostileCallback
 
     client = client_factory(credential_provider=HostileCallback(callback))  # type: ignore[operator]
     validator = _validated_sync_client if type(client) is redis.Redis else _validated_async_client

@@ -13,7 +13,18 @@ from typing import Literal
 
 import pytest
 import redis
-from _support import (
+from bluetape.leader import (
+    ActionFailed,
+    Elected,
+    LeaderBackendError,
+    LeaderElectionOptions,
+    LeaderLeaseLostError,
+    LeaderReleaseError,
+    NotHeld,
+    Renewed,
+)
+from bluetape.leader.redis import RedisDistributedLock, RedisLeaderElector
+from leader_redis_test_support import (
     TESTCONTAINERS_MARK,
     RedisEndpoint,
     assert_database_clean,
@@ -26,17 +37,6 @@ from _support import (
     redis_endpoint,
     unique_logical_name,
 )
-from bluetape.leader import (
-    ActionFailed,
-    Elected,
-    LeaderBackendError,
-    LeaderElectionOptions,
-    LeaderLeaseLostError,
-    LeaderReleaseError,
-    NotHeld,
-    Renewed,
-)
-from bluetape.leader.redis import RedisDistributedLock, RedisLeaderElector
 
 pytestmark = TESTCONTAINERS_MARK
 

@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import BinaryIO
 
 import pytest
-from _support import safe_async_client, safe_sync_client
 from bluetape.leader.redis._support import (
     _handshake_commands,
     _Timing,
     _validated_async_client,
     _validated_sync_client,
 )
+from leader_redis_test_support import safe_async_client, safe_sync_client
 from redis import connection as sync_connection
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
