@@ -2,7 +2,7 @@
 
 Date: 2026-07-19 KST
 Reviewed implementation range:
-`48b1dbc291a3a00606654f3c1c46bffbeed1361e..f93e4e057cac6cd0994f6a2a6b3438921a515e4d`
+`48b1dbc291a3a00606654f3c1c46bffbeed1361e..2f6cf37657ea86ee148e87ac023d91eb9a7e51e4`
 
 ## Method and boundary
 
@@ -17,20 +17,20 @@ pre-evidence ledger and does not pre-claim the immutable-head verifier verdict.
 
 | Priority | Lens | Finding | Repair | Status |
 |---|---|---|---|---|
-| P0 | Stability | A process-control exception raised after the real sync renewal thread started could leave a non-daemon worker and lease behind | Stop and join the published worker, perform owner-checked release, then rethrow the identical control object | Closed in `fd149bd` |
-| P1 | Performance/stability | Async acquisition lacked the sync pre-I/O auto-renew timing proof | Share one strict sync/async option normalization and timing gate | Closed in `fd149bd` |
-| P2 | Performance | Async contention lacked a direct bounded nonzero retry-count proof | Add exact dispatch/sleep-count regression | Closed in `f1d8fa0`; GREEN at `fd149bd` |
-| P3 | Performance | Derived renewal interval retained sub-millisecond precision not representable by Redis | Copy and floor the derived interval to whole Redis milliseconds | Closed in `fd149bd` |
-| P1 | Security | Timing validation compared renewal completion with the longer Python lease instead of the effective Redis TTL | Convert lease to the exact encoded millisecond TTL before comparison; add sync/async boundary regressions | Closed in `16d84ea` |
-| P2 | Security/operator | ACL integration always granted `CLIENT SETINFO`, wider than the documented minimum | Remove the unconditional grant and rerun all 48 ACL shapes | Closed in `2165c77` |
-| P1 | Developer/API | `LeaderExecutionError` accepted an arbitrary raw lifecycle exception despite the sanitized `LeaderError` contract | Runtime-validate both ordinary action and sanitized lifecycle cause types | Closed in `f31684a` |
-| P1 | Developer/API | Manual README renewal failure returned `False`, but `finally: release()` replaced it with a different lifecycle exception | Raise the sanitized terminal renewal failure before entering the action/release block and execute both failure paths in README tests | Closed in `f31684a` |
-| P2 | Operator | Migration did not explain the signed counter ceiling or impossible strictly-above restore | Document fail-closed exhaustion and downstream-recognized compound epoch/token migration | Closed in `4452a15` |
-| P3 | Operator | Server compatibility named redis-py but not the proven Redis Server major | Pin the tested support target to Redis Server 8 and add a deployment qualification gate | Closed in `4452a15` |
-| P1 | User/caller | Both lock constructors allowed positional `prefix`, unlike the approved contract and keyword-only electors | Make sync/async lock `prefix` keyword-only and pin exact signatures | Closed in `f93e4e0` |
-| P2 | User/caller | The async README returned a borrowed client from a temporary `asyncio.run()` loop and did not close it | Keep construction, operation and `aclose()` in one caller-owned async scope | Closed in `f93e4e0` |
-| P2 | User/caller | Composite action+lifecycle failure handling was public but undocumented | Explain `action_cause`, sanitized `lifecycle_cause`, propagation and safe classification | Closed in `f93e4e0` |
-| P3 | User/caller | No complete sync/async Redis elector outcome example existed | Add one identical bilingual example covering both electors and all precise outcomes | Closed in `f93e4e0` |
+| P0 | Stability | A process-control exception raised after the real sync renewal thread started could leave a non-daemon worker and lease behind | Stop and join the published worker, perform owner-checked release, then rethrow the identical control object | Closed in `077f083` |
+| P1 | Performance/stability | Async acquisition lacked the sync pre-I/O auto-renew timing proof | Share one strict sync/async option normalization and timing gate | Closed in `077f083` |
+| P2 | Performance | Async contention lacked a direct bounded nonzero retry-count proof | Add exact dispatch/sleep-count regression | Closed in `9bd104c`; GREEN at `077f083` |
+| P3 | Performance | Derived renewal interval retained sub-millisecond precision not representable by Redis | Copy and floor the derived interval to whole Redis milliseconds | Closed in `077f083` |
+| P1 | Security | Timing validation compared renewal completion with the longer Python lease instead of the effective Redis TTL | Convert lease to the exact encoded millisecond TTL before comparison; add sync/async boundary regressions | Closed in `8c9fc98` |
+| P2 | Security/operator | ACL integration always granted `CLIENT SETINFO`, wider than the documented minimum | Remove the unconditional grant and rerun all 48 ACL shapes | Closed in `91e8ee4` |
+| P1 | Developer/API | `LeaderExecutionError` accepted an arbitrary raw lifecycle exception despite the sanitized `LeaderError` contract | Runtime-validate both ordinary action and sanitized lifecycle cause types | Closed in `8167fa9` |
+| P1 | Developer/API | Manual README renewal failure returned `False`, but `finally: release()` replaced it with a different lifecycle exception | Raise the sanitized terminal renewal failure before entering the action/release block and execute both failure paths in README tests | Closed in `8167fa9` |
+| P2 | Operator | Migration did not explain the signed counter ceiling or impossible strictly-above restore | Document fail-closed exhaustion and downstream-recognized compound epoch/token migration | Closed in `1451f7f` |
+| P3 | Operator | Server compatibility named redis-py but not the proven Redis Server major | Pin the tested support target to Redis Server 8 and add a deployment qualification gate | Closed in `1451f7f` |
+| P1 | User/caller | Both lock constructors allowed positional `prefix`, unlike the approved contract and keyword-only electors | Make sync/async lock `prefix` keyword-only and pin exact signatures | Closed in `2f6cf37` |
+| P2 | User/caller | The async README returned a borrowed client from a temporary `asyncio.run()` loop and did not close it | Keep construction, operation and `aclose()` in one caller-owned async scope | Closed in `2f6cf37` |
+| P2 | User/caller | Composite action+lifecycle failure handling was public but undocumented | Explain `action_cause`, sanitized `lifecycle_cause`, propagation and safe classification | Closed in `2f6cf37` |
+| P3 | User/caller | No complete sync/async Redis elector outcome example existed | Add one identical bilingual example covering both electors and all precise outcomes | Closed in `2f6cf37` |
 
 ## Six-lens convergence
 
