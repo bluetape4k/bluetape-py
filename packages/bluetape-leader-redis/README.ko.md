@@ -120,11 +120,11 @@ from bluetape.leader import ActionFailed, Elected, Skipped
 from bluetape.leader.redis import AsyncRedisLeaderElector, RedisLeaderElector
 
 
-def sync_action():
+def sync_action(_lease):
     return "completed"
 
 
-async def async_action():
+async def async_action(_lease):
     return "completed"
 
 
@@ -277,6 +277,10 @@ caller-owned evidence를 확인해야 합니다.
 
 | 의심 상황 | Caller-owned evidence | 안전한 조치 |
 |---|---|---|
+| Contention | `try_acquire()`가 `None`을 반환하거나 elector가 `Skipped`를 반환 | Protected work를 시작하지 않고 종료하거나 caller-owned bounded retry policy만 사용 |
+| Lease loss | `NotHeld` 또는 `LeaderLeaseLostError` | Protected work를 즉시 중지하고 downstream fencing이 stale write를 거부하게 한 뒤 새 handle로 reacquire |
+| Renewal failure | `RenewBackendFailure` 또는 auto-renew lease-loss evidence | 소유권이 증명되지 않은 것으로 취급하고 다음 safe checkpoint에서 중지하며 local time으로 작업을 연장하지 않음 |
+| Release failure | `LeaderReleaseError` 또는 `LeaderExecutionError`의 lifecycle cause | Terminal lease state가 증명될 때까지 handle 재사용과 새 protected work를 차단하고 lease를 임의 삭제하지 않음 |
 | Connection 또는 pool timeout | Redis health, pool saturation, 설정한 finite timeout | 소유권이 불확실하면 protected work를 중지하고 capacity 또는 연결 문제를 해결 |
 | Permission denial | ACL audit와 denied-command evidence | 정확한 ACL command/key allowlist를 비교하고 관련 없는 key 권한은 열지 않음 |
 | Protocol failure | redis-py/RESP configuration과 server log | 정확한 supported client shape를 복구하고 retry나 hook을 켜지 않음 |

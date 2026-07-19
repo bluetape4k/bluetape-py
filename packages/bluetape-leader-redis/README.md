@@ -122,11 +122,11 @@ from bluetape.leader import ActionFailed, Elected, Skipped
 from bluetape.leader.redis import AsyncRedisLeaderElector, RedisLeaderElector
 
 
-def sync_action():
+def sync_action(_lease):
     return "completed"
 
 
-async def async_action():
+async def async_action(_lease):
     return "completed"
 
 
@@ -280,6 +280,10 @@ guessing from the exception.
 
 | Suspected condition | Caller-owned evidence | Safe action |
 |---|---|---|
+| Contention | `try_acquire()` returns `None` or the elector returns `Skipped` | Do not start protected work; exit or use only a caller-owned bounded retry policy |
+| Lease loss | `NotHeld` or `LeaderLeaseLostError` | Stop protected work immediately, let downstream fencing reject stale writes, and reacquire with a new handle |
+| Renewal failure | `RenewBackendFailure` or auto-renew lease-loss evidence | Treat ownership as unproven; stop at the next safe checkpoint and do not extend work from local time |
+| Release failure | `LeaderReleaseError` or the lifecycle cause in `LeaderExecutionError` | Block handle reuse and new protected work until terminal lease state is proven; never blindly delete the lease |
 | Connection or pool timeout | Redis health, pool saturation, configured finite timeouts | Stop protected work if ownership is uncertain; repair capacity or reachability |
 | Permission denial | ACL audit and denied-command evidence | Compare the exact ACL command/key allowlist; never broaden to unrelated keys |
 | Protocol failure | redis-py/RESP configuration and server logs | Restore the exact supported client shape; do not enable retries or hooks |
