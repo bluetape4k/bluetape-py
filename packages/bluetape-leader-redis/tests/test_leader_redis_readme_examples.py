@@ -1,11 +1,73 @@
 from __future__ import annotations
 
+import asyncio
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import TracebackType
+from typing import Any
+
+from bluetape.leader import FencedLeaderLease, LeaderElectionOptions
 
 ROOT = Path(__file__).parents[3]
 ENGLISH = ROOT / "packages/bluetape-leader-redis/README.md"
 KOREAN = ROOT / "packages/bluetape-leader-redis/README.ko.md"
+
+
+class _ExampleHandle:
+    def __init__(self) -> None:
+        now = datetime.now(UTC)
+        self._lease = FencedLeaderLease("7", None, now, now + timedelta(seconds=1), 7)
+        self._entered = False
+
+    @property
+    def lease(self) -> FencedLeaderLease:
+        assert self._entered
+        return self._lease
+
+    def __enter__(self) -> _ExampleHandle:
+        self._entered = True
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        del exc_type, exc, traceback
+
+    async def __aenter__(self) -> _ExampleHandle:
+        self._entered = True
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        del exc_type, exc, traceback
+
+
+class _ExampleSyncLock:
+    def try_acquire(
+        self,
+        lock_name: str,
+        options: LeaderElectionOptions,
+    ) -> _ExampleHandle:
+        del lock_name, options
+        return _ExampleHandle()
+
+
+class _ExampleAsyncLock:
+    async def try_acquire(
+        self,
+        lock_name: str,
+        options: LeaderElectionOptions,
+    ) -> _ExampleHandle:
+        del lock_name, options
+        return _ExampleHandle()
 
 
 def snippet(text: str, name: str) -> str:
@@ -56,7 +118,27 @@ def test_bilingual_elector_example_is_identical_and_complete() -> None:
     assert "Elected" in english
     assert "Skipped" in english
     assert "ActionFailed" in english
-    compile(english, "<elector-example>", "exec")
+    namespace: dict[str, Any] = {}
+    exec(english, namespace)
+    sync_elector_type = namespace["RedisLeaderElector"]
+    async_elector_type = namespace["AsyncRedisLeaderElector"]
+
+    def sync_elector(_client: object) -> Any:
+        elector = object.__new__(sync_elector_type)
+        elector._lock = _ExampleSyncLock()
+        return elector
+
+    def async_elector(_client: object) -> Any:
+        elector = object.__new__(async_elector_type)
+        elector._lock = _ExampleAsyncLock()
+        return elector
+
+    namespace["RedisLeaderElector"] = sync_elector
+    namespace["AsyncRedisLeaderElector"] = async_elector
+    options = LeaderElectionOptions()
+
+    assert namespace["run_sync"](object(), options) == "completed"
+    assert asyncio.run(namespace["run_async"](object(), options)) == "completed"
 
 
 def test_adapter_readmes_pin_supported_client_and_operator_boundaries() -> None:
@@ -142,3 +224,22 @@ def test_bilingual_readmes_preserve_fence_history_restore_contract() -> None:
         text = " ".join(path.read_text().split())
         for value in required:
             assert value in text, f"{value!r} missing from {path}"
+
+
+def test_bilingual_operator_tables_cover_each_lifecycle_condition() -> None:
+    required = (
+        "Contention",
+        "Lease loss",
+        "Renewal failure",
+        "Release failure",
+        "Connection",
+        "Permission denial",
+    )
+    for path in (ENGLISH, KOREAN):
+        table = (
+            path.read_text()
+            .split("<!-- leader-scenario:operator-actions -->", 1)[1]
+            .split("<!-- leader-scenario:deployment-checklist -->", 1)[0]
+        )
+        for value in required:
+            assert f"| {value}" in table, f"{value!r} row missing from {path}"
