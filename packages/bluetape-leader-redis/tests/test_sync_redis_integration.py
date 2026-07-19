@@ -43,7 +43,8 @@ pytestmark = TESTCONTAINERS_MARK
 _SHORT_LEASE = 0.20
 _POLL_INTERVAL = 0.01
 _ACL_SHAPES = [
-    (protocol, client_name, database)
+    (auth, protocol, client_name, database)
+    for auth in ("none", "password", "username-password")
     for protocol in (2, 3)
     for client_name in (None, "leader-test")
     for database in (0, 1)
@@ -99,6 +100,12 @@ def _wait_until_absent(client: redis.Redis, key: bytes, timeout: float = 1.0) ->
 
 def _renew_worker_count() -> int:
     return sum(thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate())
+
+
+def _command_calls(commandstats: dict[str, object], command: str) -> int:
+    details = commandstats.get(f"cmdstat_{command}", {})
+    assert isinstance(details, dict)
+    return int(details.get("calls", 0))
 
 
 def _sync_lifecycle_child(
@@ -203,6 +210,10 @@ def test_spawned_sync_lifecycle_crosses_three_ttls_without_leaks(
         if process.is_alive():
             process.terminate()
             process.join(1.0)
+            if process.is_alive():
+                process.kill()
+                process.join(1.0)
+            assert not process.is_alive()
             pytest.fail("sync lifecycle deadline exceeded", pytrace=False)
         assert process.exitcode == 0
         record = terminal.get(timeout=0.5)
@@ -271,14 +282,20 @@ def test_expired_owner_cannot_change_successor_record_or_ttl(
         record_before = client.get(lease_key)
         ttl_before = client.pttl(lease_key)
         assert record_before is not None and ttl_before > 0
+        commands_before = client.info("commandstats")
         assert isinstance(old.renew(), NotHeld)
         with pytest.raises(LeaderReleaseError):
             old.release()
+        commands_after = client.info("commandstats")
         record_after = client.get(lease_key)
         ttl_after = client.pttl(lease_key)
 
         assert record_after == record_before
         assert 0 < ttl_after <= ttl_before
+        assert _command_calls(commands_after, "pexpire") == _command_calls(
+            commands_before, "pexpire"
+        )
+        assert _command_calls(commands_after, "del") == _command_calls(commands_before, "del")
         successor.release()
 
 
@@ -415,16 +432,20 @@ def test_fence_counter_is_exact_above_2_to_53_and_overflow_fails_closed(
         assert admin.get(overflow_fence) == b"9223372036854775807"
 
 
-@pytest.mark.parametrize("protocol,client_name,database", _ACL_SHAPES)
+@pytest.mark.parametrize("auth,protocol,client_name,database", _ACL_SHAPES)
 def test_acl_matrix_grants_only_shape_specific_adapter_commands(
     redis_endpoint: RedisEndpoint,
     clean_redis_database: None,
+    auth: str,
     protocol: int,
     client_name: str | None,
     database: int,
 ) -> None:
     del clean_redis_database
-    username = f"leader-acl-{os.getpid()}-{protocol}-{int(client_name is not None)}-{database}"
+    shape_id = f"{os.getpid()}-{auth}-{protocol}-{int(client_name is not None)}-{database}"
+    admin_username = f"leader-admin-{shape_id}"
+    admin_password = "leader-admin-fixed-password"
+    target_username = "default" if auth != "username-password" else f"leader-acl-{shape_id}"
     password = "leader-acl-fixed-password"
     prefix = "leader-acl"
     conditional_permissions = []
@@ -434,14 +455,36 @@ def test_acl_matrix_grants_only_shape_specific_adapter_commands(
         conditional_permissions.append("+client|setname")
     if database != 0:
         conditional_permissions.append("+select")
-    with borrowed_sync_client(redis_endpoint) as admin:
+
+    with borrowed_sync_client(redis_endpoint) as bootstrap:
+        bootstrap.execute_command(
+            "ACL",
+            "SETUSER",
+            admin_username,
+            "reset",
+            "on",
+            f">{admin_password}",
+            "~*",
+            "+@all",
+        )
+    admin = new_sync_client(
+        redis_endpoint,
+        username=admin_username,
+        password=admin_password,
+        protocol=2,
+    )
+    restricted: redis.Redis | None = None
+    logical_name = unique_logical_name("acl-default")
+    keys = leader_keys(logical_name, prefix)
+    try:
+        credential_rule = "nopass" if auth == "none" else f">{password}"
         admin.execute_command(
             "ACL",
             "SETUSER",
-            username,
+            target_username,
             "reset",
             "on",
-            f">{password}",
+            credential_rule,
             f"~{prefix}:*",
             "+evalsha",
             "+eval",
@@ -455,34 +498,59 @@ def test_acl_matrix_grants_only_shape_specific_adapter_commands(
             "+client|setinfo",
             *conditional_permissions,
         )
+        authentication: dict[str, object] = {}
+        if auth == "password":
+            authentication["password"] = password
+        elif auth == "username-password":
+            authentication.update(username=target_username, password=password)
         restricted = new_sync_client(
             redis_endpoint,
-            username=username,
-            password=password,
+            **authentication,
             protocol=protocol,
             client_name=client_name,
             db=database,
         )
-        logical_name = unique_logical_name("acl-default")
-        keys = leader_keys(logical_name, prefix)
-        try:
-            handle = RedisDistributedLock(restricted, prefix=prefix).try_acquire(
-                logical_name, _options()
-            )
-            assert handle is not None
-            assert isinstance(handle.renew(), Renewed)
-            handle.release()
+        handle = RedisDistributedLock(restricted, prefix=prefix).try_acquire(
+            logical_name, _options()
+        )
+        assert handle is not None
+        assert isinstance(handle.renew(), Renewed)
+        handle.release()
 
-            with pytest.raises(redis.exceptions.NoPermissionError):
-                restricted.script_load("return 1")
-            with pytest.raises(redis.exceptions.NoPermissionError):
-                restricted.ping()
-            with pytest.raises(redis.exceptions.NoPermissionError):
-                restricted.get(b"outside-prefix")
-            clean_sync_keys(restricted, keys)
+        with pytest.raises(redis.exceptions.NoPermissionError):
+            restricted.script_load("return 1")
+        with pytest.raises(redis.exceptions.NoPermissionError):
+            restricted.ping()
+        with pytest.raises(redis.exceptions.NoPermissionError):
+            restricted.get(b"outside-prefix")
+    finally:
+        try:
+            if restricted is not None:
+                restricted.close()
+            cleanup = new_sync_client(
+                redis_endpoint,
+                username=admin_username,
+                password=admin_password,
+                protocol=2,
+                db=database,
+            )
+            try:
+                clean_sync_keys(cleanup, keys)
+            finally:
+                cleanup.close()
         finally:
-            restricted.close()
-            admin.execute_command("ACL", "DELUSER", username)
+            try:
+                if auth == "username-password":
+                    admin.execute_command("ACL", "DELUSER", target_username)
+                else:
+                    admin.execute_command(
+                        "ACL", "SETUSER", "default", "reset", "on", "nopass", "~*", "+@all"
+                    )
+            finally:
+                try:
+                    admin.execute_command("ACL", "DELUSER", admin_username)
+                finally:
+                    admin.close()
 
 
 def test_borrowed_client_remains_usable_after_adapter_lifecycle(
