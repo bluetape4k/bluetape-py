@@ -675,6 +675,15 @@ git commit -m "Make fencing capability explicit across leader contracts" \
 - Create `packages/bluetape-leader-redis/tests/test_scripts_unit.py`
 - Create `packages/bluetape-leader-redis/tests/test_timing_integration.py`
 
+> **Post-PR correction (2026-07-19):** The two-key examples and original Lua
+> sketch below preserve the approved plan's historical TDD sequence; they are
+> not the current implementation contract and must not be copied into code.
+> The final acquisition contract uses same-slot `lease`, `fence`, and persistent
+> `history` keys, validates the marker/counter pair before contention, and
+> requires an active lease's embedded token to equal the counter. The
+> authoritative corrected state machine is in the design specification's
+> **Redis Atomic Operations / Acquire** section.
+
 - [ ] **Step 1: Prepare fixtures and record the validation/key/record/timing
   coverage inventory.** Do not author behavior assertions yet. The inventory
   must cover exact sync

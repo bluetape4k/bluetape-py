@@ -17,7 +17,9 @@ def test_identity_uses_exact_utf8_sha256_and_same_slot_without_raw_name() -> Non
 
     assert keys.lease == f"bluetape-leader:{{{digest}}}:lease"
     assert keys.fence == f"bluetape-leader:{{{digest}}}:fence"
+    assert keys.history == f"bluetape-leader:{{{digest}}}:history"
     assert keys.lease.split("}", 1)[0] == keys.fence.split("}", 1)[0]
+    assert keys.lease.split("}", 1)[0] == keys.history.split("}", 1)[0]
     assert name not in keys.lease
     assert repr(keys) == "_RedisKeys(<redacted>)"
 

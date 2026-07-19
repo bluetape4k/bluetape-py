@@ -119,3 +119,26 @@ def test_bilingual_readmes_warn_about_plaintext_tcp_at_construction_and_deployme
             section = " ".join(section.split())
             for value in required:
                 assert value in section, f"{value!r} missing from {path} section"
+
+
+def test_bilingual_readmes_preserve_fence_history_restore_contract() -> None:
+    expectations = {
+        ENGLISH: (
+            "`lease`/`fence`/`history` suffix set",
+            "persistent `v1` history marker",
+            "counter and history marker together",
+            "marker exists but the counter is missing",
+            "counter exists but the marker is missing",
+        ),
+        KOREAN: (
+            "`lease`/`fence`/`history` suffix set",
+            "persistent `v1` history marker",
+            "Counter와 history marker를 함께",
+            "Marker는 있지만 counter가 없거나",
+            "counter는 있지만 marker가 없으면",
+        ),
+    }
+    for path, required in expectations.items():
+        text = " ".join(path.read_text().split())
+        for value in required:
+            assert value in text, f"{value!r} missing from {path}"

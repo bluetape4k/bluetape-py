@@ -390,7 +390,7 @@ def test_expired_owner_cannot_change_successor_record_or_ttl(
     del clean_redis_database
     with borrowed_sync_client(redis_endpoint) as client:
         logical_name = unique_logical_name("stale-owner")
-        lease_key, _ = leader_keys(logical_name)
+        lease_key, _, _ = leader_keys(logical_name)
         lock = RedisDistributedLock(client)
         old = lock.try_acquire(logical_name, _options(lease=_SHORT_LEASE))
         assert old is not None
@@ -425,7 +425,7 @@ def test_minimum_lease_survives_release_then_expires_naturally(
     del clean_redis_database
     with borrowed_sync_client(redis_endpoint) as client:
         logical_name = unique_logical_name("minimum-lease")
-        lease_key, _ = leader_keys(logical_name)
+        lease_key, _, _ = leader_keys(logical_name)
         lock = RedisDistributedLock(client)
         handle = lock.try_acquire(logical_name, _options(lease=1.0, minimum=0.30))
         assert handle is not None
@@ -446,7 +446,7 @@ def test_action_failure_is_reported_after_real_release(
     del clean_redis_database
     with borrowed_sync_client(redis_endpoint) as client:
         logical_name = unique_logical_name("action-failure")
-        lease_key, _ = leader_keys(logical_name)
+        lease_key, _, _ = leader_keys(logical_name)
         failure = ValueError("caller failure")
         result = RedisLeaderElector(client).run_if_leader_result(
             logical_name,
@@ -466,7 +466,7 @@ def test_delayed_entry_fails_before_running_body(
     del clean_redis_database
     with borrowed_sync_client(redis_endpoint) as client:
         logical_name = unique_logical_name("delayed-entry")
-        lease_key, _ = leader_keys(logical_name)
+        lease_key, _, _ = leader_keys(logical_name)
         handle = RedisDistributedLock(client).try_acquire(
             logical_name, _options(lease=_SHORT_LEASE)
         )
@@ -493,7 +493,7 @@ def test_corrupt_lease_states_fail_closed(
         borrowed_sync_client(redis_endpoint) as client,
     ):
         logical_name = unique_logical_name(f"corrupt-{state}")
-        lease_key, _ = leader_keys(logical_name)
+        lease_key, _, _ = leader_keys(logical_name)
         lock = RedisDistributedLock(client)
         if state == "malformed":
             admin.set(lease_key, b"not-a-lease", px=1000)
@@ -536,7 +536,8 @@ def test_fence_counter_is_exact_above_2_to_53_and_overflow_fails_closed(
     ):
         lock = RedisDistributedLock(client)
         exact_name = unique_logical_name("large-counter")
-        _, exact_fence = leader_keys(exact_name)
+        _, exact_fence, exact_history = leader_keys(exact_name)
+        admin.set(exact_history, b"v1")
         admin.set(exact_fence, b"9007199254740992")
         handle = lock.try_acquire(exact_name, _options())
         assert handle is not None
@@ -544,8 +545,14 @@ def test_fence_counter_is_exact_above_2_to_53_and_overflow_fails_closed(
         handle.release()
 
         overflow_name = unique_logical_name("overflow")
-        _, overflow_fence = leader_keys(overflow_name)
-        admin.set(overflow_fence, b"9223372036854775807")
+        _, overflow_fence, overflow_history = leader_keys(overflow_name)
+        admin.set(overflow_history, b"v1")
+        admin.set(overflow_fence, b"9223372036854775806")
+        maximum = lock.try_acquire(overflow_name, _options())
+        assert maximum is not None
+        assert maximum.lease.fencing_token == 9_223_372_036_854_775_807
+        assert lock.try_acquire(overflow_name, _options()) is None
+        maximum.release()
         with pytest.raises(LeaderBackendError):
             lock.try_acquire(overflow_name, _options())
         assert admin.get(overflow_fence) == b"9223372036854775807"
@@ -561,15 +568,150 @@ def test_expiring_fence_counter_fails_closed_without_issuing_a_lease(
         borrowed_sync_client(redis_endpoint) as client,
     ):
         logical_name = unique_logical_name("expiring-counter")
-        lease_key, fence_key = leader_keys(logical_name)
-        admin.set(fence_key, b"9", px=5_000)
+        lease_key, fence_key, history_key = leader_keys(logical_name)
+        lock = RedisDistributedLock(client)
+        first = lock.try_acquire(logical_name, _options())
+        assert first is not None
+        first.release()
+        assert admin.get(history_key) == b"v1"
+        assert admin.pttl(history_key) == -1
+        assert admin.pexpire(fence_key, 50) is True
 
+        with pytest.raises(LeaderBackendError):
+            lock.try_acquire(logical_name, _options())
+
+        assert admin.pttl(fence_key) > 0
+        _wait_until_absent(admin, fence_key)
+        with pytest.raises(LeaderBackendError):
+            lock.try_acquire(logical_name, _options())
+
+        assert admin.get(fence_key) is None
+        assert admin.get(history_key) == b"v1"
+        assert admin.pttl(history_key) == -1
+        assert admin.get(lease_key) is None
+
+
+@pytest.mark.parametrize("state", ["missing", "wrong-type", "wrong-value", "ttl"])
+def test_corrupt_fence_history_states_fail_closed_without_mutation(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+    state: str,
+) -> None:
+    del clean_redis_database
+    with (
+        borrowed_sync_client(redis_endpoint) as admin,
+        borrowed_sync_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name(f"corrupt-history-{state}")
+        lease_key, fence_key, history_key = leader_keys(logical_name)
+        admin.set(fence_key, b"9")
+        if state == "wrong-type":
+            admin.rpush(history_key, b"v1")
+        elif state == "wrong-value":
+            admin.set(history_key, b"v2")
+        elif state == "ttl":
+            admin.set(history_key, b"v1", px=5_000)
+
+        before_dump = admin.dump(history_key)
+        before_ttl = admin.pttl(history_key)
+        before_fence = admin.get(fence_key)
         with pytest.raises(LeaderBackendError):
             RedisDistributedLock(client).try_acquire(logical_name, _options())
 
-        assert admin.get(fence_key) == b"9"
-        assert admin.pttl(fence_key) > 0
+        after_ttl = admin.pttl(history_key)
+        assert admin.dump(history_key) == before_dump
+        assert admin.get(fence_key) == before_fence
+        if state == "ttl":
+            assert 0 < after_ttl <= before_ttl
+        else:
+            assert after_ttl == before_ttl
         assert admin.get(lease_key) is None
+
+
+@pytest.mark.parametrize("state", ["wrong-type", "malformed"])
+def test_corrupt_fence_counter_states_fail_closed_without_mutation(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+    state: str,
+) -> None:
+    del clean_redis_database
+    with (
+        borrowed_sync_client(redis_endpoint) as admin,
+        borrowed_sync_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name(f"corrupt-counter-{state}")
+        lease_key, fence_key, history_key = leader_keys(logical_name)
+        admin.set(history_key, b"v1")
+        if state == "wrong-type":
+            admin.rpush(fence_key, b"9")
+        else:
+            admin.set(fence_key, b"09")
+
+        before_fence = admin.dump(fence_key)
+        with pytest.raises(LeaderBackendError):
+            RedisDistributedLock(client).try_acquire(logical_name, _options())
+
+        assert admin.dump(fence_key) == before_fence
+        assert admin.get(history_key) == b"v1"
+        assert admin.pttl(history_key) == -1
+        assert admin.get(lease_key) is None
+
+
+def test_active_lease_with_missing_fence_history_fails_closed(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+) -> None:
+    del clean_redis_database
+    with (
+        borrowed_sync_client(redis_endpoint) as admin,
+        borrowed_sync_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name("active-missing-fence-history")
+        lease_key, fence_key, history_key = leader_keys(logical_name)
+        lock = RedisDistributedLock(client)
+        held = lock.try_acquire(logical_name, _options())
+        assert held is not None
+        lease_record = admin.get(lease_key)
+        admin.delete(fence_key, history_key)
+
+        with pytest.raises(LeaderBackendError):
+            lock.try_acquire(logical_name, _options())
+
+        assert admin.get(lease_key) == lease_record
+        assert admin.get(fence_key) is None
+        assert admin.get(history_key) is None
+        held.release()
+
+
+@pytest.mark.parametrize("replacement", [b"9", b"11"])
+def test_active_lease_with_mismatched_fence_counter_fails_closed(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+    replacement: bytes,
+) -> None:
+    del clean_redis_database
+    with (
+        borrowed_sync_client(redis_endpoint) as admin,
+        borrowed_sync_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name(f"active-mismatched-fence-{replacement.decode()}")
+        lease_key, fence_key, history_key = leader_keys(logical_name)
+        admin.set(history_key, b"v1")
+        admin.set(fence_key, b"9")
+        lock = RedisDistributedLock(client)
+        held = lock.try_acquire(logical_name, _options())
+        assert held is not None
+        assert held.lease.fencing_token == 10
+        lease_record = admin.get(lease_key)
+        admin.set(fence_key, replacement)
+
+        with pytest.raises(LeaderBackendError):
+            lock.try_acquire(logical_name, _options())
+
+        assert admin.get(lease_key) == lease_record
+        assert admin.get(fence_key) == replacement
+        assert admin.get(history_key) == b"v1"
+        held.release()
 
 
 @pytest.mark.parametrize("auth,protocol,client_name,database", _ACL_SHAPES)

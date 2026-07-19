@@ -494,24 +494,32 @@ def _exercise_stalled_primitive(
 ) -> tuple[_Timing, float]:
     if client_family == "sync":
         client = safe_sync_client(socket_connect_timeout=0.01, socket_timeout=0.01, **options)
-        timing = _validated_sync_client(client)
         pool = client.connection_pool
-        pool.connection_kwargs["socket_timeout"] = 0.5
+        connection = None
         try:
-            connection = pool.get_connection()
+            timing = _validated_sync_client(client)
+            pool.connection_kwargs["socket_timeout"] = 0.5
+            try:
+                connection = pool.get_connection()
+            finally:
+                pool.connection_kwargs["socket_timeout"] = 0.01
+            connection.socket_timeout = 0.01
+            assert connection._sock is not None
+            connection._sock.settimeout(0.01)
+            connection._parser._buffer.socket_timeout = 0.01
+            pool.release(connection)
+            connection = None
+            started = time.monotonic()
+            with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+                client.ping()
+            elapsed = time.monotonic() - started
+            return timing, elapsed
         finally:
-            pool.connection_kwargs["socket_timeout"] = 0.01
-        connection.socket_timeout = 0.01
-        assert connection._sock is not None
-        connection._sock.settimeout(0.01)
-        connection._parser._buffer.socket_timeout = 0.01
-        pool.release(connection)
-        started = time.monotonic()
-        with pytest.raises((RedisTimeoutError, RedisConnectionError)):
-            client.ping()
-        elapsed = time.monotonic() - started
-        pool.disconnect()
-        return timing, elapsed
+            try:
+                if connection is not None:
+                    pool.release(connection)
+            finally:
+                pool.disconnect()
     return asyncio.run(_stalled_async_primitive(options))
 
 
@@ -519,21 +527,29 @@ async def _stalled_async_primitive(
     options: dict[str, object],
 ) -> tuple[_Timing, float]:
     client = safe_async_client(socket_connect_timeout=0.01, socket_timeout=0.01, **options)
-    timing = _validated_async_client(client)
     pool = client.connection_pool
-    pool.connection_kwargs["socket_timeout"] = 0.5
+    connection = None
     try:
-        connection = await pool.get_connection()
+        timing = _validated_async_client(client)
+        pool.connection_kwargs["socket_timeout"] = 0.5
+        try:
+            connection = await pool.get_connection()
+        finally:
+            pool.connection_kwargs["socket_timeout"] = 0.01
+        connection.socket_timeout = 0.01
+        await pool.release(connection)
+        connection = None
+        started = time.monotonic()
+        with pytest.raises((RedisTimeoutError, RedisConnectionError)):
+            await client.ping()
+        elapsed = time.monotonic() - started
+        return timing, elapsed
     finally:
-        pool.connection_kwargs["socket_timeout"] = 0.01
-    connection.socket_timeout = 0.01
-    await pool.release(connection)
-    started = time.monotonic()
-    with pytest.raises((RedisTimeoutError, RedisConnectionError)):
-        await client.ping()
-    elapsed = time.monotonic() - started
-    await pool.disconnect()
-    return timing, elapsed
+        try:
+            if connection is not None:
+                await pool.release(connection)
+        finally:
+            await pool.disconnect()
 
 
 @pytest.mark.asyncio

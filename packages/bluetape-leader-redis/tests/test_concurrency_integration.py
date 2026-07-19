@@ -13,7 +13,7 @@ from queue import Empty
 from typing import Any, Literal
 
 import pytest
-from bluetape.leader import LeaderElectionOptions
+from bluetape.leader import LeaderBackendError, LeaderElectionOptions
 from bluetape.leader.redis import AsyncRedisDistributedLock, RedisDistributedLock
 from leader_redis_test_support import (
     TESTCONTAINERS_MARK,
@@ -92,7 +92,7 @@ def _assert_commandstats_delta(
     after: dict[str, Any],
 ) -> None:
     expected_evalsha = _GENERATIONS * (_CONTENDERS + 2)
-    expected_get = expected_evalsha + (_GENERATIONS - 1)
+    expected_get = expected_evalsha + 2 * (_GENERATIONS - 1) + 2 * _GENERATIONS * (_CONTENDERS - 1)
     assert _command_calls(after, "evalsha") - _command_calls(before, "evalsha") == expected_evalsha
     assert _command_calls(after, "eval") - _command_calls(before, "eval") == 0
     assert _command_calls(after, "get") - _command_calls(before, "get") == expected_get
@@ -112,7 +112,7 @@ def _renew_worker_count() -> int:
 def _assert_sync_auto_renew_worker_bound(endpoint: RedisEndpoint) -> None:
     baseline = _renew_worker_count()
     clients = [new_sync_client(endpoint) for _ in range(_CONTENDERS)]
-    owned_keys: list[tuple[bytes, bytes]] = []
+    owned_keys: list[tuple[bytes, bytes, bytes]] = []
     maximum_seen = baseline
     try:
         timing = observed_timing(clients[0])
@@ -217,7 +217,7 @@ def _run_sync_contention(endpoint: RedisEndpoint) -> ChildResult:
     baseline_threads = frozenset(threading.enumerate())
     logical_name = unique_logical_name("sync-contention")
     prewarm_name = unique_logical_name("sync-contention-prewarm")
-    lease_key, fence_key = leader_keys(logical_name)
+    lease_key, fence_key, history_key = leader_keys(logical_name)
     prewarm_keys = leader_keys(prewarm_name)
     options = LeaderElectionOptions(
         wait_time=timedelta(0),
@@ -315,8 +315,9 @@ def _run_sync_contention(endpoint: RedisEndpoint) -> ChildResult:
             assert stats_client.ping() is True
             assert stats_client.exists(lease_key) == 0
             assert stats_client.exists(fence_key) == 1
+            assert stats_client.get(history_key) == b"v1"
         finally:
-            clean_sync_keys(stats_client, (lease_key, fence_key))
+            clean_sync_keys(stats_client, (lease_key, fence_key, history_key))
 
     _assert_sync_auto_renew_worker_bound(endpoint)
     assert frozenset(threading.enumerate()) == baseline_threads
@@ -398,7 +399,7 @@ async def test_async_contention_has_one_winner_per_generation_and_no_task_leaks(
     redis_endpoint: RedisEndpoint = request.getfixturevalue("redis_endpoint")
     logical_name = unique_logical_name("async-contention")
     prewarm_name = unique_logical_name("async-contention-prewarm")
-    lease_key, fence_key = leader_keys(logical_name)
+    lease_key, fence_key, history_key = leader_keys(logical_name)
     prewarm_keys = leader_keys(prewarm_name)
     options = LeaderElectionOptions(
         wait_time=timedelta(0),
@@ -488,8 +489,9 @@ async def test_async_contention_has_one_winner_per_generation_and_no_task_leaks(
             assert await stats_client.ping() is True
             assert await stats_client.exists(lease_key) == 0
             assert await stats_client.exists(fence_key) == 1
+            assert await stats_client.get(history_key) == b"v1"
         finally:
-            await stats_client.delete(lease_key, fence_key)
+            await stats_client.delete(lease_key, fence_key, history_key)
 
 
 def _acquire_and_release_token(
@@ -508,12 +510,12 @@ def _atomic_write(client: Any, resource_key: bytes, token: int, payload: bytes) 
     return [int(value) for value in result]
 
 
-def test_atomic_downstream_fence_rejects_replay_stale_and_rolled_back_tokens(
+def test_atomic_downstream_fence_rejects_replay_stale_and_missing_history_state(
     request: pytest.FixtureRequest,
 ) -> None:
     redis_endpoint: RedisEndpoint = request.getfixturevalue("redis_endpoint")
     logical_name = unique_logical_name("atomic-fence")
-    lease_key, fence_key = leader_keys(logical_name)
+    lease_key, fence_key, history_key = leader_keys(logical_name)
     resource_key = f"{logical_name}-resource".encode()
     options = LeaderElectionOptions(
         wait_time=timedelta(0),
@@ -537,9 +539,8 @@ def test_atomic_downstream_fence_rejects_replay_stale_and_rolled_back_tokens(
             )
 
             client.delete(fence_key)
-            rolled_back_token = _acquire_and_release_token(lock, logical_name, options)
-            assert rolled_back_token < high_token
-            assert _atomic_write(client, resource_key, rolled_back_token, b"rollback") == [0, 1]
+            with pytest.raises(LeaderBackendError):
+                _acquire_and_release_token(lock, logical_name, options)
             assert (
                 client.hmget(resource_key, b"high_watermark", b"counter", b"payload")
                 == accepted_state
@@ -562,7 +563,7 @@ def test_atomic_downstream_fence_rejects_replay_stale_and_rolled_back_tokens(
                 2,
             ]
         finally:
-            clean_sync_keys(client, (lease_key, fence_key, resource_key))
+            clean_sync_keys(client, (lease_key, fence_key, history_key, resource_key))
 
 
 def test_non_atomic_check_then_write_is_deliberately_unsupported_evidence(
@@ -570,7 +571,7 @@ def test_non_atomic_check_then_write_is_deliberately_unsupported_evidence(
 ) -> None:
     redis_endpoint: RedisEndpoint = request.getfixturevalue("redis_endpoint")
     logical_name = unique_logical_name("non-atomic-fence")
-    lease_key, fence_key = leader_keys(logical_name)
+    lease_key, fence_key, history_key = leader_keys(logical_name)
     resource_key = f"{logical_name}-resource".encode()
     options = LeaderElectionOptions(
         wait_time=timedelta(0),
@@ -604,4 +605,4 @@ def test_non_atomic_check_then_write_is_deliberately_unsupported_evidence(
                 b"stale",
             ]
         finally:
-            clean_sync_keys(client, (lease_key, fence_key, resource_key))
+            clean_sync_keys(client, (lease_key, fence_key, history_key, resource_key))

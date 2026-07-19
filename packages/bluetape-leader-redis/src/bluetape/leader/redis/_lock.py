@@ -485,7 +485,7 @@ class RedisDistributedLock(DistributedLock[FencedLeaderLease]):
                 raw = _run_script(
                     self._commands,
                     ACQUIRE_SCRIPT,
-                    (keys.lease.encode(), keys.fence.encode()),
+                    (keys.lease.encode(), keys.fence.encode(), keys.history.encode()),
                     _validated_script_args(owner_token, ttl_ms),
                 )
                 status, fencing_token = _parse_acquire_response(raw)
