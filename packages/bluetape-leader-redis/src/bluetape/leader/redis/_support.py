@@ -166,10 +166,14 @@ def _validated_redis_options(
         except ValueError:
             raise InvalidLeaderOptionsError() from None
         options = replace(options, renew_interval=interval)
+    try:
+        effective_lease_seconds = _duration_milliseconds(options.lease_time) / 1000
+    except ValueError:
+        raise InvalidLeaderOptionsError() from None
     interval_seconds = interval.total_seconds()
     if not (
         timing.renew < interval_seconds
-        and timing.renew + interval_seconds < options.lease_time.total_seconds()
+        and timing.renew + interval_seconds < effective_lease_seconds
     ):
         raise InvalidLeaderOptionsError()
     return options
