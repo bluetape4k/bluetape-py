@@ -37,12 +37,26 @@ def test_bilingual_async_constructor_example_is_identical_and_executes() -> None
     korean = snippet(KOREAN.read_text(), "async-constructor-example")
 
     assert english == korean
-    namespace: dict[str, object] = {}
-    exec(english, namespace)
-    client = namespace["client"]
-    lock = namespace["lock"]
-    assert client.connection_pool.connection_kwargs["host"] == "127.0.0.1"
-    assert repr(lock) == "AsyncRedisDistributedLock(<redacted>)"
+    assert "async def main(" in english
+    assert "await lock.try_acquire(" in english
+    assert "finally:" in english
+    assert "await client.aclose()" in english
+    assert "return client, lock" not in english
+    compile(english, "<async-constructor-example>", "exec")
+
+
+def test_bilingual_elector_example_is_identical_and_complete() -> None:
+    english = snippet(ENGLISH.read_text(), "elector-example")
+    korean = snippet(KOREAN.read_text(), "elector-example")
+
+    assert english == korean
+    assert "RedisLeaderElector" in english
+    assert "AsyncRedisLeaderElector" in english
+    assert english.count("run_if_leader_result(") == 2
+    assert "Elected" in english
+    assert "Skipped" in english
+    assert "ActionFailed" in english
+    compile(english, "<elector-example>", "exec")
 
 
 def test_adapter_readmes_pin_supported_client_and_operator_boundaries() -> None:

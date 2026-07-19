@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import tomllib
 from pathlib import Path
 
@@ -46,6 +47,12 @@ def test_adapter_namespace_exports_exact_locks_and_electors() -> None:
     assert adapter.AsyncRedisLeaderElector.__module__ == "bluetape.leader.redis._async_elector"
     assert adapter.RedisDistributedLock.__module__ == "bluetape.leader.redis._lock"
     assert adapter.RedisLeaderElector.__module__ == "bluetape.leader.redis._elector"
+    assert str(inspect.signature(adapter.RedisDistributedLock)) == (
+        "(client: 'redis.Redis', *, prefix: 'str' = 'bluetape-leader') -> 'None'"
+    )
+    assert str(inspect.signature(adapter.AsyncRedisDistributedLock)) == (
+        "(client: 'async_redis.Redis', *, prefix: 'str' = 'bluetape-leader') -> 'None'"
+    )
 
 
 def test_lock_resolves_exact_adapter_runtime_dependencies() -> None:
