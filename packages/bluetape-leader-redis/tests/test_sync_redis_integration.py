@@ -551,6 +551,27 @@ def test_fence_counter_is_exact_above_2_to_53_and_overflow_fails_closed(
         assert admin.get(overflow_fence) == b"9223372036854775807"
 
 
+def test_expiring_fence_counter_fails_closed_without_issuing_a_lease(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+) -> None:
+    del clean_redis_database
+    with (
+        borrowed_sync_client(redis_endpoint) as admin,
+        borrowed_sync_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name("expiring-counter")
+        lease_key, fence_key = leader_keys(logical_name)
+        admin.set(fence_key, b"9", px=5_000)
+
+        with pytest.raises(LeaderBackendError):
+            RedisDistributedLock(client).try_acquire(logical_name, _options())
+
+        assert admin.get(fence_key) == b"9"
+        assert admin.pttl(fence_key) > 0
+        assert admin.get(lease_key) is None
+
+
 @pytest.mark.parametrize("auth,protocol,client_name,database", _ACL_SHAPES)
 def test_acl_matrix_grants_only_shape_specific_adapter_commands(
     redis_endpoint: RedisEndpoint,

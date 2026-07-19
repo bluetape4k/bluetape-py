@@ -50,6 +50,7 @@ end
 local fence_type = redis.call('TYPE', KEYS[2]).ok
 if fence_type ~= 'none' then
   if fence_type ~= 'string' then return {'CORRUPT'} end
+  if redis.call('PTTL', KEYS[2]) ~= -1 then return {'CORRUPT'} end
   local previous = redis.call('GET', KEYS[2])
   if not valid_fence(previous) then return {'CORRUPT'} end
   if previous == '9223372036854775807' then return {'CORRUPT'} end

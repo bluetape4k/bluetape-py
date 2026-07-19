@@ -146,6 +146,7 @@ def test_acquire_source_keeps_fence_as_canonical_string() -> None:
     source = ACQUIRE_SCRIPT.source
     assert "redis.call('INCR', KEYS[2])" in source
     assert "local fence = redis.call('GET', KEYS[2])" in source
+    assert "redis.call('PTTL', KEYS[2]) ~= -1" in source
     assert "tonumber" not in source
     assert "'PX', ARGV[2]" in source
     assert "if previous == '9223372036854775807' then return {'CORRUPT'} end" in source
