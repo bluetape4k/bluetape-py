@@ -3,8 +3,11 @@
 Date: 2026-07-19 KST
 Pre-evidence implementation head: `2f6cf37657ea86ee148e87ac023d91eb9a7e51e4`
 
-Status: **READY FOR EXACT-HEAD VERIFICATION**. This file maps the approved
-criteria but does not pre-claim the independent verifier verdict.
+Status: **PASS** at independently verified candidate head
+`56752afd3578541c8a86d2be7e41e53703381cc4`.
+
+Final severity count: **P0=0, P1=0, P2=0, P3=0**. The verifier started and
+finished at the same clean head with no blocker.
 
 ## Acceptance criterion map
 
@@ -22,19 +25,33 @@ criteria but does not pre-claim the independent verifier verdict.
 | Counter exhaustion cannot reuse ordering | signed integer ceiling and compound epoch guidance | sync/async overflow integration plus bilingual deployment checklist assertions | Mapped |
 | CI cannot silently skip Redis evidence | dedicated serialized `leader-redis` job | actionlint and JUnit nonempty/zero-failure/error/skip assertion | Mapped |
 | User guidance is executable and bilingual | EN/KO core and adapter READMEs with 13 stable scenario IDs | identical snippets, runtime manual-failure tests and cross-document status tests | Mapped |
-| Review and lesson gates are durable | TDD, performance/stability, code-review and lesson artifacts | six lenses converged to P0=0/P1=0; independent verifier remains final gate | Pending exact-head replay |
+| Review and lesson gates are durable | TDD, performance/stability, code-review and lesson artifacts | six lenses converged to P0=0/P1=0; independent verifier passed with P0-P3 all zero | Passed |
 
-## Final verifier requirements
+## Independent verifier evidence
 
-- Candidate SHA equals `git rev-parse HEAD` before and after all commands.
-- Worktree is clean.
-- `uv sync --all-packages --all-extras --python 3.13.14 --locked` succeeds.
-- `uv run pytest`, Ruff lint, Ruff format check, all-package build,
-  `actionlint`, lock check and `git diff --check` pass.
-- The prior full-suite Redis startup flake is not hidden; rerun evidence and the
-  final canonical outcome are recorded explicitly.
-- All six independent lenses report P0=0 and P1=0 at the corrected surface.
-- No PR, merge, release, publication or cleanup claim is folded into local
-  verification.
+- `uv sync --all-packages --all-extras --all-groups --python 3.13.14 --locked`
+  passed.
+- The independent public API and packaging set passed `130` tests.
+- The canonical suite passed `3249` tests with one unrelated testcontainers
+  deprecation warning.
+- The first canonical attempt exposed one transient existing cache-redis Redis
+  container startup failure. Its isolated rerun passed, the affected package
+  had no feature-branch diff, and the complete canonical rerun passed all
+  `3249` tests.
+- `uv run ruff check .`, `uv run ruff format --check .`, `actionlint`,
+  `uv lock --check`, and `git diff --check` passed.
+- `uv build --all-packages` produced all `21` wheels and all `21` source
+  distributions; the verifier checked archive integrity.
+- All `62` feature commits passed `git interpret-trailers --parse`, with zero
+  literal backslash-n sequences and zero missing mandatory Lore trailers.
+- All `33` commit references and `10` task ranges in the four SHA-bound review
+  artifacts are reachable and match the rewritten commit subjects and order.
+- The approved design, spec-review, plan and plan-review hashes still match the
+  TDD ledger.
+
+This verdict covers the implementation and pre-verdict evidence tree at the
+candidate head above. The commit that records this verdict is an evidence-only
+administrative delta and receives a final clean-head, trailer and diff refresh
+after commit.
 
 PR creation, CI review, merge and release remain separate workflow gates.
