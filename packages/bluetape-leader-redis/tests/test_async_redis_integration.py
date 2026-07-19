@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import timedelta
 
 import pytest
+import redis
 from _support import (
     TESTCONTAINERS_MARK,
     RedisEndpoint,
@@ -11,6 +13,7 @@ from _support import (
     borrowed_async_client,
     clean_redis_database,
     leader_keys,
+    new_async_client,
     observed_timing,
     redis_endpoint,
     task_baseline,
@@ -34,6 +37,12 @@ pytestmark = [TESTCONTAINERS_MARK, pytest.mark.usefixtures("clean_redis_database
 
 _SHORT_LEASE = 0.20
 _POLL_INTERVAL = 0.01
+_ACL_SHAPES = [
+    (protocol, client_name, database)
+    for protocol in (2, 3)
+    for client_name in (None, "leader-test")
+    for database in (0, 1)
+]
 
 
 def _options(
@@ -294,3 +303,74 @@ async def test_async_noscript_and_numeric_boundaries_fail_closed(
             await lock.try_acquire(overflow_name, _options())
         assert await admin.get(overflow_fence) == b"9223372036854775807"
         assert await client.ping() is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol,client_name,database", _ACL_SHAPES)
+async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
+    redis_endpoint: RedisEndpoint,
+    protocol: int,
+    client_name: str | None,
+    database: int,
+) -> None:
+    username = f"async-acl-{os.getpid()}-{protocol}-{int(client_name is not None)}-{database}"
+    password = "async-acl-fixed-password"
+    prefix = "async-leader-acl"
+    conditional_permissions = []
+    if protocol == 3:
+        conditional_permissions.append("+hello")
+    if client_name is not None:
+        conditional_permissions.append("+client|setname")
+    if database != 0:
+        conditional_permissions.append("+select")
+
+    async with borrowed_async_client(redis_endpoint) as admin:
+        await admin.execute_command(
+            "ACL",
+            "SETUSER",
+            username,
+            "reset",
+            "on",
+            f">{password}",
+            f"~{prefix}:*",
+            "+evalsha",
+            "+eval",
+            "+get",
+            "+type",
+            "+pttl",
+            "+incr",
+            "+set",
+            "+pexpire",
+            "+del",
+            "+client|setinfo",
+            *conditional_permissions,
+        )
+        restricted = new_async_client(
+            redis_endpoint,
+            username=username,
+            password=password,
+            protocol=protocol,
+            client_name=client_name,
+            db=database,
+        )
+        logical_name = unique_logical_name("async-acl-default")
+        keys = leader_keys(logical_name, prefix)
+        try:
+            async with asyncio.timeout(3.0):
+                handle = await AsyncRedisDistributedLock(restricted, prefix=prefix).try_acquire(
+                    logical_name, _options()
+                )
+                assert handle is not None
+                assert isinstance(await handle.renew(), Renewed)
+                await handle.release()
+
+                with pytest.raises(redis.exceptions.NoPermissionError):
+                    await restricted.script_load("return 1")
+                with pytest.raises(redis.exceptions.NoPermissionError):
+                    await restricted.ping()
+                with pytest.raises(redis.exceptions.NoPermissionError):
+                    await restricted.get(b"outside-prefix")
+                await restricted.delete(*keys)
+        finally:
+            await restricted.aclose()
+            await admin.execute_command("ACL", "DELUSER", username)
