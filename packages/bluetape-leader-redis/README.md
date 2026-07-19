@@ -280,7 +280,7 @@ guessing from the exception.
 
 | Suspected condition | Caller-owned evidence | Safe action |
 |---|---|---|
-| Contention | `try_acquire()` returns `None` or the elector returns `Skipped` | Do not start protected work; exit or use only a caller-owned bounded retry policy |
+| Contention | A `None` acquire result or elector `Skipped` outcome | Do not start protected work; exit or use only a caller-owned bounded retry policy |
 | Lease loss | `NotHeld` or `LeaderLeaseLostError` | Stop protected work immediately, let downstream fencing reject stale writes, and reacquire with a new handle |
 | Renewal failure | `RenewBackendFailure` or auto-renew lease-loss evidence | Treat ownership as unproven; stop at the next safe checkpoint and do not extend work from local time |
 | Release failure | `LeaderReleaseError` or the lifecycle cause in `LeaderExecutionError` | Block handle reuse and new protected work until terminal lease state is proven; never blindly delete the lease |
