@@ -20,6 +20,8 @@ Current public distributions:
 - `bluetape-audit`
 - `bluetape-cache`
 - `bluetape-cache-redis`
+- `bluetape-leader`
+- `bluetape-leader-redis`
 - `bluetape-codec`
 - `bluetape-collections`
 - `bluetape-compression`
@@ -98,6 +100,21 @@ bounded sync/async same-key load coordination with expiring Redis leases,
 atomic token-checked publication, bounded polling, and explicit failure
 semantics. It is not an L2 cache, fencing primitive, or distributed
 invalidation system.
+
+`bluetape-leader` owns the stdlib-only `bluetape.leader` namespace and generic
+options, leases, result values, sanitized errors, and sync/async protocols. It
+is available directly or through `bluetape[leader]`; the default meta install
+remains core-only. It does not depend on Redis or define backend-specific
+timing, topology, or key behavior.
+
+`bluetape-leader-redis` extends that namespace with
+`bluetape.leader.redis`. It depends exactly on `bluetape-leader==0.1.0` and
+`redis==8.0.1` and is available directly or through the explicit
+`bluetape[leader-redis]` extra. It stays outside the default, `dev`, and `all`
+sets. The first slice supports one authoritative writable single-primary with
+exact borrowed clients, bounded operations, owner-checked Lua lifecycle, and
+fencing tokens. Redlock, Sentinel, Cluster, multi-primary routing, group locks,
+strategic election, and additional backends remain separate future work.
 
 `bluetape-serde` is stdlib-only for its strict JSON v1 contract. Its root public
 surface is imported from `bluetape.serde` and is fixed at 25 ordered exports
