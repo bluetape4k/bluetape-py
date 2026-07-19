@@ -88,3 +88,34 @@ def test_adapter_readmes_pin_supported_client_and_operator_boundaries() -> None:
         text = path.read_text()
         for value in required:
             assert value in text, f"{value!r} missing from {path}"
+
+
+def test_bilingual_readmes_warn_about_plaintext_tcp_at_construction_and_deployment() -> None:
+    expectations = {
+        ENGLISH: (
+            "caller-controlled protected network",
+            "Prefer a local Unix socket whenever possible",
+            "TLS is unsupported",
+            "Redis credentials, owner tokens, and capability-bearing lock material",
+            "network observers",
+        ),
+        KOREAN: (
+            "호출자가 통제하는 보호된 네트워크",
+            "가능하면 로컬 Unix socket을 우선",
+            "TLS를 지원하지 않습니다",
+            "Redis 자격 증명, owner token, capability 역할을 하는 lock material",
+            "네트워크 관찰자",
+        ),
+    }
+
+    for path, required in expectations.items():
+        text = path.read_text()
+        constructor = text.split("<!-- leader-scenario:constructor -->", 1)[1].split(
+            "<!-- sync-constructor-example -->", 1
+        )[0]
+        deployment = text.split("<!-- leader-scenario:deployment-checklist -->", 1)[1]
+
+        for section in (constructor, deployment):
+            section = " ".join(section.split())
+            for value in required:
+                assert value in section, f"{value!r} missing from {path} section"

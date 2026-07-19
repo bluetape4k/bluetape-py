@@ -27,6 +27,11 @@ default empty `event_dispatcher`. TLS, a hostname, retrying clients, health
 checks, credential callbacks, connection hooks, custom response callbacks,
 proxies, subclasses, and pre-used pools are rejected before I/O.
 
+TLS is unsupported. Prefer a local Unix socket whenever possible. If TCP is
+required, use plaintext TCP only on a caller-controlled protected network.
+Plaintext TCP exposes Redis credentials, owner tokens, and capability-bearing
+lock material to network observers.
+
 <!-- sync-constructor-example -->
 ```python
 import redis
@@ -280,6 +285,10 @@ cause.
 - [ ] Pin `redis==8.0.1` and construct a fresh exact sync or async client with a
   numeric IP or Unix socket, finite positive timeouts, zero retry, no TLS,
   hostname, health check, callback, event hook, or custom response callback.
+- [ ] TLS is unsupported. Prefer a local Unix socket whenever possible. Allow
+  plaintext TCP only on a caller-controlled protected network; plaintext TCP
+  exposes Redis credentials, owner tokens, and capability-bearing lock material
+  to network observers.
 - [ ] Deploy against Redis Server 8, the currently tested server major; qualify
   another major with the complete integration suite before declaring support.
 - [ ] Route all contenders to one writable standalone primary; reject
