@@ -199,6 +199,20 @@ async def test_async_worker_lifecycle_rejects_unprovable_renew_timing_before_io(
 
 
 @pytest.mark.asyncio
+async def test_async_worker_lifecycle_uses_effective_redis_ttl_for_renew_timing() -> None:
+    clock = AsyncClock()
+    commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+
+    with pytest.raises(InvalidLeaderOptionsError):
+        await new_lock(commands, clock).try_acquire(
+            "job",
+            options(lease=1.000999, auto_renew=True, renew_interval=0.9605),
+        )
+
+    assert commands.calls == []
+
+
+@pytest.mark.asyncio
 async def test_async_derived_renew_interval_is_rounded_down_at_redis_boundary() -> None:
     clock = AsyncClock()
     commands = AsyncCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])

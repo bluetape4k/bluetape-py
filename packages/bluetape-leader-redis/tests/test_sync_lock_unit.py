@@ -852,6 +852,19 @@ def test_worker_lifecycle_rejects_unprovable_renew_timing_before_io() -> None:
     assert commands.calls == []
 
 
+def test_worker_lifecycle_uses_effective_redis_ttl_for_renew_timing() -> None:
+    clock = FakeClock()
+    commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
+
+    with pytest.raises(InvalidLeaderOptionsError):
+        new_lock(commands, clock).try_acquire(
+            "job",
+            options(lease=1.000999, auto_renew=True, renew_interval=0.9605),
+        )
+
+    assert commands.calls == []
+
+
 def test_derived_renew_interval_is_rounded_down_at_the_redis_boundary() -> None:
     clock = FakeClock()
     commands = FakeCommands(evalsha_effects=[[b"ACQUIRED", b"7"]])
