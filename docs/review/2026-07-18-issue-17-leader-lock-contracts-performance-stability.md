@@ -35,7 +35,8 @@ the expected adapter trace per mode to:
 
 - `EVALSHA`: `10 * (16 + 2) = 180` calls;
 - fallback `EVAL`: `0` calls on the warmed path;
-- `GET`: `180 + 9 = 189` calls, including downstream verification;
+- `GET`: `180 + 2 * 9 + 2 * 10 * 15 = 498` calls, including persistent
+  marker/counter validation plus lease probe and release reads;
 - no stale contender may complete the atomic downstream fenced write.
 
 This deterministic command-count proof is preferred over a machine-specific
@@ -84,7 +85,9 @@ pre-establishes the exact supported connection with a bounded 500 ms setup
 timeout, restores the validated 10 ms response timeout on that connection, and
 only then issues `PING`. A condition-based observation wait proves the command
 was actually received before server teardown; it does not replace or extend
-the measured Redis timeout bound.
+the measured Redis timeout bound. Both sync and async primitive helpers release
+any still-checked-out setup connection and disconnect the pool through nested
+`finally` cleanup, including assertion and setup failures.
 
 The corrected local timing matrix passed all `206` cases. Hosted CI and the
 new exact-head performance/stability lenses remain the authority for closure.

@@ -619,11 +619,17 @@ prefix, use:
 ```text
 bluetape-leader:{<digest>}:lease
 bluetape-leader:{<digest>}:fence
+bluetape-leader:{<digest>}:history
 ```
 
-The braces place both keys in the same Redis Cluster hash slot even though
+The braces place all three keys in the same Redis Cluster hash slot even though
 Cluster operation is outside this issue. The raw lock name never becomes a
 Redis key and is never logged by package code.
+
+The history key is a persistent string with the exact value `v1`. It records
+that this coordination identity has issued fencing tokens, so loss or expiry of
+the counter cannot be mistaken for a fresh identity. The counter and marker are
+created atomically on first acquisition and neither has a TTL.
 
 Prefix, digest algorithm, key suffixes, and record version together form a
 coordination identity and remain immutable for the deployment lifetime. Old
@@ -661,25 +667,34 @@ representations.
 
 ### Acquire
 
-One Lua script receives the lease key and fence key in `KEYS`, and the owner
-token plus TTL milliseconds in `ARGV`:
+One Lua script receives the lease, fence, and history keys in `KEYS`, and the
+owner token plus TTL milliseconds in `ARGV`:
 
-1. inspect the lease key type, value, and `PTTL` atomically;
-2. return contention only for a canonical `v1` record with a positive TTL;
-3. return a corruption status for a wrong type, malformed record, missing TTL,
+1. inspect the history marker and fence counter type, value, and `PTTL`
+   atomically;
+2. accept both absent only when the lease is also absent; create the persistent
+   `v1` marker as part of that first atomic acquisition;
+3. require both existing keys to be canonical persistent strings, and return
+   corruption when exactly one is missing or either has a TTL, wrong type, or
+   malformed value;
+4. inspect the lease key type, value, and `PTTL` atomically;
+5. return contention only for a canonical `v1` record with a positive TTL and
+   a valid persistent counter/marker pair whose counter equals the lease's
+   embedded fencing token;
+6. return a corruption status for a wrong type, malformed record, missing TTL,
    or otherwise invalid existing lease;
-4. increment the fence key;
-5. read the counter back as a bulk decimal string and validate its canonical
+7. increment the fence key;
+8. read the counter back as a bulk decimal string and validate its canonical
    positive form without converting it through a Lua floating-point number;
-6. write the exact `v1:owner:fence` value with `PX ttl`;
-7. return the fencing token as its canonical decimal string.
+9. write the exact `v1:owner:fence` value with `PX ttl`;
+10. return the fencing token as its canonical decimal string.
 
 This script makes ownership publication and fencing issuance one atomic Redis
-operation. The counter key has no TTL and is never deleted by normal release.
-Counter overflow or corruption fails closed as `LeaderBackendError`. Gaps are
-allowed after a script failure, but a token is never reused. The strict
-monotonic guarantee applies only while the authoritative counter is not
-deleted, decreased, or restored from an older snapshot.
+operation. The counter and history keys have no TTL and are never deleted by
+normal release. Counter overflow or corruption fails closed as
+`LeaderBackendError`. Gaps are allowed after a script failure, but a token is
+never reused. The strict monotonic guarantee requires the authoritative counter
+and marker to be protected, backed up, and restored together without rollback.
 
 ### Renew
 
@@ -988,8 +1003,9 @@ Manual context managers use the same safety precedence without producing
   high-watermark; restore and manual counter repair require all contenders to
   stop first.
 - Rollback is removal of the adapter usage and optional package extras. Existing
-  Redis fence counters and expired lease keys may remain; deleting counters is
-  unsafe while any consumer can still write with an older token.
+  Redis fence counters, history markers, and expired lease keys may remain;
+  deleting either persistent key is unsafe while any consumer can still write
+  with an older token.
 
 ## Documentation Contract
 
@@ -1071,6 +1087,8 @@ causes directly. README examples are executed by focused tests.
   than contention;
 - fencing counters at `2^53 - 1`, `2^53`, and signed Redis overflow preserve
   canonical decimal behavior or fail closed;
+- fence history marker/counter missing, TTL, wrong-type, and malformed states
+  fail closed before a lease is issued, including after counter expiry;
 - uncertain minimum-lease release covers absent, different-owner, same-owner
   retry, second uncertainty, and natural expiry;
 - action × renewal × release × cancellation failure-matrix coverage;

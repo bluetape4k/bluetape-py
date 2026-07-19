@@ -647,7 +647,7 @@ class AsyncRedisDistributedLock(AsyncDistributedLock[FencedLeaderLease]):
                 raw = await _run_script_async(
                     self._commands,
                     ACQUIRE_SCRIPT,
-                    (keys.lease.encode(), keys.fence.encode()),
+                    (keys.lease.encode(), keys.fence.encode(), keys.history.encode()),
                     _validated_script_args(owner_token, ttl_ms),
                 )
                 status, fencing_token = _parse_acquire_response(raw)

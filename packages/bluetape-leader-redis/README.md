@@ -210,24 +210,36 @@ Validate that unrelated commands and keys outside the prefix remain denied.
 <!-- leader-scenario:migration -->
 ## Coordination identity migration and counter restore
 
-Prefix, SHA-256 logical-name digest derivation, the `lease`/`fence` suffix set,
-and record version `v1` form one coordination identity. A rolling migration can
+Prefix, SHA-256 logical-name digest derivation, the
+`lease`/`fence`/`history` suffix set, the persistent `v1` history marker, and
+record version `v1` form one coordination identity. A rolling migration can
 split contenders, so use this ordered stop-the-world contract:
 
 1. **stop every old and new contender** and prevent any new protected action;
 2. **prove the old lease absent** without deleting or printing its value;
 3. read and preserve every **downstream resource high-watermark**;
 4. restore or seed the authoritative Redis fence counter **strictly above** the
-   maximum preserved watermark;
+   maximum preserved watermark and set its persistent `v1` history marker;
 5. configure every contender with one **identical prefix**, digest derivation,
    suffix set, and record version;
 6. **restart all contenders** on that single coordination identity, then
    re-enable protected work.
 
-Backup and restore the fence counter with the protected data. If the counter is
-missing, rolled back, or cannot be proven above all preserved watermarks, keep
-writers stopped. Never “repair” the state by deleting an active lease or
-lowering downstream state.
+Backup and restore the counter and history marker together with the protected
+data. Acquisition fails closed when the marker exists but the counter is
+missing, when the counter exists but the marker is missing, or when either key
+has a TTL, wrong type, or malformed value. An active lease whose embedded token
+differs from the counter also fails closed. Both keys being absent is accepted
+only as a fresh coordination identity with no active lease, so protect and
+restore both keys as one unit. If state cannot be proven above all preserved
+watermarks, keep writers stopped. Never “repair” it by deleting an active lease
+or lowering downstream state.
+
+A deployment created by a pre-marker implementation cannot be upgraded by
+rolling migration. Stop every contender and protected writer, prove the lease
+absent, seed a persistent counter strictly above every downstream watermark,
+set the persistent `v1` history marker, and only then start all contenders on
+the marker-aware implementation. There is no automatic legacy-state adoption.
 
 The Redis signed-integer ceiling is `9223372036854775807`. Acquisition fails
 closed when the counter reaches that value. If either the counter or a
@@ -252,7 +264,8 @@ values. Do not turn a sanitized exception into a key scan or a value dump.
 ## Rollback
 
 Stop contenders and protected work, remove adapter usage and the
-`leader-redis` extra, and leave counters and expired lease keys intact. Restore
+`leader-redis` extra, and leave counters, history markers, and expired lease
+keys intact. Restore
 the previous application only if it uses the same coordination identity and
 cannot reintroduce a writer whose token is below a preserved downstream
 high-watermark. Otherwise keep protected work disabled and complete the ordered
@@ -294,7 +307,8 @@ cause.
 - [ ] Route all contenders to one writable standalone primary; reject
   Sentinel, Cluster, proxies, promotion, and multi-primary routing.
 - [ ] Apply and test the minimal ACL, including out-of-prefix denial.
-- [ ] Persist, back up, and restore the fence counter with protected data.
+- [ ] Persist, back up, and restore the counter and history marker together
+  with protected data.
 - [ ] Monitor counter headroom below `9223372036854775807`; at exhaustion, keep
   writers stopped until a downstream-recognized epoch migration is complete.
 - [ ] Make every protected store atomically compare and commit its
@@ -302,7 +316,7 @@ cause.
 - [ ] Exercise contention, cancellation, lease loss, release failure, and
   caller-owned borrowed-client cleanup under finite deadlines.
 - [ ] Roll back only to an identical coordination identity while preserving
-  counters, expired leases, and downstream watermarks.
+  counters, history markers, expired leases, and downstream watermarks.
 
 Async cancellation performs bounded owned cleanup and then re-raises
 `CancelledError`. Close the borrowed async client only after the cancelled lock

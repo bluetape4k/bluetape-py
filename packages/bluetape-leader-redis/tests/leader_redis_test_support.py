@@ -207,11 +207,11 @@ def unique_logical_name(scenario: str) -> str:
     return f"leader-integration-{scenario}-{sequence}"
 
 
-def leader_keys(logical_name: str, prefix: str = "bluetape-leader") -> tuple[bytes, bytes]:
-    """Return private lease/fence keys for cleanup without rendering their values."""
+def leader_keys(logical_name: str, prefix: str = "bluetape-leader") -> tuple[bytes, bytes, bytes]:
+    """Return private lease/fence/history keys without rendering their values."""
 
     keys = _redis_keys(logical_name, prefix)
-    return keys.lease.encode(), keys.fence.encode()
+    return keys.lease.encode(), keys.fence.encode(), keys.history.encode()
 
 
 def clean_sync_keys(client: redis.Redis, keys: Iterable[bytes]) -> None:

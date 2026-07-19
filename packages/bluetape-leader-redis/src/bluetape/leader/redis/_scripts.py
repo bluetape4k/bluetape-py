@@ -34,27 +34,40 @@ class _Script:
 
 ACQUIRE_SCRIPT = _Script(
     _FENCE_VALIDATION
-    + """local lease_type = redis.call('TYPE', KEYS[1]).ok
+    + """local history_type = redis.call('TYPE', KEYS[3]).ok
+if history_type ~= 'none' then
+  if history_type ~= 'string' then return {'CORRUPT'} end
+  if redis.call('PTTL', KEYS[3]) ~= -1 then return {'CORRUPT'} end
+  if redis.call('GET', KEYS[3]) ~= 'v1' then return {'CORRUPT'} end
+end
+local fence_type = redis.call('TYPE', KEYS[2]).ok
+local previous = false
+if fence_type == 'none' then
+  if history_type ~= 'none' then return {'CORRUPT'} end
+else
+  if history_type == 'none' then return {'CORRUPT'} end
+  if fence_type ~= 'string' then return {'CORRUPT'} end
+  if redis.call('PTTL', KEYS[2]) ~= -1 then return {'CORRUPT'} end
+  previous = redis.call('GET', KEYS[2])
+  if not valid_fence(previous) then return {'CORRUPT'} end
+end
+local lease_type = redis.call('TYPE', KEYS[1]).ok
 if lease_type ~= 'none' then
+  if history_type == 'none' then return {'CORRUPT'} end
   if lease_type ~= 'string' then return {'CORRUPT'} end
   local current = redis.call('GET', KEYS[1])
   local owner, fence = string.match(current, '^v1:([%w_-]+):([1-9][0-9]*)$')
   if not owner or string.len(owner) ~= 32 or not valid_fence(fence) then
     return {'CORRUPT'}
   end
+  if fence ~= previous then return {'CORRUPT'} end
   if redis.call('PTTL', KEYS[1]) <= 0 then
     return {'CORRUPT'}
   end
   return {'CONTENDED'}
 end
-local fence_type = redis.call('TYPE', KEYS[2]).ok
-if fence_type ~= 'none' then
-  if fence_type ~= 'string' then return {'CORRUPT'} end
-  if redis.call('PTTL', KEYS[2]) ~= -1 then return {'CORRUPT'} end
-  local previous = redis.call('GET', KEYS[2])
-  if not valid_fence(previous) then return {'CORRUPT'} end
-  if previous == '9223372036854775807' then return {'CORRUPT'} end
-end
+if previous == '9223372036854775807' then return {'CORRUPT'} end
+if history_type == 'none' then redis.call('SET', KEYS[3], 'v1') end
 redis.call('INCR', KEYS[2])
 local fence = redis.call('GET', KEYS[2])
 if not valid_fence(fence) then return {'CORRUPT'} end
@@ -240,7 +253,7 @@ def _validate_dispatch(script: _Script, keys: tuple[bytes, ...], args: tuple[byt
     for value in (*keys, *args):
         _validate_bytes(value)
     if script is ACQUIRE_SCRIPT:
-        if len(keys) != 2 or len(args) != 2 or not _valid_owner_bytes(args[0]):
+        if len(keys) != 3 or len(args) != 2 or not _valid_owner_bytes(args[0]):
             raise ValueError("Redis script argument is invalid")
         _validate_milliseconds(args[1], allow_zero=False)
     elif script in (RENEW_SCRIPT, PROBE_SCRIPT, RELEASE_SCRIPT):

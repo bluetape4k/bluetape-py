@@ -17,6 +17,7 @@ _PREFIX_PATTERN = re.compile(r"[A-Za-z0-9._-]+", re.ASCII)
 class _RedisKeys:
     lease: str
     fence: str
+    history: str
 
     def __repr__(self) -> str:
         return "_RedisKeys(<redacted>)"
@@ -48,7 +49,11 @@ def _redis_keys(lock_name: str, prefix: str) -> _RedisKeys:
         raise InvalidLockNameError()
     digest = hashlib.sha256(encoded).hexdigest()
     hash_tag = f"{safe_prefix}:{{{digest}}}"
-    return _RedisKeys(lease=f"{hash_tag}:lease", fence=f"{hash_tag}:fence")
+    return _RedisKeys(
+        lease=f"{hash_tag}:lease",
+        fence=f"{hash_tag}:fence",
+        history=f"{hash_tag}:history",
+    )
 
 
 __all__: list[str] = []

@@ -208,7 +208,8 @@ prefix 밖 key가 계속 거부되는지 검증하십시오.
 <!-- leader-scenario:migration -->
 ## Coordination identity migration과 counter 복원
 
-Prefix, SHA-256 logical-name digest derivation, `lease`/`fence` suffix set, record
+Prefix, SHA-256 logical-name digest derivation,
+`lease`/`fence`/`history` suffix set, persistent `v1` history marker, record
 version `v1`이 하나의 coordination identity를 이룹니다. Rolling migration은
 contender를 갈라놓을 수 있으므로 다음 stop-the-world 순서를 지키십시오.
 
@@ -216,15 +217,26 @@ contender를 갈라놓을 수 있으므로 다음 stop-the-world 순서를 지�
 2. 값을 삭제하거나 출력하지 않고 **기존 lease가 없음을 증명**합니다.
 3. 모든 **downstream resource high-watermark**를 읽고 보존합니다.
 4. authoritative Redis fence counter를 보존한 최대 watermark보다 **엄격히 큰 값**으로
-   복원하거나 seed합니다.
+   복원하거나 seed하고 persistent `v1` history marker를 설정합니다.
 5. 모든 contender에 하나의 **동일한 prefix**, digest derivation, suffix set, record
    version을 설정합니다.
 6. 하나의 coordination identity에서 **모든 contender를 다시 시작**한 다음 protected
    work를 다시 허용합니다.
 
-Fence counter는 protected data와 함께 backup하고 restore하십시오. Counter가 없거나
-rollback되었거나 모든 보존 watermark보다 큰 값임을 증명할 수 없다면 writer를 계속
-중지합니다. Active lease를 삭제하거나 downstream state를 낮춰 “복구”하면 안 됩니다.
+Counter와 history marker를 함께 protected data와 backup하고 restore하십시오. Marker는
+있지만 counter가 없거나, counter는 있지만 marker가 없으면 acquire는 fail-closed됩니다.
+두 key 중 하나라도 TTL, wrong type, malformed value를 가지는 경우도 같습니다. 두 key가
+모두 없는 상태는 active lease가 없는 새 coordination identity에서만 허용되며, active
+lease의 embedded token이 counter와 다른 경우도 fail-closed됩니다. 두 key를 하나의
+단위로 보호하고 복원하십시오. 모든 보존 watermark보다 큰 상태임을 증명할 수 없다면
+writer를 계속 중지합니다. Active lease를 삭제하거나 downstream state를 낮춰 “복구”하면
+안 됩니다.
+
+Pre-marker 구현이 만든 deployment는 rolling migration으로 upgrade할 수 없습니다. 모든
+contender와 protected writer를 중지하고 lease가 없음을 증명한 뒤, 모든 downstream
+watermark보다 엄격히 큰 persistent counter와 persistent `v1` history marker를 seed합니다.
+그 다음에만 marker-aware 구현으로 모든 contender를 시작하십시오. Legacy state를
+자동으로 채택하지 않습니다.
 
 Redis signed integer 상한은 `9223372036854775807`입니다. Counter가 이 값에
 도달하면 acquire는 fail-closed됩니다. Counter나 downstream watermark가 상한에
@@ -251,7 +263,7 @@ Renewal loss, owner mismatch, corruption, uncertain release가 발생하면 다�
 ## Rollback
 
 Contender와 protected work를 중지하고 adapter 사용과 `leader-redis` extra를
-제거하되 counter와 만료된 lease key를 그대로 둡니다. 이전 application이 동일한
+제거하되 counter, history marker, 만료된 lease key를 그대로 둡니다. 이전 application이 동일한
 coordination identity를 사용하고 보존된 downstream high-watermark보다 작은 token을
 가진 writer를 다시 들여오지 않을 때만 복원합니다. 그렇지 않으면 protected work를
 계속 중지하고 ordered migration 절차를 마친 뒤 재개하십시오.
@@ -291,14 +303,14 @@ log field나 metric label로 사용하면 안 됩니다.
 - [ ] 모든 contender를 하나의 writable standalone primary로 routing하고 Sentinel,
   Cluster, proxy, promotion, multi-primary routing을 거부합니다.
 - [ ] 최소 ACL을 적용하고 prefix 밖 접근이 거부되는지 검증합니다.
-- [ ] Fence counter를 protected data와 함께 보존, backup, restore합니다.
+- [ ] Counter와 history marker를 함께 protected data와 보존, backup, restore합니다.
 - [ ] Counter가 `9223372036854775807`에 도달하기 전 headroom을 관찰합니다. 소진되면
   downstream-recognized epoch migration이 끝날 때까지 writer를 중지합니다.
 - [ ] 모든 protected store가 high-watermark와 business data를 atomic하게 비교하고
   commit하게 합니다.
 - [ ] 유한한 deadline 아래에서 contention, cancellation, lease loss, release failure,
   caller-owned borrowed-client cleanup을 검증합니다.
-- [ ] Counter, 만료 lease, downstream watermark를 보존한 채 동일한 coordination
+- [ ] Counter, history marker, 만료 lease, downstream watermark를 보존한 채 동일한 coordination
   identity로만 rollback합니다.
 
 Async cancellation은 제한된 owned cleanup을 수행한 뒤 `CancelledError`를 다시

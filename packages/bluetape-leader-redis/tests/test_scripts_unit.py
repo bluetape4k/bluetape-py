@@ -69,7 +69,7 @@ def test_noscript_falls_back_once_without_script_load() -> None:
     result = _run_script(
         commands,
         ACQUIRE_SCRIPT,
-        (b"lease", b"fence"),
+        (b"lease", b"fence", b"history"),
         (b"A" * 32, b"1000"),
     )
 
@@ -147,6 +147,9 @@ def test_acquire_source_keeps_fence_as_canonical_string() -> None:
     assert "redis.call('INCR', KEYS[2])" in source
     assert "local fence = redis.call('GET', KEYS[2])" in source
     assert "redis.call('PTTL', KEYS[2]) ~= -1" in source
+    assert "local history_type = redis.call('TYPE', KEYS[3]).ok" in source
+    assert "redis.call('SET', KEYS[3], 'v1')" in source
+    assert "if fence ~= previous then return {'CORRUPT'} end" in source
     assert "tonumber" not in source
     assert "'PX', ARGV[2]" in source
     assert "if previous == '9223372036854775807' then return {'CORRUPT'} end" in source
@@ -209,8 +212,8 @@ def test_script_arguments_validate_before_dispatch() -> None:
 @pytest.mark.parametrize(
     ("script", "keys", "args"),
     [
-        (ACQUIRE_SCRIPT, (b"lease", b"fence"), (b"short", b"1000")),
-        (ACQUIRE_SCRIPT, (b"lease", b"fence"), (b"A" * 32, b"01")),
+        (ACQUIRE_SCRIPT, (b"lease", b"fence", b"history"), (b"short", b"1000")),
+        (ACQUIRE_SCRIPT, (b"lease", b"fence", b"history"), (b"A" * 32, b"01")),
         (RENEW_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":1", b"0")),
         (PROBE_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":9223372036854775808",)),
         (RELEASE_SCRIPT, (b"lease",), (b"v1:" + b"A" * 32 + b":1", b"+1")),
@@ -237,7 +240,7 @@ async def test_script_arguments_reject_noncanonical_values_before_async_dispatch
         await _run_script_async(
             AsyncFakeCommands(wrapped),
             ACQUIRE_SCRIPT,
-            (b"lease", b"fence"),
+            (b"lease", b"fence", b"history"),
             (b"short", b"1000"),
         )
 
