@@ -61,6 +61,10 @@ class LeaderExecutionError(LeaderError):
     lifecycle_cause: LeaderError
 
     def __init__(self, action_cause: Exception, lifecycle_cause: LeaderError) -> None:
+        if not issubclass(type(action_cause), Exception):
+            raise TypeError("action_cause must be Exception")
+        if not issubclass(type(lifecycle_cause), LeaderError):
+            raise TypeError("lifecycle_cause must be LeaderError")
         super().__init__("leader action and lifecycle both failed")
         self.action_cause = action_cause
         self.lifecycle_cause = lifecycle_cause
