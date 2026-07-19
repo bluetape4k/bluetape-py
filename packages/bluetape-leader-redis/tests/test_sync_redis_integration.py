@@ -644,19 +644,21 @@ def test_acl_matrix_grants_only_shape_specific_adapter_commands(
             restricted.get(b"outside-prefix")
     finally:
         try:
-            if restricted is not None:
-                restricted.close()
-            cleanup = new_sync_client(
-                redis_endpoint,
-                username=admin_username,
-                password=admin_password,
-                protocol=2,
-                db=database,
-            )
             try:
-                clean_sync_keys(cleanup, keys)
+                if restricted is not None:
+                    restricted.close()
             finally:
-                cleanup.close()
+                cleanup = new_sync_client(
+                    redis_endpoint,
+                    username=admin_username,
+                    password=admin_password,
+                    protocol=2,
+                    db=database,
+                )
+                try:
+                    clean_sync_keys(cleanup, keys)
+                finally:
+                    cleanup.close()
         finally:
             try:
                 if auth == "username-password":

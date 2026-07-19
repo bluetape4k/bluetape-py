@@ -462,19 +462,21 @@ async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
                 await restricted.get(b"outside-prefix")
     finally:
         try:
-            if restricted is not None:
-                await restricted.aclose()
-            cleanup = new_async_client(
-                redis_endpoint,
-                username=admin_username,
-                password=admin_password,
-                protocol=2,
-                db=database,
-            )
             try:
-                await cleanup.delete(*keys)
+                if restricted is not None:
+                    await restricted.aclose()
             finally:
-                await cleanup.aclose()
+                cleanup = new_async_client(
+                    redis_endpoint,
+                    username=admin_username,
+                    password=admin_password,
+                    protocol=2,
+                    db=database,
+                )
+                try:
+                    await cleanup.delete(*keys)
+                finally:
+                    await cleanup.aclose()
         finally:
             try:
                 if auth == "username-password":
