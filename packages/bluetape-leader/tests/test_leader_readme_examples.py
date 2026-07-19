@@ -116,6 +116,9 @@ def test_core_readmes_record_public_result_and_lifecycle_contracts() -> None:
             "is_held",
             "TOCTOU",
             "CancelledError",
+            "LeaderExecutionError",
+            "action_cause",
+            "lifecycle_cause",
             "caller",
         ):
             assert required in text, f"{required!r} missing from {path}"
