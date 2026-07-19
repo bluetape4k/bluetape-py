@@ -53,7 +53,7 @@ _ACL_SHAPES = [
 
 @dataclass(frozen=True, slots=True)
 class ChildResult:
-    scenario_id: Literal["sync-lifecycle", "sync-contention"]
+    scenario_id: Literal["sync-lifecycle", "sync-contention", "sync-renewal-loss"]
     status: Literal["passed", "failed"]
     public_outcome: Literal[
         "elected",
@@ -193,6 +193,70 @@ def _sync_lifecycle_child(
         client.close()
 
 
+def _sync_renewal_loss_child(
+    endpoint: RedisEndpoint,
+    logical_name: str,
+    terminal: multiprocessing.Queue[ChildResult],
+) -> None:
+    client = new_sync_client(endpoint)
+    keys = leader_keys(logical_name)
+    baseline = _renew_worker_count()
+    action_count = 0
+    try:
+        timing = observed_timing(client)
+        renew_interval = timing.renew + 0.05
+
+        def invalidate(_lease: object) -> str:
+            nonlocal action_count
+            action_count += 1
+            client.delete(keys[0])
+            time.sleep(renew_interval + 0.20)
+            return "must-not-complete"
+
+        with pytest.raises(LeaderLeaseLostError):
+            RedisLeaderElector(client).run_if_leader_result(
+                logical_name,
+                invalidate,
+                _options(lease=2.0, auto_renew=True, renew_interval=renew_interval),
+            )
+        assert client.exists(keys[0]) == 0
+        terminal.put(
+            ChildResult(
+                scenario_id="sync-renewal-loss",
+                status="passed",
+                public_outcome="lease-lost",
+                action_count=action_count,
+                fencing_relation="not-applicable",
+                lease_cleanup="not-applicable",
+                worker_delta=_renew_worker_count() - baseline,
+                task_delta=0,
+                borrowed_client_usable=client.ping() is True,
+                failure_kind="none",
+            )
+        )
+    except AssertionError:
+        terminal.put(
+            ChildResult(
+                scenario_id="sync-renewal-loss",
+                status="failed",
+                public_outcome="execution-error",
+                action_count=action_count,
+                fencing_relation="not-applicable",
+                lease_cleanup="not-applicable",
+                worker_delta=_renew_worker_count() - baseline,
+                task_delta=0,
+                borrowed_client_usable=False,
+                failure_kind="assertion",
+            )
+        )
+        raise SystemExit(1) from None
+    except BaseException:
+        raise SystemExit(2) from None
+    finally:
+        clean_sync_keys(client, keys)
+        client.close()
+
+
 def test_spawned_sync_lifecycle_crosses_three_ttls_without_leaks(
     redis_endpoint: RedisEndpoint,
     clean_redis_database: None,
@@ -235,6 +299,61 @@ def test_spawned_sync_lifecycle_crosses_three_ttls_without_leaks(
         if process.is_alive():
             process.terminate()
         process.join(1.0)
+        terminal.close()
+        terminal.join_thread()
+        with borrowed_sync_client(redis_endpoint) as client:
+            client.flushdb()
+            assert_database_clean(client)
+
+
+def test_spawned_sync_renewal_loss_prevents_successful_scoped_completion(
+    redis_endpoint: RedisEndpoint,
+    clean_redis_database: None,
+) -> None:
+    del clean_redis_database
+    with borrowed_sync_client(redis_endpoint) as timing_client:
+        timing = observed_timing(timing_client)
+    deadline = timing.acquire + timing.renew + timing.release + 2.0
+    context = multiprocessing.get_context("spawn")
+    terminal: multiprocessing.Queue[ChildResult] = context.Queue()
+    process = context.Process(
+        target=_sync_renewal_loss_child,
+        args=(redis_endpoint, unique_logical_name("spawned-renewal-loss"), terminal),
+    )
+    process.start()
+    try:
+        process.join(deadline)
+        if process.is_alive():
+            process.terminate()
+            process.join(1.0)
+            if process.is_alive():
+                process.kill()
+                process.join(1.0)
+            assert not process.is_alive()
+            pytest.fail("sync renewal-loss deadline exceeded", pytrace=False)
+        assert process.exitcode == 0
+        record = terminal.get(timeout=0.5)
+        with pytest.raises(queue.Empty):
+            terminal.get_nowait()
+        assert record == ChildResult(
+            scenario_id="sync-renewal-loss",
+            status="passed",
+            public_outcome="lease-lost",
+            action_count=1,
+            fencing_relation="not-applicable",
+            lease_cleanup="not-applicable",
+            worker_delta=0,
+            task_delta=0,
+            borrowed_client_usable=True,
+            failure_kind="none",
+        )
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(1.0)
+            if process.is_alive():
+                process.kill()
+                process.join(1.0)
         terminal.close()
         terminal.join_thread()
         with borrowed_sync_client(redis_endpoint) as client:
