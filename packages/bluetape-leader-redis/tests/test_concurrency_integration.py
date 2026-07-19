@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import timedelta
 from queue import Empty
@@ -40,10 +41,25 @@ _CONTENDERS = 16
 _GENERATIONS = 10
 _SCHEDULING_MARGIN = 2.0
 _ATOMIC_WRITE_SCRIPT = """
-local stored = tonumber(redis.call('HGET', KEYS[1], 'high_watermark') or '-1')
-local incoming = tonumber(ARGV[1])
+local stored = redis.call('HGET', KEYS[1], 'high_watermark')
+local incoming = ARGV[1]
 local counter = tonumber(redis.call('HGET', KEYS[1], 'counter') or '0')
-if incoming <= stored then
+local function is_canonical_positive_decimal(value)
+  return string.match(value, '^[1-9][0-9]*$') ~= nil
+end
+local function is_strictly_greater(left, right)
+  if right == false then
+    return true
+  end
+  if string.len(left) ~= string.len(right) then
+    return string.len(left) > string.len(right)
+  end
+  return left > right
+end
+if not is_canonical_positive_decimal(incoming) then
+  return redis.error_reply('invalid fencing token')
+end
+if not is_strictly_greater(incoming, stored) then
   return {0, counter}
 end
 counter = redis.call('HINCRBY', KEYS[1], 'counter', 1)
@@ -87,6 +103,56 @@ def _assert_strict_generations(results: list[list[int]]) -> None:
     assert all(len(generation) == 1 for generation in results)
     fences = [generation[0] for generation in results]
     assert fences == sorted(set(fences))
+
+
+def _renew_worker_count() -> int:
+    return sum(thread.name.startswith("bluetape-leader-renew-") for thread in threading.enumerate())
+
+
+def _assert_sync_auto_renew_worker_bound(endpoint: RedisEndpoint) -> None:
+    baseline = _renew_worker_count()
+    clients = [new_sync_client(endpoint) for _ in range(_CONTENDERS)]
+    owned_keys: list[tuple[bytes, bytes]] = []
+    maximum_seen = baseline
+    try:
+        timing = observed_timing(clients[0])
+        renew_interval = timing.renew + 0.05
+        options = LeaderElectionOptions(
+            wait_time=timedelta(0),
+            lease_time=timedelta(seconds=2),
+            auto_renew=True,
+            renew_interval=timedelta(seconds=renew_interval),
+        )
+        with ExitStack() as stack:
+            for index, client in enumerate(clients):
+                logical_name = unique_logical_name(f"sync-renew-workers-{index}")
+                owned_keys.append(leader_keys(logical_name))
+                handle = RedisDistributedLock(client).try_acquire(logical_name, options)
+                assert handle is not None
+                stack.enter_context(handle)
+
+            deadline = time.monotonic() + timing.acquire + _SCHEDULING_MARGIN
+            while True:
+                current = _renew_worker_count()
+                maximum_seen = max(maximum_seen, current)
+                assert current <= baseline + _CONTENDERS
+                if current == baseline + _CONTENDERS:
+                    break
+                if time.monotonic() >= deadline:
+                    pytest.fail("sync renew worker startup deadline exceeded", pytrace=False)
+                time.sleep(0.01)
+
+        deadline = time.monotonic() + timing.release + _SCHEDULING_MARGIN
+        while _renew_worker_count() != baseline:
+            if time.monotonic() >= deadline:
+                pytest.fail("sync renew worker cleanup deadline exceeded", pytrace=False)
+            time.sleep(0.01)
+        assert maximum_seen == baseline + _CONTENDERS
+    finally:
+        for client, keys in zip(clients, owned_keys, strict=False):
+            clean_sync_keys(client, keys)
+        for client in clients:
+            client.close()
 
 
 def _prepared_sync_locks(
@@ -252,6 +318,7 @@ def _run_sync_contention(endpoint: RedisEndpoint) -> ChildResult:
         finally:
             clean_sync_keys(stats_client, (lease_key, fence_key))
 
+    _assert_sync_auto_renew_worker_bound(endpoint)
     assert frozenset(threading.enumerate()) == baseline_threads
     return ChildResult(
         scenario_id="sync-contention",
@@ -477,6 +544,23 @@ def test_atomic_downstream_fence_rejects_replay_stale_and_rolled_back_tokens(
                 client.hmget(resource_key, b"high_watermark", b"counter", b"payload")
                 == accepted_state
             )
+
+            client.hset(
+                resource_key,
+                mapping={
+                    b"high_watermark": b"9007199254740993",
+                    b"counter": b"1",
+                    b"payload": b"large-accepted",
+                },
+            )
+            assert _atomic_write(client, resource_key, 9_007_199_254_740_992, b"rounded") == [
+                0,
+                1,
+            ]
+            assert _atomic_write(client, resource_key, 9_007_199_254_740_994, b"larger") == [
+                1,
+                2,
+            ]
         finally:
             clean_sync_keys(client, (lease_key, fence_key, resource_key))
 

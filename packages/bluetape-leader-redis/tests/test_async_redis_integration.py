@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 import redis
+import redis.asyncio as async_redis
 from _support import (
     TESTCONTAINERS_MARK,
     RedisEndpoint,
@@ -38,7 +39,8 @@ pytestmark = [TESTCONTAINERS_MARK, pytest.mark.usefixtures("clean_redis_database
 _SHORT_LEASE = 0.20
 _POLL_INTERVAL = 0.01
 _ACL_SHAPES = [
-    (protocol, client_name, database)
+    (auth, protocol, client_name, database)
+    for auth in ("none", "password", "username-password")
     for protocol in (2, 3)
     for client_name in (None, "leader-test")
     for database in (0, 1)
@@ -70,24 +72,32 @@ async def _wait_until_absent(client: object, key: bytes, timeout: float = 1.0) -
         await asyncio.sleep(_POLL_INTERVAL)
 
 
+def _command_calls(commandstats: dict[str, object], command: str) -> int:
+    details = commandstats.get(f"cmdstat_{command}", {})
+    assert isinstance(details, dict)
+    return int(details.get("calls", 0))
+
+
 @pytest.mark.asyncio
 async def test_real_async_lifecycle_reacquires_with_increasing_fence(
     redis_endpoint: RedisEndpoint,
 ) -> None:
-    async with asyncio.timeout(3.0), borrowed_async_client(redis_endpoint) as client:
+    async with borrowed_async_client(redis_endpoint) as client:
+        timing = observed_timing(client)
         logical_name = unique_logical_name("async-lifecycle")
         lock = AsyncRedisDistributedLock(client)
-        first = await lock.try_acquire(logical_name, _options())
-        assert first is not None
-        assert isinstance(await first.renew(), Renewed)
-        assert await lock.try_acquire(logical_name, _options()) is None
-        first_token = first.lease.fencing_token
-        await first.release()
+        async with asyncio.timeout(3 * timing.acquire + timing.renew + 2 * timing.release + 1.0):
+            first = await lock.try_acquire(logical_name, _options())
+            assert first is not None
+            assert isinstance(await first.renew(), Renewed)
+            assert await lock.try_acquire(logical_name, _options()) is None
+            first_token = first.lease.fencing_token
+            await first.release()
 
-        successor = await lock.try_acquire(logical_name, _options())
-        assert successor is not None
-        assert successor.lease.fencing_token > first_token
-        await successor.release()
+            successor = await lock.try_acquire(logical_name, _options())
+            assert successor is not None
+            assert successor.lease.fencing_token > first_token
+            await successor.release()
         assert await client.ping() is True
 
 
@@ -95,53 +105,64 @@ async def test_real_async_lifecycle_reacquires_with_increasing_fence(
 async def test_expired_async_owner_cannot_change_successor_record_or_ttl(
     redis_endpoint: RedisEndpoint,
 ) -> None:
-    async with asyncio.timeout(3.0), borrowed_async_client(redis_endpoint) as client:
+    async with borrowed_async_client(redis_endpoint) as client:
+        timing = observed_timing(client)
         logical_name = unique_logical_name("async-stale-owner")
         lease_key, _ = leader_keys(logical_name)
         lock = AsyncRedisDistributedLock(client)
-        old = await lock.try_acquire(logical_name, _options(lease=_SHORT_LEASE))
-        assert old is not None
-        await _wait_until_absent(client, lease_key)
+        async with asyncio.timeout(2 * timing.acquire + timing.renew + 2 * timing.release + 2.0):
+            old = await lock.try_acquire(logical_name, _options(lease=_SHORT_LEASE))
+            assert old is not None
+            await _wait_until_absent(client, lease_key)
 
-        successor = await lock.try_acquire(logical_name, _options())
-        assert successor is not None
-        record_before = await client.get(lease_key)
-        ttl_before = await client.pttl(lease_key)
-        assert record_before is not None and ttl_before > 0
-        assert isinstance(await old.renew(), NotHeld)
-        with pytest.raises(LeaderReleaseError):
-            await old.release()
-        record_after = await client.get(lease_key)
-        ttl_after = await client.pttl(lease_key)
+            successor = await lock.try_acquire(logical_name, _options())
+            assert successor is not None
+            record_before = await client.get(lease_key)
+            ttl_before = await client.pttl(lease_key)
+            assert record_before is not None and ttl_before > 0
+            commands_before = await client.info("commandstats")
+            assert isinstance(await old.renew(), NotHeld)
+            with pytest.raises(LeaderReleaseError):
+                await old.release()
+            commands_after = await client.info("commandstats")
+            record_after = await client.get(lease_key)
+            ttl_after = await client.pttl(lease_key)
 
-        assert record_after == record_before
-        assert 0 < ttl_after <= ttl_before
-        await successor.release()
+            assert record_after == record_before
+            assert 0 < ttl_after <= ttl_before
+            assert _command_calls(commands_after, "pexpire") == _command_calls(
+                commands_before, "pexpire"
+            )
+            assert _command_calls(commands_after, "del") == _command_calls(commands_before, "del")
+            await successor.release()
 
 
 @pytest.mark.asyncio
 async def test_async_minimum_lease_delays_successor_then_expires(
     redis_endpoint: RedisEndpoint,
 ) -> None:
-    async with asyncio.timeout(3.0), borrowed_async_client(redis_endpoint) as client:
+    async with borrowed_async_client(redis_endpoint) as client:
+        timing = observed_timing(client)
         logical_name = unique_logical_name("async-minimum")
         lease_key, _ = leader_keys(logical_name)
         lock = AsyncRedisDistributedLock(client)
-        handle = await lock.try_acquire(logical_name, _options(minimum=0.30))
-        assert handle is not None
-        await handle.release()
-        assert 0 < await client.pttl(lease_key) <= 300
-        assert await lock.try_acquire(logical_name, _options()) is None
-        await _wait_until_absent(client, lease_key)
-        successor = await lock.try_acquire(logical_name, _options())
-        assert successor is not None
-        await successor.release()
+        async with asyncio.timeout(3 * timing.acquire + 2 * timing.release + 2.0):
+            handle = await lock.try_acquire(logical_name, _options(minimum=0.30))
+            assert handle is not None
+            await handle.release()
+            assert 0 < await client.pttl(lease_key) <= 300
+            assert await lock.try_acquire(logical_name, _options()) is None
+            await _wait_until_absent(client, lease_key)
+            successor = await lock.try_acquire(logical_name, _options())
+            assert successor is not None
+            await successor.release()
 
 
 @pytest.mark.asyncio
 async def test_async_long_action_crosses_three_ttls_and_releases(
     redis_endpoint: RedisEndpoint,
 ) -> None:
+    baseline = task_baseline()
     async with borrowed_async_client(redis_endpoint) as client:
         logical_name = unique_logical_name("async-long-action")
         lease_key, _ = leader_keys(logical_name)
@@ -166,26 +187,64 @@ async def test_async_long_action_crosses_three_ttls_and_releases(
         assert result.value == "completed"
         assert action_count == 1
         assert await client.exists(lease_key) == 0
+    assert_task_baseline(baseline)
 
 
 @pytest.mark.asyncio
 async def test_async_action_failure_is_reported_after_release(
     redis_endpoint: RedisEndpoint,
 ) -> None:
-    async with asyncio.timeout(3.0), borrowed_async_client(redis_endpoint) as client:
+    baseline = task_baseline()
+    async with borrowed_async_client(redis_endpoint) as client:
         logical_name = unique_logical_name("async-action-failure")
         lease_key, _ = leader_keys(logical_name)
         failure = ValueError("caller failure")
+        timing = observed_timing(client)
+        renew_interval = timing.renew + 0.05
 
         async def action(_lease: object) -> None:
             raise failure
 
-        result = await AsyncRedisLeaderElector(client).run_if_leader_result(
-            logical_name, action, _options()
-        )
+        async with asyncio.timeout(timing.acquire + timing.release + 1.0):
+            result = await AsyncRedisLeaderElector(client).run_if_leader_result(
+                logical_name,
+                action,
+                _options(lease=2.0, auto_renew=True, renew_interval=renew_interval),
+            )
         assert isinstance(result, ActionFailed)
         assert result.cause is failure
         assert await client.exists(lease_key) == 0
+    assert_task_baseline(baseline)
+
+
+@pytest.mark.asyncio
+async def test_real_async_renewal_loss_prevents_successful_scoped_completion(
+    redis_endpoint: RedisEndpoint,
+) -> None:
+    baseline = task_baseline()
+    async with (
+        borrowed_async_client(redis_endpoint) as admin,
+        borrowed_async_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name("async-renewal-loss")
+        lease_key, _ = leader_keys(logical_name)
+        timing = observed_timing(client)
+        renew_interval = timing.renew + 0.05
+
+        async def invalidate(_lease: object) -> str:
+            await admin.delete(lease_key)
+            await asyncio.sleep(renew_interval + 0.20)
+            return "must-not-complete"
+
+        with pytest.raises(LeaderLeaseLostError):
+            async with asyncio.timeout(timing.acquire + timing.renew + timing.release + 2.0):
+                await AsyncRedisLeaderElector(client).run_if_leader_result(
+                    logical_name,
+                    invalidate,
+                    _options(lease=2.0, auto_renew=True, renew_interval=renew_interval),
+                )
+        assert await client.exists(lease_key) == 0
+    assert_task_baseline(baseline)
 
 
 @pytest.mark.asyncio
@@ -213,7 +272,7 @@ async def test_async_cancellation_releases_and_restores_task_baseline(
 
         try:
             task = asyncio.create_task(hold())
-            async with asyncio.timeout(3.0):
+            async with asyncio.timeout(timing.acquire + timing.release + 1.0):
                 await entered.wait()
                 task.cancel()
                 with pytest.raises(asyncio.CancelledError):
@@ -231,20 +290,22 @@ async def test_async_cancellation_releases_and_restores_task_baseline(
 async def test_delayed_async_entry_fails_before_running_body(
     redis_endpoint: RedisEndpoint,
 ) -> None:
-    async with asyncio.timeout(3.0), borrowed_async_client(redis_endpoint) as client:
+    async with borrowed_async_client(redis_endpoint) as client:
+        timing = observed_timing(client)
         logical_name = unique_logical_name("async-delayed-entry")
         lease_key, _ = leader_keys(logical_name)
-        handle = await AsyncRedisDistributedLock(client).try_acquire(
-            logical_name, _options(lease=_SHORT_LEASE)
-        )
-        assert handle is not None
-        await _wait_until_absent(client, lease_key)
-        body_started = False
+        async with asyncio.timeout(timing.acquire + timing.probe + timing.release + 2.0):
+            handle = await AsyncRedisDistributedLock(client).try_acquire(
+                logical_name, _options(lease=_SHORT_LEASE)
+            )
+            assert handle is not None
+            await _wait_until_absent(client, lease_key)
+            body_started = False
 
-        with pytest.raises(LeaderLeaseLostError):
-            async with handle:
-                body_started = True
-        assert body_started is False
+            with pytest.raises(LeaderLeaseLostError):
+                async with handle:
+                    body_started = True
+            assert body_started is False
 
 
 @pytest.mark.asyncio
@@ -254,10 +315,10 @@ async def test_async_corrupt_lease_states_fail_closed(
     state: str,
 ) -> None:
     async with (
-        asyncio.timeout(3.0),
         borrowed_async_client(redis_endpoint) as admin,
         borrowed_async_client(redis_endpoint) as client,
     ):
+        timing = observed_timing(client)
         logical_name = unique_logical_name(f"async-corrupt-{state}")
         lease_key, _ = leader_keys(logical_name)
         if state == "malformed":
@@ -267,8 +328,9 @@ async def test_async_corrupt_lease_states_fail_closed(
         else:
             await admin.rpush(lease_key, b"not-a-string")
 
-        with pytest.raises(LeaderBackendError):
-            await AsyncRedisDistributedLock(client).try_acquire(logical_name, _options())
+        async with asyncio.timeout(timing.acquire + 1.0):
+            with pytest.raises(LeaderBackendError):
+                await AsyncRedisDistributedLock(client).try_acquire(logical_name, _options())
 
 
 @pytest.mark.asyncio
@@ -276,44 +338,49 @@ async def test_async_noscript_and_numeric_boundaries_fail_closed(
     redis_endpoint: RedisEndpoint,
 ) -> None:
     async with (
-        asyncio.timeout(4.0),
         borrowed_async_client(redis_endpoint) as admin,
         borrowed_async_client(redis_endpoint) as client,
     ):
+        timing = observed_timing(client)
         lock = AsyncRedisDistributedLock(client)
-        noscript_name = unique_logical_name("async-noscript")
-        await admin.script_flush()
-        handle = await lock.try_acquire(noscript_name, _options())
-        assert handle is not None
-        assert isinstance(await handle.renew(), Renewed)
-        await handle.release()
+        async with asyncio.timeout(3 * timing.acquire + timing.renew + 2 * timing.release + 1.0):
+            noscript_name = unique_logical_name("async-noscript")
+            await admin.script_flush()
+            handle = await lock.try_acquire(noscript_name, _options())
+            assert handle is not None
+            assert isinstance(await handle.renew(), Renewed)
+            await handle.release()
 
-        exact_name = unique_logical_name("async-large-counter")
-        _, exact_fence = leader_keys(exact_name)
-        await admin.set(exact_fence, b"9007199254740992")
-        exact = await lock.try_acquire(exact_name, _options())
-        assert exact is not None
-        assert exact.lease.fencing_token == 9_007_199_254_740_993
-        await exact.release()
+            exact_name = unique_logical_name("async-large-counter")
+            _, exact_fence = leader_keys(exact_name)
+            await admin.set(exact_fence, b"9007199254740992")
+            exact = await lock.try_acquire(exact_name, _options())
+            assert exact is not None
+            assert exact.lease.fencing_token == 9_007_199_254_740_993
+            await exact.release()
 
-        overflow_name = unique_logical_name("async-overflow")
-        _, overflow_fence = leader_keys(overflow_name)
-        await admin.set(overflow_fence, b"9223372036854775807")
-        with pytest.raises(LeaderBackendError):
-            await lock.try_acquire(overflow_name, _options())
-        assert await admin.get(overflow_fence) == b"9223372036854775807"
-        assert await client.ping() is True
+            overflow_name = unique_logical_name("async-overflow")
+            _, overflow_fence = leader_keys(overflow_name)
+            await admin.set(overflow_fence, b"9223372036854775807")
+            with pytest.raises(LeaderBackendError):
+                await lock.try_acquire(overflow_name, _options())
+            assert await admin.get(overflow_fence) == b"9223372036854775807"
+            assert await client.ping() is True
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("protocol,client_name,database", _ACL_SHAPES)
+@pytest.mark.parametrize("auth,protocol,client_name,database", _ACL_SHAPES)
 async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
     redis_endpoint: RedisEndpoint,
+    auth: str,
     protocol: int,
     client_name: str | None,
     database: int,
 ) -> None:
-    username = f"async-acl-{os.getpid()}-{protocol}-{int(client_name is not None)}-{database}"
+    shape_id = f"{os.getpid()}-{auth}-{protocol}-{int(client_name is not None)}-{database}"
+    admin_username = f"async-admin-{shape_id}"
+    admin_password = "async-admin-fixed-password"
+    target_username = "default" if auth != "username-password" else f"async-acl-{shape_id}"
     password = "async-acl-fixed-password"
     prefix = "async-leader-acl"
     conditional_permissions = []
@@ -324,14 +391,35 @@ async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
     if database != 0:
         conditional_permissions.append("+select")
 
-    async with borrowed_async_client(redis_endpoint) as admin:
+    async with borrowed_async_client(redis_endpoint) as bootstrap:
+        await bootstrap.execute_command(
+            "ACL",
+            "SETUSER",
+            admin_username,
+            "reset",
+            "on",
+            f">{admin_password}",
+            "~*",
+            "+@all",
+        )
+    admin = new_async_client(
+        redis_endpoint,
+        username=admin_username,
+        password=admin_password,
+        protocol=2,
+    )
+    restricted: async_redis.Redis | None = None
+    logical_name = unique_logical_name("async-acl-default")
+    keys = leader_keys(logical_name, prefix)
+    try:
+        credential_rule = "nopass" if auth == "none" else f">{password}"
         await admin.execute_command(
             "ACL",
             "SETUSER",
-            username,
+            target_username,
             "reset",
             "on",
-            f">{password}",
+            credential_rule,
             f"~{prefix}:*",
             "+evalsha",
             "+eval",
@@ -345,32 +433,58 @@ async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
             "+client|setinfo",
             *conditional_permissions,
         )
+        authentication: dict[str, object] = {}
+        if auth == "password":
+            authentication["password"] = password
+        elif auth == "username-password":
+            authentication.update(username=target_username, password=password)
         restricted = new_async_client(
             redis_endpoint,
-            username=username,
-            password=password,
+            **authentication,
             protocol=protocol,
             client_name=client_name,
             db=database,
         )
-        logical_name = unique_logical_name("async-acl-default")
-        keys = leader_keys(logical_name, prefix)
-        try:
-            async with asyncio.timeout(3.0):
-                handle = await AsyncRedisDistributedLock(restricted, prefix=prefix).try_acquire(
-                    logical_name, _options()
-                )
-                assert handle is not None
-                assert isinstance(await handle.renew(), Renewed)
-                await handle.release()
+        timing = observed_timing(restricted)
+        async with asyncio.timeout(timing.acquire + timing.renew + timing.release + 1.0):
+            handle = await AsyncRedisDistributedLock(restricted, prefix=prefix).try_acquire(
+                logical_name, _options()
+            )
+            assert handle is not None
+            assert isinstance(await handle.renew(), Renewed)
+            await handle.release()
 
-                with pytest.raises(redis.exceptions.NoPermissionError):
-                    await restricted.script_load("return 1")
-                with pytest.raises(redis.exceptions.NoPermissionError):
-                    await restricted.ping()
-                with pytest.raises(redis.exceptions.NoPermissionError):
-                    await restricted.get(b"outside-prefix")
-                await restricted.delete(*keys)
+            with pytest.raises(redis.exceptions.NoPermissionError):
+                await restricted.script_load("return 1")
+            with pytest.raises(redis.exceptions.NoPermissionError):
+                await restricted.ping()
+            with pytest.raises(redis.exceptions.NoPermissionError):
+                await restricted.get(b"outside-prefix")
+    finally:
+        try:
+            if restricted is not None:
+                await restricted.aclose()
+            cleanup = new_async_client(
+                redis_endpoint,
+                username=admin_username,
+                password=admin_password,
+                protocol=2,
+                db=database,
+            )
+            try:
+                await cleanup.delete(*keys)
+            finally:
+                await cleanup.aclose()
         finally:
-            await restricted.aclose()
-            await admin.execute_command("ACL", "DELUSER", username)
+            try:
+                if auth == "username-password":
+                    await admin.execute_command("ACL", "DELUSER", target_username)
+                else:
+                    await admin.execute_command(
+                        "ACL", "SETUSER", "default", "reset", "on", "nopass", "~*", "+@all"
+                    )
+            finally:
+                try:
+                    await admin.execute_command("ACL", "DELUSER", admin_username)
+                finally:
+                    await admin.aclose()
