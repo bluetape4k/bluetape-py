@@ -6,6 +6,8 @@
 authoritative writable Redis primary를 대상으로 제한된 sync/asyncio distributed
 lock과 leader elector를 구현합니다. Runtime dependency는
 `bluetape-leader==0.1.0`과 `redis==8.0.1`뿐입니다.
+검증된 server compatibility target은 Redis Server 8입니다. 다른 server major는
+별도로 증명하기 전까지 첫 구현 지원 계약에 포함하지 않습니다.
 
 현재 PyPI 공개는 보류 중입니다. 설치 명령은 공개 이후의 형태를 설명합니다.
 
@@ -168,6 +170,13 @@ Fence counter는 protected data와 함께 backup하고 restore하십시오. Coun
 rollback되었거나 모든 보존 watermark보다 큰 값임을 증명할 수 없다면 writer를 계속
 중지합니다. Active lease를 삭제하거나 downstream state를 낮춰 “복구”하면 안 됩니다.
 
+Redis signed integer 상한은 `9223372036854775807`입니다. Counter가 이 값에
+도달하면 acquire는 fail-closed됩니다. Counter나 downstream watermark가 상한에
+도달했다면 그보다 엄격히 큰 integer token을 복원할 수 없습니다. Writer를 계속
+중지하고, protected store를 compound epoch/token ordering을 사용하는 새로운
+downstream-recognized coordination epoch로 migration하십시오. Redis prefix만 바꾸거나
+counter를 reset하는 것은 안전하지 않습니다.
+
 ## Lease-loss runbook
 
 Renewal loss, owner mismatch, corruption, uncertain release가 발생하면 다음 순서로
@@ -217,10 +226,14 @@ log field나 metric label로 사용하면 안 됩니다.
 - [ ] `redis==8.0.1`을 pin하고 numeric IP 또는 Unix socket, 유한한 양수 timeout,
   zero retry로 새 exact sync/async client를 구성합니다. TLS, hostname, health check,
   callback, event hook, custom response callback을 사용하지 않습니다.
+- [ ] 현재 검증된 server major인 Redis Server 8에 배포합니다. 다른 major를
+  지원한다고 선언하기 전에 complete integration suite로 검증합니다.
 - [ ] 모든 contender를 하나의 writable standalone primary로 routing하고 Sentinel,
   Cluster, proxy, promotion, multi-primary routing을 거부합니다.
 - [ ] 최소 ACL을 적용하고 prefix 밖 접근이 거부되는지 검증합니다.
 - [ ] Fence counter를 protected data와 함께 보존, backup, restore합니다.
+- [ ] Counter가 `9223372036854775807`에 도달하기 전 headroom을 관찰합니다. 소진되면
+  downstream-recognized epoch migration이 끝날 때까지 writer를 중지합니다.
 - [ ] 모든 protected store가 high-watermark와 business data를 atomic하게 비교하고
   commit하게 합니다.
 - [ ] 유한한 deadline 아래에서 contention, cancellation, lease loss, release failure,
