@@ -15,6 +15,8 @@ pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
+pip install "bluetape[leader]"
+pip install "bluetape[leader-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -39,6 +41,8 @@ pip install "bluetape[all]"
 | `asyncio` | `bluetape-async` | `bluetape.asyncio` | no |
 | `cache` | `bluetape-cache` | `bluetape.cache` | no |
 | `cache-redis` | `bluetape-cache-redis` | `bluetape.cache.redis` | no |
+| `leader` | `bluetape-leader` | `bluetape.leader` | no |
+| `leader-redis` | `bluetape-leader-redis` | `bluetape.leader.redis` | no |
 | `codec` | `bluetape-codec` | `bluetape.codec` | no |
 | `collections` | `bluetape-collections` | `bluetape.collections` | no |
 | `compression` | `bluetape-compression` | `bluetape.compression` | no |
@@ -61,6 +65,11 @@ cache를 설치합니다. 별도 `cache-redis` extra는 byte-only sync/async Red
 provider, 크기 제한 result envelope, bounded cross-process load coordination을
 설치합니다. Durable Redis L2 caching과 upstream에 막힌 별도 near-cache
 invalidation issue #56은 제공하지 않습니다.
+
+`leader` extra는 표준 라이브러리만 사용하는 backend-neutral lock, lease, result,
+elector 계약을 설치합니다. 명시적인 `leader-redis` extra는 하나의 writable
+single-primary를 위한 exact redis-py adapter를 추가합니다. 기본 설치는 계속
+core-only이며 Redis adapter는 `dev`와 `all`에서 의도적으로 제외합니다.
 
 `asyncio` extra는 호출 범위가 정해진 bounded structured-concurrency 헬퍼를
 설치합니다. 기본 설치는 계속 `bluetape-core`로 제한합니다.

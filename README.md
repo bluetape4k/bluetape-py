@@ -63,6 +63,8 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1 plus an explicit CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | Stdlib-only bounded sync and async local TTL loading caches. |
 | `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis providers, bounded result envelopes, and sync/async load coordinators. |
+| `bluetape-leader` | `bluetape.leader` | no | active, source workspace | Stdlib-only backend-neutral leader and distributed-lock contracts. |
+| `bluetape-leader-redis` | `bluetape.leader.redis` | no | active, source workspace | Bounded single-primary Redis locks and leader electors with fencing. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | Ecosystem-owned Redis 8, PostgreSQL 18, and selected-service LocalStack test-server lifecycles and connection details. |
 | `bluetape-benchmark` | `bluetape.benchmark` | no | private, source-only | Built/tested benchmark report and comparison contracts; never published. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | FastAPI integration helpers after the core/logging/testing layer stabilizes. |
@@ -85,9 +87,10 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
   module before promising a broad public API.
 - The root `bluetape` distribution exposes extras, but it does not create a
   root `bluetape/__init__.py` import surface.
-- The default meta install remains core-only. Cache, Redis, compression providers,
-  resilience, observability, serde, and Testcontainers are opt-in; Apache Fory is
-  trusted-internal only and available solely through the explicit `fory` extra.
+- The default meta install remains core-only. Cache, Redis, leader coordination,
+  compression providers, resilience, observability, serde, and Testcontainers
+  are opt-in; Apache Fory is trusted-internal only and available solely through
+  the explicit `fory` extra.
 
 ## Install
 
@@ -102,6 +105,8 @@ pip install "bluetape[audit]"
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
+pip install "bluetape[leader]"
+pip install "bluetape[leader-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -134,6 +139,8 @@ pip install bluetape-money
 pip install bluetape-async
 pip install bluetape-cache
 pip install bluetape-cache-redis
+pip install bluetape-leader
+pip install bluetape-leader-redis
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -497,6 +504,8 @@ The default `bluetape` install remains core-only. See the
 | `bluetape-audit` | [packages/bluetape-audit/README.md](packages/bluetape-audit/README.md) / [한국어](packages/bluetape-audit/README.ko.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.md](packages/bluetape-cache-redis/README.md) / [한국어](packages/bluetape-cache-redis/README.ko.md) |
+| `bluetape-leader` | [packages/bluetape-leader/README.md](packages/bluetape-leader/README.md) / [한국어](packages/bluetape-leader/README.ko.md) |
+| `bluetape-leader-redis` | [packages/bluetape-leader-redis/README.md](packages/bluetape-leader-redis/README.md) / [한국어](packages/bluetape-leader-redis/README.ko.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.md](packages/bluetape-benchmark/README.md) / [한국어](packages/bluetape-benchmark/README.ko.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |

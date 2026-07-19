@@ -213,7 +213,11 @@ Historical release scope; all items are closed.
   literal text matching/masking, and Pillow single-image transforms; prove
   graph values and Neo4j interoperability through examples before publishing a
   common graph API.
-- #17 - Leader election and distributed lock contracts.
+- Issue #17 - Leader election and distributed lock contracts. Implemented as the
+  stdlib-only `bluetape-leader` contract package and explicit
+  `bluetape-leader-redis` single-primary adapter with sync/async bounded
+  lifecycle, fencing, isolated wheels, Redis 8 contention evidence, and
+  bilingual operating guidance; review and merge gates remain pending.
 - #18 - JWT and key-rotation helpers.
 - #19 - Rules, workflow, batch, and work-report primitives.
 - #20 - Probabilistic data structure helpers.

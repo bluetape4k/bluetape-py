@@ -61,6 +61,8 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-serde` | `bluetape.serde` | no | active, source workspace | Strict JSON v1과 명시적인 CPython 3.13 Apache Fory extra. |
 | `bluetape-cache` | `bluetape.cache` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded sync/async local TTL loading cache. |
 | `bluetape-cache-redis` | `bluetape.cache.redis` | no | active, source workspace | Byte-only Redis provider, 크기 제한 result envelope, sync/async load coordinator. |
+| `bluetape-leader` | `bluetape.leader` | no | active, source workspace | 표준 라이브러리만 사용하는 backend-neutral leader와 distributed-lock 계약. |
+| `bluetape-leader-redis` | `bluetape.leader.redis` | no | active, source workspace | Fencing을 갖춘 bounded single-primary Redis lock과 leader elector. |
 | `bluetape-testcontainers` | `bluetape.testcontainers` | no | active, source workspace | 생태계가 관리하는 Redis 8, PostgreSQL 18, 선택 서비스 LocalStack 테스트 서버 수명주기와 연결 정보. |
 | `bluetape-benchmark` | `bluetape.benchmark` | no | private, source-only | Build/test 대상 benchmark report와 comparison contract이며 publish하지 않음. |
 | `bluetape-fastapi` | `bluetape.fastapi` | no | planned | core/logging/testing 계층이 안정화된 뒤 추가할 FastAPI 연동 헬퍼. |
@@ -83,9 +85,9 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
   전에 내부 지원 모듈로 먼저 성장시킵니다.
 - 루트 `bluetape` 배포 패키지는 extras를 제공하지만, 루트
   `bluetape/__init__.py` import surface는 만들지 않습니다.
-- 기본 meta 설치는 계속 core-only입니다. Cache, Redis, compression provider,
-  resilience, observability, serde, Testcontainers는 opt-in이며 Apache Fory는 trusted-internal
-  전용 `fory` extra로만 제공합니다.
+- 기본 meta 설치는 계속 core-only입니다. Cache, Redis, leader coordination,
+  compression provider, resilience, observability, serde, Testcontainers는 opt-in이며
+  Apache Fory는 trusted-internal 전용 `fory` extra로만 제공합니다.
 
 ## 설치
 
@@ -100,6 +102,8 @@ pip install "bluetape[audit]"
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
+pip install "bluetape[leader]"
+pip install "bluetape[leader-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -132,6 +136,8 @@ pip install bluetape-money
 pip install bluetape-async
 pip install bluetape-cache
 pip install bluetape-cache-redis
+pip install bluetape-leader
+pip install bluetape-leader-redis
 pip install bluetape-codec
 pip install bluetape-collections
 pip install bluetape-compression
@@ -490,6 +496,8 @@ assert price == Money.of("12.35", USD)
 | `bluetape-audit` | [한국어](packages/bluetape-audit/README.ko.md) / [English](packages/bluetape-audit/README.md) |
 | `bluetape-cache` | [packages/bluetape-cache/README.md](packages/bluetape-cache/README.md) |
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.ko.md](packages/bluetape-cache-redis/README.ko.md) / [English](packages/bluetape-cache-redis/README.md) |
+| `bluetape-leader` | [한국어](packages/bluetape-leader/README.ko.md) / [English](packages/bluetape-leader/README.md) |
+| `bluetape-leader-redis` | [한국어](packages/bluetape-leader-redis/README.ko.md) / [English](packages/bluetape-leader-redis/README.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.ko.md](packages/bluetape-benchmark/README.ko.md) / [English](packages/bluetape-benchmark/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |

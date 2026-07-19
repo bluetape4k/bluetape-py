@@ -22,6 +22,13 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Implement Issue #17 with the stdlib-only `bluetape-leader` contract package
+  and opt-in `bluetape-leader-redis` adapter. The first Redis slice provides
+  bounded sync/async locks and electors, exact borrowed-client validation,
+  owner-safe Lua lifecycle, fencing tokens, cancellation cleanup, real Redis 8
+  contention evidence, isolated wheel checks, and bilingual migration,
+  rollback, ACL, topology, and operator guidance. The default install remains
+  core-only and Redis leader support stays outside `dev` and `all`.
 - Add the opt-in, stdlib-only `bluetape-audit` distribution with immutable
   storage-neutral audit values, explicit caller-supplied limits, value-safe
   errors, and deterministic adapter preservation helpers. Applications retain

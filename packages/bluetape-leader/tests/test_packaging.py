@@ -115,7 +115,12 @@ def test_namespace_is_extended_before_the_adapter_child_imports() -> None:
     adapter = importlib.import_module("bluetape.leader.redis")
 
     assert len(list(leader.__path__)) >= 2
-    assert adapter.__all__ == []
+    assert adapter.__all__ == [
+        "RedisDistributedLock",
+        "AsyncRedisDistributedLock",
+        "RedisLeaderElector",
+        "AsyncRedisLeaderElector",
+    ]
 
 
 def test_lock_registers_the_stdlib_only_core_distribution() -> None:
@@ -125,11 +130,11 @@ def test_lock_registers_the_stdlib_only_core_distribution() -> None:
     assert packages["bluetape-leader"].get("dependencies", []) == []
 
 
-def test_initial_readmes_state_only_the_current_package_boundary() -> None:
+def test_readmes_state_the_implemented_backend_neutral_boundary() -> None:
     english = " ".join((ROOT / "packages/bluetape-leader/README.md").read_text().split())
     korean = " ".join((ROOT / "packages/bluetape-leader/README.ko.md").read_text().split())
 
-    assert "The current public surface contains only sanitized leader error contracts." in english
-    assert "Leader options, leases, electors, and lock behavior are not implemented yet." in english
-    assert "현재 공개 표면은 값이 노출되지 않는 leader 오류 계약만 포함합니다." in korean
-    assert "옵션, lease, elector, lock 동작은 아직 구현하지 않았습니다." in korean
+    assert "stdlib-only, backend-neutral contracts" in english
+    assert "The default `bluetape` install remains core-only." in english
+    assert "표준 라이브러리 전용 backend-neutral 계약" in korean
+    assert "기본 `bluetape` 설치는 계속 core-only" in korean

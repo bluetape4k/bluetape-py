@@ -13,6 +13,8 @@ pip install bluetape
 pip install "bluetape[asyncio]"
 pip install "bluetape[cache]"
 pip install "bluetape[cache-redis]"
+pip install "bluetape[leader]"
+pip install "bluetape[leader-redis]"
 pip install "bluetape[codec]"
 pip install "bluetape[collections]"
 pip install "bluetape[compression]"
@@ -43,6 +45,8 @@ Focused packages own focused import paths such as `bluetape.asyncio`,
 | `asyncio` | `bluetape-async` | `bluetape.asyncio` | no |
 | `cache` | `bluetape-cache` | `bluetape.cache` | no |
 | `cache-redis` | `bluetape-cache-redis` | `bluetape.cache.redis` | no |
+| `leader` | `bluetape-leader` | `bluetape.leader` | no |
+| `leader-redis` | `bluetape-leader-redis` | `bluetape.leader.redis` | no |
 | `codec` | `bluetape-codec` | `bluetape.codec` | no |
 | `collections` | `bluetape-collections` | `bluetape.collections` | no |
 | `compression` | `bluetape-compression` | `bluetape.compression` | no |
@@ -65,6 +69,11 @@ loading caches. The separate `cache-redis` extra installs byte-only sync/async
 Redis providers, bounded result envelopes, and bounded cross-process load
 coordination. It does not provide durable Redis L2 caching or the separate
 upstream-blocked near-cache invalidation tracked by issue #56.
+
+The `leader` extra installs stdlib-only backend-neutral lock, lease, result,
+and elector contracts. The explicit `leader-redis` extra adds the exact
+redis-py adapter for one writable single-primary. The default remains
+core-only; the Redis adapter is intentionally excluded from `dev` and `all`.
 
 The `asyncio` extra installs `bluetape-async`, which provides bounded,
 call-scoped structured-concurrency helpers. The default install remains limited
@@ -90,7 +99,7 @@ The `serde` extra installs strict payload contracts and bounded JSON v1
 serialization. The separate `fory` extra installs `bluetape-serde[fory]` and
 currently requires CPython 3.13. Fory is intentionally excluded from the base,
 `serde`, `dev`, and `all` extras. The full extra list is `asyncio`, `cache`,
-`cache-redis`, `codec`, `collections`, `compression`, `compression-lz4`,
+`cache-redis`, `leader`, `leader-redis`, `codec`, `collections`, `compression`, `compression-lz4`,
 `compression-snappy`, `compression-zstd`, `compression-native`, `logging`,
 `resilience`, `serde`, `fory`, `testing`, `dev`, and `all`.
 

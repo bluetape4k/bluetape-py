@@ -60,11 +60,11 @@ def test_lock_resolves_exact_adapter_runtime_dependencies() -> None:
     assert packages["redis"]["version"] == "8.0.1"
 
 
-def test_initial_readmes_reserve_only_the_adapter_boundary() -> None:
+def test_readmes_state_the_implemented_single_primary_adapter_boundary() -> None:
     english = " ".join((ROOT / "packages/bluetape-leader-redis/README.md").read_text().split())
     korean = " ".join((ROOT / "packages/bluetape-leader-redis/README.ko.md").read_text().split())
 
-    assert "The current package only reserves the Redis adapter namespace." in english
-    assert "Redis lock and leader behavior are not implemented yet." in english
-    assert "현재 패키지는 Redis adapter namespace만 예약합니다." in korean
-    assert "Redis lock과 leader 동작은 아직 구현하지 않았습니다." in korean
+    assert "opt-in Redis adapter" in english
+    assert "one authoritative writable Redis primary" in english
+    assert "opt-in Redis adapter" in korean
+    assert "authoritative writable Redis primary" in korean
