@@ -164,6 +164,42 @@ jobs:
           uv run --package bluetape-cache-redis --python 3.13.14
           pytest -m testcontainers packages/bluetape-cache-redis -q
 
+  leader-redis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.13.14"
+
+      - name: Sync Redis leader test dependencies
+        run: >-
+          uv sync --package bluetape-leader-redis --group test
+          --python 3.13.14 --locked
+
+      - name: Verify Docker runtime
+        run: docker info
+
+      - name: Test Redis leader unit contracts
+        run: >-
+          uv run --package bluetape-leader-redis --group test --python 3.13.14 pytest
+          --strict-markers -m "not testcontainers"
+          packages/bluetape-leader-redis/tests -rs -q
+
+      - name: Test Redis leader integration contracts serially
+        run: |
+          uv run --package bluetape-leader-redis --group test --python 3.13.14 pytest \
+            --strict-markers -m testcontainers packages/bluetape-leader-redis/tests \
+            --junitxml="$RUNNER_TEMP/leader-redis-testcontainers.xml" -rs -q
+          uv run python -c 'import os, xml.etree.ElementTree as E; r=E.parse(os.environ["RUNNER_TEMP"] + "/leader-redis-testcontainers.xml").getroot(); s=[r] if r.tag.endswith("testsuite") else list(r.findall("testsuite")); assert sum(int(x.attrib.get("tests", 0)) for x in s) > 0 and all(sum(int(x.attrib.get(k, 0)) for x in s) == 0 for k in ("failures", "errors", "skipped"))'
+
   compression-native:
     runs-on: ubuntu-latest
     steps:
