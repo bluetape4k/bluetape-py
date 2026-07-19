@@ -43,6 +43,7 @@ class RespServer(AbstractContextManager["RespServer"]):
         self._listener.listen()
         self.port = self._listener.getsockname()[1] if unix_path is None else 0
         self.commands: list[list[tuple[bytes, ...]]] = []
+        self._commands_changed = threading.Condition()
         self.accepted = threading.Event()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=False)
@@ -59,19 +60,30 @@ class RespServer(AbstractContextManager["RespServer"]):
         if self.unix_path is not None:
             self.unix_path.unlink(missing_ok=True)
 
+    def wait_for_command_count(self, expected: int, timeout: float) -> bool:
+        with self._commands_changed:
+            return self._commands_changed.wait_for(
+                lambda: bool(self.commands) and len(self.commands[0]) >= expected,
+                timeout=timeout,
+            )
+
     def _serve(self) -> None:
         try:
             for _ in range(self._connections):
                 connection, _address = self._listener.accept()
                 self.accepted.set()
                 seen: list[tuple[bytes, ...]] = []
-                self.commands.append(seen)
+                with self._commands_changed:
+                    self.commands.append(seen)
+                    self._commands_changed.notify_all()
                 with connection, connection.makefile("rb") as reader:
                     while not self._stop.is_set():
                         command = _read_command(reader)
                         if command is None:
                             break
-                        seen.append(command)
+                        with self._commands_changed:
+                            seen.append(command)
+                            self._commands_changed.notify_all()
                         if self._stall_after is not None and len(seen) > self._stall_after:
                             self._stop.wait(1)
                             break
@@ -432,6 +444,7 @@ def test_stalled_handshake_and_primitive_responses_respect_e_p_bound(
             started = time.monotonic()
             timing = _exercise_stalled_command(client_family, options)
             elapsed = time.monotonic() - started
+            assert server.wait_for_command_count(stall_after + 1, timeout=1.0)
 
         assert timing.handshake_round_trips == expected_handshakes
         assert len(server.commands) == 1
