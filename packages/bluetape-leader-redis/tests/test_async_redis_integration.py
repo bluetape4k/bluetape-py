@@ -369,6 +369,26 @@ async def test_async_noscript_and_numeric_boundaries_fail_closed(
 
 
 @pytest.mark.asyncio
+async def test_async_expiring_fence_counter_fails_closed_without_issuing_a_lease(
+    redis_endpoint: RedisEndpoint,
+) -> None:
+    async with (
+        borrowed_async_client(redis_endpoint) as admin,
+        borrowed_async_client(redis_endpoint) as client,
+    ):
+        logical_name = unique_logical_name("async-expiring-counter")
+        lease_key, fence_key = leader_keys(logical_name)
+        await admin.set(fence_key, b"9", px=5_000)
+
+        with pytest.raises(LeaderBackendError):
+            await AsyncRedisDistributedLock(client).try_acquire(logical_name, _options())
+
+        assert await admin.get(fence_key) == b"9"
+        assert await admin.pttl(fence_key) > 0
+        assert await admin.get(lease_key) is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("auth,protocol,client_name,database", _ACL_SHAPES)
 async def test_async_acl_matrix_grants_only_shape_specific_adapter_commands(
     redis_endpoint: RedisEndpoint,
