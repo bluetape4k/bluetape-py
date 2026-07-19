@@ -73,3 +73,18 @@ claim.
 
 Coverage aggregation and nightly scheduling are N/A for the same reasons
 recorded in the TDD ledger. Final exact-head replay remains mandatory.
+
+## Post-PR Linux timing correction
+
+The first hosted PR run showed that observing a command after timeout was not
+enough: under Linux async TCP scheduling, the client could exhaust the final
+handshake response timeout before emitting the primitive command. The repaired
+harness keeps handshake-stage stalls separate. For the primitive stage it
+pre-establishes the exact supported connection with a bounded 500 ms setup
+timeout, restores the validated 10 ms response timeout on that connection, and
+only then issues `PING`. A condition-based observation wait proves the command
+was actually received before server teardown; it does not replace or extend
+the measured Redis timeout bound.
+
+The corrected local timing matrix passed all `206` cases. Hosted CI and the
+new exact-head performance/stability lenses remain the authority for closure.
