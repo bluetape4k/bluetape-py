@@ -217,11 +217,11 @@ def _validate_temporal_claims(
     *,
     now: datetime,
 ) -> None:
-    if claims.expires_at is not None and now - profile.clock_skew >= claims.expires_at:
+    if claims.expires_at is not None and now - claims.expires_at >= profile.clock_skew:
         raise JWTExpiredError() from None
-    if claims.not_before is not None and now + profile.clock_skew < claims.not_before:
+    if claims.not_before is not None and claims.not_before - now > profile.clock_skew:
         raise JWTNotYetValidError() from None
-    if claims.issued_at is not None and claims.issued_at > now + profile.clock_skew:
+    if claims.issued_at is not None and claims.issued_at - now > profile.clock_skew:
         raise JWTNotYetValidError() from None
     if (
         claims.expires_at is not None
@@ -232,7 +232,11 @@ def _validate_temporal_claims(
     if profile.max_token_age is not None:
         if claims.issued_at is None:
             raise JWTClaimError() from None
-        if now - claims.issued_at > profile.max_token_age + profile.clock_skew:
+        token_age = now - claims.issued_at
+        if (
+            token_age > profile.max_token_age
+            and token_age - profile.max_token_age > profile.clock_skew
+        ):
             raise JWTExpiredError() from None
 
 

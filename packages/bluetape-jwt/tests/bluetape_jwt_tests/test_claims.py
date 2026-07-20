@@ -1,13 +1,13 @@
 """Immutable JWT claim value tests."""
 
 from dataclasses import FrozenInstanceError
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from importlib import import_module
 from types import MappingProxyType
 
 import bluetape.jwt as jwt
 import pytest
-from bluetape.jwt._claims import _claims_from_payload, _claims_to_payload
+from bluetape.jwt._claims import _claims_from_payload, _claims_to_payload, _freeze_json
 
 
 def test_custom_claims_are_deeply_frozen() -> None:
@@ -27,27 +27,43 @@ def test_numeric_date_rejects_bool_and_overflow() -> None:
     convert = getattr(claims_module, "_numeric_date_to_datetime", None)
     assert callable(convert)
 
-    for invalid in (True, False, 10**100, -(10**100)):
+    for invalid in (
+        True,
+        False,
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        10**100,
+        -(10**100),
+    ):
         with pytest.raises(jwt.JWTMalformedTokenError):
             convert(invalid)
 
 
 def test_claims_normalize_audience_and_datetimes_without_mutating_caller() -> None:
-    eastern = datetime(2025, 1, 1, 3, tzinfo=UTC) + timedelta(hours=9)
+    korean_time = datetime(2025, 1, 1, 9, tzinfo=timezone(timedelta(hours=9)))
     audience = ["api", "admin"]
     claims = jwt.TokenClaims(
         issuer="issuer",
         subject="subject",
         audience=audience,
-        expires_at=eastern,
+        expires_at=korean_time,
         jwt_id="identifier",
     )
 
     audience.append("changed")
     assert claims.audience == ("api", "admin")
-    assert claims.expires_at == eastern.astimezone(UTC)
+    assert claims.expires_at == datetime(2025, 1, 1, tzinfo=UTC)
     with pytest.raises(FrozenInstanceError):
         claims.subject = "changed"
+
+
+def test_duplicate_audiences_preserve_caller_and_inbound_order() -> None:
+    caller = jwt.TokenClaims(audience=["api", "api", "admin"])
+    inbound = _claims_from_payload({"aud": ["api", "api", "admin"]})
+
+    assert caller.audience == ("api", "api", "admin")
+    assert inbound.audience == ("api", "api", "admin")
 
 
 @pytest.mark.parametrize("field", ["expires_at", "not_before", "issued_at"])
@@ -75,20 +91,28 @@ def test_custom_claims_reject_non_json_or_ambiguous_values(custom: object) -> No
         jwt.TokenClaims(custom=custom)
 
 
-def test_custom_claims_reject_cycles_depth_and_node_overflow() -> None:
+def test_custom_claims_reject_cycles_and_enforce_exact_depth_budget() -> None:
     cyclic: dict[str, object] = {}
     cyclic["self"] = cyclic
     with pytest.raises(jwt.JWTClaimError):
         jwt.TokenClaims(custom=cyclic)
 
-    deep: object = "leaf"
-    for _ in range(33):
-        deep = [deep]
+    at_limit: object = "leaf"
+    for _ in range(32):
+        at_limit = [at_limit]
+    assert _freeze_json(at_limit)
+
+    over_limit: object = [at_limit]
     with pytest.raises(jwt.JWTClaimError):
-        jwt.TokenClaims(custom={"deep": deep})
+        _freeze_json(over_limit)
+
+
+def test_custom_claims_enforce_exact_node_budget() -> None:
+    at_limit = _freeze_json([None] * 9_999)
+    assert len(at_limit) == 9_999
 
     with pytest.raises(jwt.JWTClaimError):
-        jwt.TokenClaims(custom={"many": [None] * 10_000})
+        _freeze_json([None] * 10_000)
 
 
 def test_registered_claim_serialization_uses_integer_numeric_dates() -> None:
@@ -135,6 +159,9 @@ def test_inbound_payload_conversion_normalizes_and_freezes() -> None:
         {"sub": None},
         {"jti": None},
         {"iat": True},
+        {"iat": float("nan")},
+        {"iat": float("inf")},
+        {"iat": float("-inf")},
         {"nested": b"not-json"},
         {"": "invalid"},
     ],
