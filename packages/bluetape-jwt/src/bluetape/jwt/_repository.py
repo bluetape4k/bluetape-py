@@ -16,7 +16,7 @@ from bluetape.jwt._keys import JWTKey
 
 logger = logging.getLogger(__name__)
 
-_LOG_MESSAGE = "JWT key repository mutation"
+_LOG_MESSAGE = "jwt_repository_transition"
 
 
 def _raise_configuration_error() -> None:
@@ -252,7 +252,7 @@ class InMemoryKeyRepository:
         logger.info(
             _LOG_MESSAGE,
             extra={
-                "event": "jwt_key_repository_mutation",
+                "event": "jwt_repository_transition",
                 "operation": operation,
                 "outcome": "success",
                 "error_category": "none",
@@ -268,7 +268,7 @@ class InMemoryKeyRepository:
         logger.warning(
             _LOG_MESSAGE,
             extra={
-                "event": "jwt_key_repository_mutation",
+                "event": "jwt_repository_transition",
                 "operation": operation,
                 "outcome": "failure",
                 "error_category": category,

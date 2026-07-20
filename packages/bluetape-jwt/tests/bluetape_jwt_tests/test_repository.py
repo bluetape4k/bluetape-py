@@ -319,8 +319,8 @@ def test_success_logging_is_one_value_free_info_per_mutation(
         assert len(caplog.records) == 1
         record = caplog.records[0]
         assert record.levelno == logging.INFO
-        assert record.getMessage() == "JWT key repository mutation"
-        assert record.event == "jwt_key_repository_mutation"  # type: ignore[attr-defined]
+        assert record.getMessage() == "jwt_repository_transition"
+        assert record.event == "jwt_repository_transition"  # type: ignore[attr-defined]
         assert record.operation == name  # type: ignore[attr-defined]
         assert record.outcome == "success"  # type: ignore[attr-defined]
         rendered = f"{record.__dict__!r}\n{record.getMessage()}"
@@ -344,7 +344,8 @@ def test_failure_logs_and_exceptions_never_expose_values(
     assert canary not in rendered_exception
     assert len(caplog.records) == 1
     record = caplog.records[0]
-    assert record.getMessage() == "JWT key repository mutation"
+    assert record.getMessage() == "jwt_repository_transition"
+    assert record.event == "jwt_repository_transition"  # type: ignore[attr-defined]
     assert record.outcome == "failure"  # type: ignore[attr-defined]
     assert record.error_category == "key_state"  # type: ignore[attr-defined]
     assert record.exc_info is None
