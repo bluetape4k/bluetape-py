@@ -24,6 +24,11 @@ PUBLIC_EXPORTS = [
     "JWTCacheError",
     "JWSAlgorithm",
     "JWTKey",
+    "KeyStatus",
+    "KeyEntry",
+    "KeySnapshot",
+    "KeyRepository",
+    "InMemoryKeyRepository",
 ]
 
 
