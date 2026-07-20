@@ -3,6 +3,7 @@
 from pkgutil import extend_path
 
 from bluetape.jwt._algorithms import JWSAlgorithm
+from bluetape.jwt._cache import VerifiedTokenCacheOptions
 from bluetape.jwt._claims import JSONValue, TokenClaims, VerifiedToken
 from bluetape.jwt._errors import (
     JWTCacheError,
@@ -64,4 +65,5 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "TokenProvider",
     "IssuanceProfileProvider",
     "JWSProvider",
+    "VerifiedTokenCacheOptions",
 ]
