@@ -24,11 +24,16 @@ PUBLIC_EXPORTS = [
     "JWTCacheError",
     "JWSAlgorithm",
     "KeyStatus",
+    "JSONValue",
     "JWTKey",
     "KeyEntry",
     "KeySnapshot",
     "KeyRepository",
     "InMemoryKeyRepository",
+    "TokenClaims",
+    "VerifiedToken",
+    "IssuanceProfile",
+    "ValidationProfile",
 ]
 
 
