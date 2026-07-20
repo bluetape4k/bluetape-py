@@ -5,6 +5,7 @@ from dataclasses import FrozenInstanceError
 from types import MappingProxyType
 from typing import Any
 
+import bluetape.jwt._keys as key_module
 import pytest
 from bluetape.jwt import JWSAlgorithm, JWTKey, JWTKeyError
 from cryptography.hazmat.primitives import serialization
@@ -424,6 +425,74 @@ def test_private_jwk_copies_caller_owned_key_operations(
         ).payload
         == b"caller mutation cannot alter policy"
     )
+
+
+def test_private_jwk_snapshots_key_operations_before_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    rsa_material: dict[str, Any],
+) -> None:
+    caller_operations = ["sign", "verify"]
+    original_validator = key_module._validate_jwk_metadata
+
+    def mutate_caller_after_validation(
+        jwk: dict[str, Any],
+        *,
+        kid: str,
+        algorithm: JWSAlgorithm,
+        private: bool,
+    ) -> None:
+        original_validator(
+            jwk,
+            kid=kid,
+            algorithm=algorithm,
+            private=private,
+        )
+        caller_operations[:] = ["decrypt"]
+
+    monkeypatch.setattr(
+        key_module,
+        "_validate_jwk_metadata",
+        mutate_caller_after_validation,
+    )
+    key = JWTKey.from_rsa_private(
+        "rsa-key",
+        JWSAlgorithm.RS256,
+        {**rsa_material["private_jwk"], "key_ops": caller_operations},
+    )
+    provider_key = object.__getattribute__(key, "_provider_key")
+    compact = jws.serialize_compact(
+        {"alg": "RS256"},
+        b"snapshot survives validation callback",
+        provider_key,
+        algorithms=["RS256"],
+    )
+
+    assert provider_key.get("key_ops") == ["sign", "verify"]
+    assert (
+        jws.deserialize_compact(
+            compact,
+            provider_key,
+            algorithms=["RS256"],
+        ).payload
+        == b"snapshot survives validation callback"
+    )
+
+
+def test_jwk_rejects_key_operation_list_subclasses(
+    rsa_material: dict[str, Any],
+) -> None:
+    class CallerOperations(list[str]):
+        pass
+
+    with pytest.raises(JWTKeyError):
+        JWTKey.from_rsa_private(
+            "rsa-key",
+            JWSAlgorithm.RS256,
+            {
+                **rsa_material["private_jwk"],
+                "key_ops": CallerOperations(["sign", "verify"]),
+            },
+        )
 
 
 def test_rsa_jwk_rejects_invalid_mapping_keys_and_key_type(
