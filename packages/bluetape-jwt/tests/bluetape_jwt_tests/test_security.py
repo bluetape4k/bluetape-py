@@ -149,6 +149,37 @@ def test_key_family_mismatch_is_rejected_before_signature() -> None:
         provider.verify(token)
 
 
+@pytest.mark.parametrize("algorithm", list(jwt.JWSAlgorithm))
+def test_every_algorithm_rejects_header_mismatch_before_key_lookup(
+    algorithm: jwt.JWSAlgorithm,
+) -> None:
+    mismatch = "RS256" if algorithm is jwt.JWSAlgorithm.HS256 else "HS256"
+    profile = jwt.ValidationProfile(
+        token_type="access+jwt",
+        allowed_issuers=frozenset({"issuer"}),
+        accepted_audiences=frozenset({"api"}),
+        protected_headers={"tenant": "primary"},
+        clock=lambda: NOW,
+    )
+    provider = jwt.JWSProvider(
+        algorithm,
+        jwt.InMemoryKeyRepository(),
+        profile,
+    )
+    token = compact_token(
+        {
+            "alg": mismatch,
+            "kid": "missing-key",
+            "typ": "access+jwt",
+            "tenant": "primary",
+        },
+        {"iss": "issuer", "aud": ["api"]},
+    )
+
+    with pytest.raises(jwt.JWTUnsupportedTokenError):
+        provider.verify(token)
+
+
 def test_duplicate_payload_name_is_rejected() -> None:
     provider, key = make_provider()
     token = sign_payload(
