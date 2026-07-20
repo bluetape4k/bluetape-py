@@ -92,6 +92,40 @@ def test_validation_profile_freezes_policy_and_adds_mandatory_claims() -> None:
     assert profile.protected_headers == {"tenant": "primary"}
 
 
+def test_validation_profile_repr_does_not_expose_policy_values() -> None:
+    profile = jwt.ValidationProfile(
+        token_type="type-canary",
+        allowed_issuers=frozenset({"issuer-canary"}),
+        accepted_audiences=frozenset({"audience-canary"}),
+        required_claims=frozenset({"claim-canary"}),
+        protected_headers={"header-name-canary": "header-value-canary"},
+    )
+
+    rendered = repr(profile)
+    assert all(
+        canary not in rendered
+        for canary in (
+            "type-canary",
+            "issuer-canary",
+            "audience-canary",
+            "claim-canary",
+            "header-name-canary",
+            "header-value-canary",
+        )
+    )
+
+
+def test_validation_profile_rejects_non_utf8_policy_strings() -> None:
+    with pytest.raises(jwt.JWTConfigurationError) as captured:
+        jwt.ValidationProfile(
+            token_type="\ud800",
+            allowed_issuers=frozenset({"issuer"}),
+            accepted_audiences=frozenset({"api"}),
+        )
+
+    assert captured.value.__cause__ is None
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

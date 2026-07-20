@@ -50,6 +50,10 @@ def _raise_configuration_error() -> NoReturn:
 def _validate_name(value: object) -> str:
     if type(value) is not str or not value or value != value.strip() or "\x00" in value:
         _raise_configuration_error()
+    try:
+        value.encode("utf-8")
+    except UnicodeError:
+        _raise_configuration_error()
     return value
 
 
@@ -105,7 +109,7 @@ class IssuanceProfile:
         object.__setattr__(self, "max_ttl", max_ttl)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class ValidationProfile:
     """One immutable validation policy bound to a provider."""
 

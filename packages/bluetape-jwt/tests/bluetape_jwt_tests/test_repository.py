@@ -118,6 +118,17 @@ def test_snapshot_defensively_copies_and_enforces_invariants() -> None:
             KeySnapshot(entries, epoch)  # type: ignore[arg-type]
 
 
+def test_snapshot_repr_does_not_expose_kids_or_epoch() -> None:
+    snapshot = KeySnapshot(
+        {"kid-canary": KeyEntry(KeyStatus.RETIRED, hmac_key("kid-canary"))},
+        424_242,
+    )
+
+    rendered = repr(snapshot)
+    assert "kid-canary" not in rendered
+    assert "424242" not in rendered
+
+
 def test_constructor_bootstrap_and_failure_are_atomic(
     rsa_pems: tuple[bytes, bytes],
     caplog: pytest.LogCaptureFixture,

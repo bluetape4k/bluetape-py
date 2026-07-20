@@ -177,7 +177,7 @@ def _thaw_json(value: JSONValue) -> object:
     return value
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class TokenClaims:
     """Caller-owned registered and custom claims captured immutably."""
 
@@ -212,7 +212,7 @@ class TokenClaims:
         object.__setattr__(self, "custom", frozen)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class VerifiedToken:
     """Fully verified immutable token projection returned to callers."""
 

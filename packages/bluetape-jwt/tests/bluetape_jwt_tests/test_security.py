@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tracemalloc
 from base64 import urlsafe_b64encode
 from datetime import UTC, datetime
 
@@ -115,6 +116,21 @@ def test_algorithm_mismatch_fails_before_key_resolution() -> None:
         provider.verify(token)
 
     assert repository.snapshot_calls == 2
+
+
+def test_oversized_token_is_rejected_before_allocating_a_utf8_copy() -> None:
+    provider, _ = make_provider()
+    oversized = "a" * (8 * 1024 * 1024)
+
+    tracemalloc.start()
+    try:
+        with pytest.raises(jwt.JWTMalformedTokenError):
+            provider.verify(oversized)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 1024 * 1024
 
 
 def test_key_family_mismatch_is_rejected_before_signature() -> None:
