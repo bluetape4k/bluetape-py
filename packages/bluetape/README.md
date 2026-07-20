@@ -23,6 +23,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[id]"
+pip install "bluetape[jwt]"
 pip install "bluetape[logging]"
 pip install "bluetape[measure]"
 pip install "bluetape[money]"
@@ -55,6 +56,7 @@ Focused packages own focused import paths such as `bluetape.asyncio`,
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
 | `id` | `bluetape-id` | `bluetape.id` | no |
+| `jwt` | `bluetape-jwt` | `bluetape.jwt` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
 | `measure` | `bluetape-measure` | `bluetape.measure` | no |
 | `money` | `bluetape-money` | `bluetape.money` | no |
@@ -69,6 +71,10 @@ loading caches. The separate `cache-redis` extra installs byte-only sync/async
 Redis providers, bounded result envelopes, and bounded cross-process load
 coordination. It does not provide durable Redis L2 caching or the separate
 upstream-blocked near-cache invalidation tracked by issue #56.
+
+The `jwt` extra installs strict synchronous JWS signing and verification,
+in-memory key rotation, an issuance-policy decorator, and an optional bounded
+verified-result cache. It does not add JWT to the core-only default install.
 
 The `leader` extra installs stdlib-only backend-neutral lock, lease, result,
 and elector contracts. The explicit `leader-redis` extra adds the exact

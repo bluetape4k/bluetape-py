@@ -25,6 +25,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[id]"
+pip install "bluetape[jwt]"
 pip install "bluetape[logging]"
 pip install "bluetape[measure]"
 pip install "bluetape[money]"
@@ -51,6 +52,7 @@ pip install "bluetape[all]"
 | `compression-zstd` | `bluetape-compression[zstd]` | `bluetape.compression.native` | no |
 | `compression-native` | `bluetape-compression[native]` | `bluetape.compression.native` | no |
 | `id` | `bluetape-id` | `bluetape.id` | no |
+| `jwt` | `bluetape-jwt` | `bluetape.jwt` | no |
 | `logging` | `bluetape-logging` | `bluetape.logging` | no |
 | `measure` | `bluetape-measure` | `bluetape.measure` | no |
 | `money` | `bluetape-money` | `bluetape.money` | no |
@@ -65,6 +67,10 @@ cache를 설치합니다. 별도 `cache-redis` extra는 byte-only sync/async Red
 provider, 크기 제한 result envelope, bounded cross-process load coordination을
 설치합니다. Durable Redis L2 caching과 upstream에 막힌 별도 near-cache
 invalidation issue #56은 제공하지 않습니다.
+
+`jwt` extra는 엄격한 동기 JWS 발급·검증, in-memory key rotation,
+issuance-policy decorator, 선택적 bounded verified-result cache를 설치합니다.
+기본 core-only 설치에는 JWT가 추가되지 않습니다.
 
 `leader` extra는 표준 라이브러리만 사용하는 backend-neutral lock, lease, result,
 elector 계약을 설치합니다. 명시적인 `leader-redis` extra는 하나의 writable
