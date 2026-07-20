@@ -70,7 +70,7 @@ class KeyEntry:
             _raise_key_state_error()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, repr=False)
 class KeySnapshot:
     """Immutable point-in-time view of a repository state."""
 

@@ -18,7 +18,7 @@ from bluetape.jwt._repository import KeySnapshot
 
 logger = logging.getLogger(__name__)
 
-_LOG_MESSAGE = "jwt_cache_failure"
+_LOG_MESSAGE = "jwt_cache_operation"
 type _CacheKey = tuple[bytes, str, int]
 
 
@@ -158,7 +158,7 @@ class _VerifiedTokenCache:
         logger.error(
             _LOG_MESSAGE,
             extra={
-                "event": "jwt_cache_failure",
+                "event": "jwt_cache_operation",
                 "operation": operation,
                 "outcome": "failure",
                 "error_category": "cache",

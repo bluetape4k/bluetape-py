@@ -455,9 +455,9 @@ def test_cache_terminal_failure_is_logged_once_and_redacted(
     assert captured.value.__cause__ is None
     assert len(caplog.records) == 1
     record = caplog.records[0]
-    assert record.message == "jwt_cache_failure"
+    assert record.message == "jwt_cache_operation"
     assert (record.event, record.operation, record.outcome, record.error_category) == (
-        "jwt_cache_failure",
+        "jwt_cache_operation",
         operation,
         "failure",
         "cache",

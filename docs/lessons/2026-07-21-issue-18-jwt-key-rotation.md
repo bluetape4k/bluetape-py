@@ -66,9 +66,22 @@ object를 검증한 뒤 JOSE parser에 전달해야 비정상 입력 비용을 �
 고정된 public category로 변환하고 token, signature, key material, claim value를 예외
 메시지와 structured log field에 포함하지 않는다.
 
+Byte 제한을 `len(token.encode("utf-8"))` 하나로 검사하면 제한을 확인하기 전에 공격자
+입력 크기만큼 bytes를 추가 할당한다. Python `str`의 code point 수가 byte 제한보다 큰
+경우를 먼저 O(1) 길이 검사로 거절하고, 그 이하의 bounded 입력만 UTF-8 byte 수를
+확인해야 한다. 8 MiB 입력의 `tracemalloc` 회귀 테스트가 이 순서를 직접 고정한다.
+
+Frozen dataclass도 기본 `repr`는 안전하지 않다. `TokenClaims`, `VerifiedToken`,
+`ValidationProfile`, `KeySnapshot`은 immutable이어도 issuer, audience, custom claim,
+header, kid, epoch를 자동 repr에 그대로 포함한다. 민감 값을 보유하는 public 값은
+dataclass repr를 비활성화하고 canary가 `repr()`에 없음을 테스트해야 한다. Policy
+문자열은 fingerprint 직전 raw `UnicodeEncodeError`가 나지 않도록 constructor에서 UTF-8
+가능 여부까지 검증해 redacted `JWTConfigurationError`로 닫는다.
+
 운영 로그는 low-cardinality event, operation, outcome, error category만 제공한다.
 Redaction은 애플리케이션 소유이지만 package가 민감한 원문을 애초에 log record에 넣지
-않아야 caller-owned redaction을 우회하지 않는다.
+않아야 caller-owned redaction을 우회하지 않는다. Fixed event 이름도 운영 필터 계약이므로
+`jwt_cache_operation` 같은 승인된 이름을 구현과 테스트에서 동일하게 고정한다.
 
 ### 새 distribution은 모든 fail-closed 정본과 격리 wheel에서 증명한다
 

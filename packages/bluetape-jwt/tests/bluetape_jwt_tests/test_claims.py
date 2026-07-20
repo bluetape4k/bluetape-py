@@ -197,6 +197,48 @@ def test_verified_token_freezes_custom_and_custom_headers() -> None:
         verified.kid = "changed"
 
 
+def test_claim_value_reprs_do_not_expose_sensitive_values() -> None:
+    claims = jwt.TokenClaims(
+        issuer="issuer-canary",
+        subject="subject-canary",
+        audience=("audience-canary",),
+        jwt_id="jwt-id-canary",
+        custom={"claim-name-canary": "claim-value-canary"},
+    )
+    verified = jwt.VerifiedToken(
+        kid="kid-canary",
+        algorithm=jwt.JWSAlgorithm.HS256,
+        token_type="type-canary",
+        issuer="issuer-canary",
+        subject="subject-canary",
+        audience=("audience-canary",),
+        expires_at=None,
+        not_before=None,
+        issued_at=None,
+        jwt_id="jwt-id-canary",
+        custom={"claim-name-canary": "claim-value-canary"},
+        headers={"header-name-canary": "header-value-canary"},
+    )
+
+    for value in (claims, verified):
+        rendered = repr(value)
+        assert all(
+            canary not in rendered
+            for canary in (
+                "issuer-canary",
+                "subject-canary",
+                "audience-canary",
+                "jwt-id-canary",
+                "claim-name-canary",
+                "claim-value-canary",
+                "kid-canary",
+                "type-canary",
+                "header-name-canary",
+                "header-value-canary",
+            )
+        )
+
+
 def test_typed_result_helper_preserves_verified_projection() -> None:
     claims_module = import_module("bluetape.jwt._claims")
     convert = getattr(claims_module, "_to_verified_token", None)

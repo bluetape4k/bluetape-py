@@ -250,7 +250,7 @@ class JWSProvider:
         return snapshot
 
     def _validate_token_shape(self, token: object) -> tuple[str, str, str]:
-        if type(token) is not str:
+        if type(token) is not str or len(token) > _MAX_TOKEN_BYTES:
             raise JWTMalformedTokenError() from None
         try:
             if len(token.encode("utf-8")) > _MAX_TOKEN_BYTES:
