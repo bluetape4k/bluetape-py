@@ -36,10 +36,11 @@ focused distribution model:
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-id`: stdlib-only UUIDv4/v7 and random/monotonic ULID values,
   implemented for issue #13 with process-local generator state.
-- `bluetape-jwt`: issue #18 implementation is in progress. The current staged
-  boundary contains only the approved JWS algorithm enum, redacted public
-  exception hierarchy, and package metadata; signing, verification, key
-  rotation, claims, and caching are not implemented yet.
+- `bluetape-jwt`: issue #18 is implemented and locally verified on
+  `feat/issue-18-jwt-key-rotation` with nine JWS algorithms, immutable claims
+  and profiles, active/retired/revoked key lifecycle, strict verification,
+  issuance-policy composition, and an optional bounded verified-result cache.
+  PR review and merge remain pending; PyPI publication stays on HOLD.
 - `bluetape-measure`: immutable runtime dimension-checked linear measurements,
   implemented for issue #13 with caller-owned custom unit definitions.
 - `bluetape-money`: exact Decimal money and current ISO 4217 currencies,
@@ -223,9 +224,10 @@ Historical release scope; all items are closed.
   lifecycle, fencing, isolated wheels, Redis 8 contention evidence, and
   bilingual operating guidance; completed by rebase-merging PR #83 into
   `develop`.
-- #18 - JWT and key-rotation helpers. Implementation is in progress on
-  `feat/issue-18-jwt-key-rotation`; only the package/error/algorithm boundary is
-  available at this stage.
+- #18 - JWT and key-rotation helpers. Implemented and locally verified on
+  `feat/issue-18-jwt-key-rotation`; PR review and merge remain pending. Async
+  providers, JWE encryption, and versioned compression remain separate issues
+  #88, #89, and #90.
 - #19 - Rules, workflow, batch, and work-report primitives.
 - #20 - Probabilistic data structure helpers.
 - #21 - Python web API adapter boundary research.

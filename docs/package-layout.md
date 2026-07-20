@@ -27,6 +27,7 @@ Current public distributions:
 - `bluetape-compression`
 - `bluetape-core`
 - `bluetape-id`
+- `bluetape-jwt`
 - `bluetape-logging`
 - `bluetape-measure`
 - `bluetape-money`
@@ -77,6 +78,15 @@ distribution or the explicit `bluetape[cache]` meta extra. It is
 stdlib-only and provides bounded sync and async local TTL loading caches. It is
 not part of the core-only default meta install and does not add a root
 `bluetape` import surface.
+
+`bluetape-jwt` owns `bluetape.jwt` and is available from the focused
+distribution or `bluetape[jwt]`. It depends exactly on
+`bluetape-cache==0.1.0` and `joserfc>=1.7.4,<2`, while the default meta install
+remains core-only. The package provides strict synchronous JWS issue/verify,
+immutable claims and profiles, in-memory active/retired/revoked key lifecycle,
+an optional bounded verified-result cache, and an issuance-policy decorator.
+JWS payloads remain readable. Async providers, JWE encryption, and versioned
+compression envelopes remain follow-up issues #88, #89, and #90.
 
 `bluetape-cache-redis` owns `bluetape.cache.redis`. The parent
 `bluetape.cache` package extends its namespace path so the focused Redis wheel

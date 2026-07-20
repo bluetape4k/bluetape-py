@@ -18,7 +18,7 @@ heavier capabilities into explicit PyPI distributions and extras.
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI publication remains on hold until package ownership and trusted publishing
 are confirmed. The collections, codec, compression, cache, Redis provider,
-serde, ID, measure, money, testcontainers, and audit packages are available
+serde, ID, JWT, measure, money, testcontainers, and audit packages are available
 from the source workspace; registry install commands describe the intended
 post-publication shape only.
 
@@ -50,6 +50,7 @@ only `bluetape-core` by default, so the core-only default is Redis-free.
 | `bluetape-core` | `bluetape.core` | yes | active | Stdlib-only validation and foundation helpers. |
 | `bluetape-audit` | `bluetape.audit` | no | active, source workspace | Stdlib-only immutable audit values, explicit limits, and preservation helpers. |
 | `bluetape-id` | `bluetape.id` | no | active, source workspace | Stdlib-only UUIDv4/v7 and random/monotonic ULID values. |
+| `bluetape-jwt` | `bluetape.jwt` | no | active, source workspace | Strict JWS verification, key rotation, issuance profiles, and optional bounded verification cache. |
 | `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Immutable runtime dimension-checked linear measurements. |
 | `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currencies and exact Decimal money with caller-owned FX rates. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | Stdlib-only bounded structured-concurrency helpers. |
@@ -115,6 +116,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[id]"
+pip install "bluetape[jwt]"
 pip install "bluetape[logging]"
 pip install "bluetape[measure]"
 pip install "bluetape[money]"
@@ -134,6 +136,7 @@ Focused distributions can also be installed directly:
 pip install bluetape-core
 pip install bluetape-audit
 pip install bluetape-id
+pip install bluetape-jwt
 pip install bluetape-measure
 pip install bluetape-money
 pip install bluetape-async
@@ -506,6 +509,7 @@ The default `bluetape` install remains core-only. See the
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.md](packages/bluetape-cache-redis/README.md) / [한국어](packages/bluetape-cache-redis/README.ko.md) |
 | `bluetape-leader` | [packages/bluetape-leader/README.md](packages/bluetape-leader/README.md) / [한국어](packages/bluetape-leader/README.ko.md) |
 | `bluetape-leader-redis` | [packages/bluetape-leader-redis/README.md](packages/bluetape-leader-redis/README.md) / [한국어](packages/bluetape-leader-redis/README.ko.md) |
+| `bluetape-jwt` | [packages/bluetape-jwt/README.md](packages/bluetape-jwt/README.md) / [한국어](packages/bluetape-jwt/README.ko.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.md](packages/bluetape-benchmark/README.md) / [한국어](packages/bluetape-benchmark/README.ko.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |

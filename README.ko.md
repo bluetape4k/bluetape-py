@@ -17,8 +17,8 @@ PyPI 배포 패키지와 extras로 분리합니다.
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
 PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, cache, Redis provider, serde, ID, measure,
-money, testcontainers, audit 패키지는 source workspace에서 사용할 수 있으며,
+collections, codec, compression, cache, Redis provider, serde, ID, JWT,
+measure, money, testcontainers, audit 패키지는 source workspace에서 사용할 수 있으며,
 registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
@@ -48,6 +48,7 @@ Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compress
 | `bluetape-core` | `bluetape.core` | yes | active | 표준 라이브러리만 사용하는 검증 및 기반 헬퍼. |
 | `bluetape-audit` | `bluetape.audit` | no | active, source workspace | 표준 라이브러리만 사용하는 불변 감사 값, 명시적 제한, 보존 헬퍼. |
 | `bluetape-id` | `bluetape.id` | no | active, source workspace | 표준 라이브러리 기반 UUIDv4/v7과 random/monotonic ULID 값. |
+| `bluetape-jwt` | `bluetape.jwt` | no | active, source workspace | 엄격한 JWS 검증, key rotation, issuance profile, 선택적 bounded verification cache. |
 | `bluetape-measure` | `bluetape.measure` | no | active, source workspace | Runtime dimension을 검사하는 불변 선형 측정값. |
 | `bluetape-money` | `bluetape.money` | no | active, source workspace | Current ISO 4217 currency와 caller-owned FX rate를 사용하는 exact Decimal money. |
 | `bluetape-async` | `bluetape.asyncio` | no | active, source workspace | 표준 라이브러리만 사용하는 bounded structured-concurrency 헬퍼. |
@@ -112,6 +113,7 @@ pip install "bluetape[compression-snappy]"
 pip install "bluetape[compression-zstd]"
 pip install "bluetape[compression-native]"
 pip install "bluetape[id]"
+pip install "bluetape[jwt]"
 pip install "bluetape[logging]"
 pip install "bluetape[measure]"
 pip install "bluetape[money]"
@@ -131,6 +133,7 @@ pip install "bluetape[all]"
 pip install bluetape-core
 pip install bluetape-audit
 pip install bluetape-id
+pip install bluetape-jwt
 pip install bluetape-measure
 pip install bluetape-money
 pip install bluetape-async
@@ -498,6 +501,7 @@ assert price == Money.of("12.35", USD)
 | `bluetape-cache-redis` | [packages/bluetape-cache-redis/README.ko.md](packages/bluetape-cache-redis/README.ko.md) / [English](packages/bluetape-cache-redis/README.md) |
 | `bluetape-leader` | [한국어](packages/bluetape-leader/README.ko.md) / [English](packages/bluetape-leader/README.md) |
 | `bluetape-leader-redis` | [한국어](packages/bluetape-leader-redis/README.ko.md) / [English](packages/bluetape-leader-redis/README.md) |
+| `bluetape-jwt` | [한국어](packages/bluetape-jwt/README.ko.md) / [English](packages/bluetape-jwt/README.md) |
 | `bluetape-benchmark` | [packages/bluetape-benchmark/README.ko.md](packages/bluetape-benchmark/README.ko.md) / [English](packages/bluetape-benchmark/README.md) |
 | `bluetape-codec` | [packages/bluetape-codec/README.md](packages/bluetape-codec/README.md) |
 | `bluetape-collections` | [packages/bluetape-collections/README.md](packages/bluetape-collections/README.md) |

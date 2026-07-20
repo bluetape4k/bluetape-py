@@ -22,6 +22,13 @@ and this project uses semantic versioning once the first tag is published.
 
 ### Added
 
+- Add the opt-in `bluetape-jwt` distribution with nine strict JWS algorithms,
+  immutable typed claims and profiles, atomic in-memory key rotation,
+  active/retired/revoked lifecycle, constructor-bound validation, an
+  issuance-policy decorator, and an optional bounded verified-result cache.
+  JWS payloads remain readable; async providers, JWE encryption, and versioned
+  compression are tracked separately by #88, #89, and #90. The default meta
+  install remains core-only and PyPI publication stays on HOLD.
 - Implement Issue #17 with the stdlib-only `bluetape-leader` contract package
   and opt-in `bluetape-leader-redis` adapter. The first Redis slice provides
   bounded sync/async locks and electors, exact borrowed-client validation,
