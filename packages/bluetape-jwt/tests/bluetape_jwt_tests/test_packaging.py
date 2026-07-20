@@ -94,11 +94,11 @@ def test_public_surface_has_exact_reviewed_order() -> None:
     assert jwt.__all__ == PUBLIC_EXPORTS
 
 
-def test_initial_readmes_are_aligned_with_in_progress_scope() -> None:
+def test_readmes_are_aligned_with_completed_sync_scope() -> None:
     english = (ROOT / "packages/bluetape-jwt/README.md").read_text()
     korean = (ROOT / "packages/bluetape-jwt/README.ko.md").read_text()
 
-    assert "Implementation status: in progress" in english
-    assert "구현 상태: 진행 중" in korean
+    assert "Implementation status: in progress" not in english
+    assert "구현 상태: 진행 중" not in korean
     assert "JWSAlgorithm" in english and "JWSAlgorithm" in korean
-    assert "JWSProvider(" not in english and "JWSProvider(" not in korean
+    assert "JWSProvider(" in english and "JWSProvider(" in korean

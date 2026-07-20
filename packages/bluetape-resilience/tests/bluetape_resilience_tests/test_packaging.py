@@ -15,6 +15,7 @@ PUBLISHABLE = {
     "bluetape-compression",
     "bluetape-core",
     "bluetape-id",
+    "bluetape-jwt",
     "bluetape-leader",
     "bluetape-leader-redis",
     "bluetape-logging",
