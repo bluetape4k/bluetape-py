@@ -14,6 +14,7 @@ dependencies = [
     "bluetape-compression==0.1.0",
     "bluetape-core==0.1.0",
     "bluetape-id==0.1.0",
+    "bluetape-jwt==0.1.0",
     "bluetape-leader==0.1.0",
     "bluetape-leader-redis==0.1.0",
     "bluetape-logging==0.1.0",
@@ -47,6 +48,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-id = { workspace = true }
+bluetape-jwt = { workspace = true }
 bluetape-leader = { workspace = true }
 bluetape-leader-redis = { workspace = true }
 bluetape-logging = { workspace = true }
@@ -71,6 +73,7 @@ members = [
     "packages/bluetape-compression",
     "packages/bluetape-core",
     "packages/bluetape-id",
+    "packages/bluetape-jwt",
     "packages/bluetape-leader",
     "packages/bluetape-leader-redis",
     "packages/bluetape-logging",
