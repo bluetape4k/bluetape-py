@@ -34,6 +34,8 @@ PUBLIC_EXPORTS = [
     "VerifiedToken",
     "IssuanceProfile",
     "ValidationProfile",
+    "TokenProvider",
+    "JWSProvider",
 ]
 
 
