@@ -161,9 +161,12 @@ numbers 기준 2048 bits 이상이다. HMAC export와 RSA private material expor
 `n`, `e` public projection만 새 immutable mapping으로 반환한다.
 RSA JWK metadata는 fail-closed matrix를 적용한다. `alg`가 있으면 selected RS/PS
 algorithm과 같아야 하고, `use`가 있으면 `sig`만 허용한다. private factory의
-`key_ops`는 `sign`과 `verify`의 부분집합이면서 `sign`을 포함해야 하고 public
-factory는 `verify`만 허용한다. absent metadata는 wrapper arguments로 policy를
-부여한다. unknown/encryption operation 또는 conflicting `kid`는 거부한다.
+`key_ops`가 있으면 `sign`과 `verify`를 정확히 모두 포함해야 하고 public
+factory는 `verify`만 허용한다. 검증된 caller-owned `key_ops` list는 dependency
+import 전에 복사한다. absent metadata는 wrapper arguments로 policy를 부여한다.
+unknown/encryption operation 또는 conflicting `kid`는 거부한다. 이 exact private
+policy는 `joserfc`가 sign-only key의 verification을 거부하는 실제 동작에 맞춰
+active signing key의 verification capability를 보존한다.
 
 ```python
 @dataclass(frozen=True, slots=True)
@@ -432,9 +435,11 @@ uv run pytest packages/bluetape-jwt/tests/bluetape_jwt_tests/test_packaging.py -
   HMAC export와 RSA private-material export를 거부한다.
 - [ ] JWK의 `kid`, `alg`, `use`, `key_ops`가 wrapper의 identifier, algorithm,
   capability와 충돌하면 dependency import 전에/직후 fail closed함을 test한다.
-  absent metadata, exact `alg`, `use="sig"`, private `sign`/`verify`, public
-  `verify`만 positive이고 `enc`, encryption operation, wrong algorithm/kid,
-  unknown operation은 모두 negative인 matrix를 고정한다.
+  absent metadata, exact `alg`, `use="sig"`, private exact `sign`+`verify`, public
+  exact `verify`만 positive이고 private sign-only, `enc`, encryption operation,
+  wrong algorithm/kid, unknown operation은 모두 negative인 matrix를 고정한다.
+  caller가 원래 `key_ops` list를 변경해도 imported key capability가 변하지 않는
+  regression을 포함한다.
 - [ ] `str`/`repr`/exception/traceback에 secret/PEM/JWK canary가 없고 object가
   unhashable임을 test한다.
 - [ ] RED: `uv run pytest packages/bluetape-jwt/tests/bluetape_jwt_tests/test_keys.py -q`
