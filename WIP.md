@@ -217,7 +217,8 @@ Historical release scope; all items are closed.
   stdlib-only `bluetape-leader` contract package and explicit
   `bluetape-leader-redis` single-primary adapter with sync/async bounded
   lifecycle, fencing, isolated wheels, Redis 8 contention evidence, and
-  bilingual operating guidance; PR, CI review, and merge gates remain pending.
+  bilingual operating guidance; completed by rebase-merging PR #83 into
+  `develop`.
 - #18 - JWT and key-rotation helpers.
 - #19 - Rules, workflow, batch, and work-report primitives.
 - #20 - Probabilistic data structure helpers.
