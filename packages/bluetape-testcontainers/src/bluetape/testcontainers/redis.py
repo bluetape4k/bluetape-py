@@ -21,7 +21,11 @@ from bluetape.testcontainers._support import (
 from docker.errors import ImageNotFound as _ImageNotFound
 
 from testcontainers.core.container import DockerContainer as _DockerContainer
+from testcontainers.core.wait_strategies import (
+    CompositeWaitStrategy as _CompositeWaitStrategy,
+)
 from testcontainers.core.wait_strategies import ExecWaitStrategy as _ExecWaitStrategy
+from testcontainers.core.wait_strategies import PortWaitStrategy as _PortWaitStrategy
 
 __all__ = [
     "DEFAULT_REDIS_IMAGE",
@@ -57,8 +61,11 @@ class RedisConnectionDetails:
 
 
 def _new_container(image: str, startup_timeout: float) -> _DockerContainer:
-    strategy = _ExecWaitStrategy(["redis-cli", "ping"]).with_startup_timeout(
-        timedelta(seconds=startup_timeout)
+    strategy = _CompositeWaitStrategy(
+        _ExecWaitStrategy(["redis-cli", "ping"]),
+        _PortWaitStrategy(REDIS_PORT),
+    ).with_startup_timeout(
+        timedelta(seconds=startup_timeout),
     )
     return (
         _DockerContainer(image, docker_client_kw={"timeout": startup_timeout})

@@ -22,6 +22,7 @@ from bluetape.testcontainers.redis import (
     TestcontainerStartError as RedisTestcontainerStartError,
 )
 from docker.errors import DockerException, ImageNotFound
+from testcontainers.core.wait_strategies import CompositeWaitStrategy
 
 from ._support import ContainerFactory, FakeContainer
 
@@ -127,25 +128,52 @@ def test_construction_has_no_container_side_effect(monkeypatch: pytest.MonkeyPat
         _ = server.details
 
 
-def test_container_factory_applies_redis_runtime_contract(
+def test_container_factory_requires_internal_and_published_port_readiness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    strategy = Mock()
-    strategy.with_startup_timeout.return_value = strategy
-    wait_strategy = Mock(return_value=strategy)
+    internal_strategy = Mock()
+    internal_strategy.with_startup_timeout.return_value = internal_strategy
+    internal_wait_strategy = Mock(return_value=internal_strategy)
+    host_strategy = Mock()
+    host_strategy.with_startup_timeout.return_value = host_strategy
+    host_strategy.wait_until_ready.side_effect = TimeoutError
+    host_wait_strategy = Mock(return_value=host_strategy)
+    composite_wait_strategy = Mock(
+        side_effect=lambda *strategies: CompositeWaitStrategy(*strategies)
+    )
     container = Mock()
     container.with_kwargs.return_value = container
     container.with_exposed_ports.return_value = container
     container.waiting_for.return_value = container
     docker_container = Mock(return_value=container)
-    monkeypatch.setattr(redis_module, "_ExecWaitStrategy", wait_strategy)
+    monkeypatch.setattr(redis_module, "_ExecWaitStrategy", internal_wait_strategy)
+    monkeypatch.setattr(
+        redis_module,
+        "_PortWaitStrategy",
+        host_wait_strategy,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        redis_module,
+        "_CompositeWaitStrategy",
+        composite_wait_strategy,
+        raising=False,
+    )
     monkeypatch.setattr(redis_module, "_DockerContainer", docker_container)
 
     created = redis_module._new_container("redis:8", 7.0)
+    configured_strategy = container.waiting_for.call_args.args[0]
 
     assert created is container
-    wait_strategy.assert_called_once_with(["redis-cli", "ping"])
-    strategy.with_startup_timeout.assert_called_once_with(timedelta(seconds=7.0))
+    with pytest.raises(TimeoutError):
+        configured_strategy.wait_until_ready(container)
+    internal_strategy.wait_until_ready.assert_called_once_with(container)
+    host_strategy.wait_until_ready.assert_called_once_with(container)
+    internal_wait_strategy.assert_called_once_with(["redis-cli", "ping"])
+    host_wait_strategy.assert_called_once_with(6379)
+    composite_wait_strategy.assert_called_once_with(internal_strategy, host_strategy)
+    internal_strategy.with_startup_timeout.assert_called_once_with(timedelta(seconds=7.0))
+    host_strategy.with_startup_timeout.assert_called_once_with(timedelta(seconds=7.0))
     docker_container.assert_called_once_with(
         "redis:8",
         docker_client_kw={"timeout": 7.0},
@@ -154,7 +182,7 @@ def test_container_factory_applies_redis_runtime_contract(
         labels={"com.bluetape.testcontainers.redis": "true"}
     )
     container.with_exposed_ports.assert_called_once_with(6379)
-    container.waiting_for.assert_called_once_with(strategy)
+    container.waiting_for.assert_called_once_with(configured_strategy)
 
 
 def test_container_start_skips_ryuk_and_provider_auto_pull() -> None:
