@@ -1,6 +1,6 @@
 # WIP
 
-Snapshot: 2026-07-15 KST
+Snapshot: 2026-07-20 KST
 Scope: `v0.1.0` released foundation and `0.2.0` ecosystem package planning.
 
 ## Current Target
@@ -36,6 +36,10 @@ focused distribution model:
 - `bluetape-logging`: stdlib `logging` plus `contextvars` helpers.
 - `bluetape-id`: stdlib-only UUIDv4/v7 and random/monotonic ULID values,
   implemented for issue #13 with process-local generator state.
+- `bluetape-jwt`: issue #18 implementation is in progress. The current staged
+  boundary contains only the approved JWS algorithm enum, redacted public
+  exception hierarchy, and package metadata; signing, verification, key
+  rotation, claims, and caching are not implemented yet.
 - `bluetape-measure`: immutable runtime dimension-checked linear measurements,
   implemented for issue #13 with caller-owned custom unit definitions.
 - `bluetape-money`: exact Decimal money and current ISO 4217 currencies,
@@ -219,7 +223,9 @@ Historical release scope; all items are closed.
   lifecycle, fencing, isolated wheels, Redis 8 contention evidence, and
   bilingual operating guidance; completed by rebase-merging PR #83 into
   `develop`.
-- #18 - JWT and key-rotation helpers.
+- #18 - JWT and key-rotation helpers. Implementation is in progress on
+  `feat/issue-18-jwt-key-rotation`; only the package/error/algorithm boundary is
+  available at this stage.
 - #19 - Rules, workflow, batch, and work-report primitives.
 - #20 - Probabilistic data structure helpers.
 - #21 - Python web API adapter boundary research.

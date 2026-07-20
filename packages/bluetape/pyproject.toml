@@ -19,6 +19,7 @@ compression-native = ["bluetape-compression[native]==0.1.0"]
 compression-snappy = ["bluetape-compression[snappy]==0.1.0"]
 compression-zstd = ["bluetape-compression[zstd]==0.1.0"]
 id = ["bluetape-id==0.1.0"]
+jwt = ["bluetape-jwt==0.1.0"]
 leader = ["bluetape-leader==0.1.0"]
 leader-redis = ["bluetape-leader-redis==0.1.0"]
 logging = ["bluetape-logging==0.1.0"]
@@ -37,6 +38,7 @@ dev = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-id==0.1.0",
+    "bluetape-jwt==0.1.0",
     "bluetape-leader==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-measure==0.1.0",
@@ -54,6 +56,7 @@ all = [
     "bluetape-collections==0.1.0",
     "bluetape-compression==0.1.0",
     "bluetape-id==0.1.0",
+    "bluetape-jwt==0.1.0",
     "bluetape-leader==0.1.0",
     "bluetape-logging==0.1.0",
     "bluetape-measure==0.1.0",
@@ -79,6 +82,7 @@ bluetape-collections = { workspace = true }
 bluetape-compression = { workspace = true }
 bluetape-core = { workspace = true }
 bluetape-id = { workspace = true }
+bluetape-jwt = { workspace = true }
 bluetape-leader = { workspace = true }
 bluetape-leader-redis = { workspace = true }
 bluetape-logging = { workspace = true }
