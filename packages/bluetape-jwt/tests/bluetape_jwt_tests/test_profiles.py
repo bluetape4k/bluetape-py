@@ -224,6 +224,45 @@ def test_same_reference_time_validation_applies_skew_and_max_age() -> None:
         )
 
 
+def test_temporal_validation_never_overflows_with_accepted_durations() -> None:
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    unlimited_skew = make_profile(clock_skew=timedelta.max)
+    _validate_claims(
+        make_claims(expires_at=now - timedelta(seconds=1)),
+        unlimited_skew,
+        token_type="access+jwt",
+        protected_headers={"tenant": "primary"},
+        now=now,
+    )
+
+    huge_max_age = make_profile(
+        clock_skew=timedelta(microseconds=1),
+        max_token_age=timedelta.max,
+    )
+    _validate_claims(
+        make_claims(issued_at=datetime.min.replace(tzinfo=UTC)),
+        huge_max_age,
+        token_type="access+jwt",
+        protected_headers={"tenant": "primary"},
+        now=now,
+    )
+
+
+def test_same_reference_time_validation_rejects_exp_not_after_nbf() -> None:
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    with pytest.raises(jwt.JWTClaimError):
+        _validate_claims(
+            make_claims(
+                expires_at=now + timedelta(seconds=1),
+                not_before=now + timedelta(seconds=1),
+            ),
+            make_profile(clock_skew=timedelta(seconds=2)),
+            token_type="access+jwt",
+            protected_headers={"tenant": "primary"},
+            now=now,
+        )
+
+
 @pytest.mark.parametrize(
     ("token_type", "headers"),
     [

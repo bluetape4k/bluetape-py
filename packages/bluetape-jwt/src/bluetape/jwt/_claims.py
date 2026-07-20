@@ -142,10 +142,6 @@ def _normalize_audience(
             _raise_malformed_token_error()
         _raise_claim_error()
     normalized = tuple(_validate_string(item, inbound=inbound) for item in values)
-    if len(set(normalized)) != len(normalized):
-        if inbound:
-            _raise_malformed_token_error()
-        _raise_claim_error()
     return normalized
 
 
