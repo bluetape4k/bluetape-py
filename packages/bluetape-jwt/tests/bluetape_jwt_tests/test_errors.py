@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import pickle
 import traceback
 
 import bluetape.jwt as jwt
@@ -21,6 +23,22 @@ ERROR_MESSAGES = [
     ("JWTIssuancePolicyError", "JWT issuance policy is invalid"),
     ("JWTCacheError", "JWT cache operation failed"),
 ]
+
+
+@pytest.mark.parametrize(("error_name", "message"), ERROR_MESSAGES)
+def test_public_errors_survive_safe_reconstruction(error_name: str, message: str) -> None:
+    canary = "private-key-token-claim-canary"
+    error_type = getattr(jwt, error_name)
+    error = error_type()
+
+    restored_errors = [copy.copy(error), pickle.loads(pickle.dumps(error))]
+
+    for restored in restored_errors:
+        assert type(restored) is error_type
+        assert str(restored) == message
+        assert restored.args == (message,)
+        assert canary not in str(restored)
+        assert canary not in repr(restored)
 
 
 def test_public_errors_are_redacted() -> None:

@@ -1,5 +1,7 @@
 """Stable, value-free exceptions for JWT security boundaries."""
 
+from __future__ import annotations
+
 
 class JWTError(Exception):
     """Base class for public bluetape-jwt failures."""
@@ -9,6 +11,9 @@ class JWTError(Exception):
 
     def __init__(self) -> None:
         super().__init__(self._message)
+
+    def __reduce__(self) -> tuple[type[JWTError], tuple[()]]:
+        return type(self), ()
 
 
 class JWTConfigurationError(JWTError, ValueError):
