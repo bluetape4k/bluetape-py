@@ -22,6 +22,7 @@ from bluetape.jwt._errors import (
 )
 from bluetape.jwt._keys import JWTKey
 from bluetape.jwt._profiles import IssuanceProfile, ValidationProfile
+from bluetape.jwt._provider import JWSProvider, TokenProvider
 from bluetape.jwt._repository import (
     InMemoryKeyRepository,
     KeyEntry,
@@ -59,4 +60,6 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "VerifiedToken",
     "IssuanceProfile",
     "ValidationProfile",
+    "TokenProvider",
+    "JWSProvider",
 ]
