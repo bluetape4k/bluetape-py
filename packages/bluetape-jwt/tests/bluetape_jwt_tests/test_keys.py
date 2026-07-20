@@ -253,7 +253,6 @@ def test_kid_is_strictly_validated(kid: Any) -> None:
         {"kid": "rsa-key"},
         {"alg": "RS256"},
         {"use": "sig"},
-        {"key_ops": ["sign"]},
         {"key_ops": ["sign", "verify"]},
         {
             "kid": "rsa-key",
@@ -283,6 +282,7 @@ def test_private_jwk_accepts_only_compatible_metadata(
         {"alg": "PS256"},
         {"use": "enc"},
         {"key_ops": []},
+        {"key_ops": ["sign"]},
         {"key_ops": ["verify"]},
         {"key_ops": ["sign", "encrypt"]},
         {"key_ops": ["sign", "unknown"]},
@@ -363,6 +363,69 @@ def test_public_jwk_rejects_conflicting_or_invalid_metadata(
         )
 
 
+def test_private_jwk_requires_sign_and_verify_interoperability(
+    rsa_material: dict[str, Any],
+) -> None:
+    with pytest.raises(JWTKeyError):
+        JWTKey.from_rsa_private(
+            "rsa-key",
+            JWSAlgorithm.RS256,
+            {**rsa_material["private_jwk"], "key_ops": ["sign"]},
+        )
+
+    key = JWTKey.from_rsa_private(
+        "rsa-key",
+        JWSAlgorithm.RS256,
+        {**rsa_material["private_jwk"], "key_ops": ["sign", "verify"]},
+    )
+    provider_key = object.__getattribute__(key, "_provider_key")
+    compact = jws.serialize_compact(
+        {"alg": "RS256"},
+        b"active signing key verifies too",
+        provider_key,
+        algorithms=["RS256"],
+    )
+
+    assert (
+        jws.deserialize_compact(
+            compact,
+            provider_key,
+            algorithms=["RS256"],
+        ).payload
+        == b"active signing key verifies too"
+    )
+
+
+def test_private_jwk_copies_caller_owned_key_operations(
+    rsa_material: dict[str, Any],
+) -> None:
+    caller_operations = ["sign", "verify"]
+    key = JWTKey.from_rsa_private(
+        "rsa-key",
+        JWSAlgorithm.RS256,
+        {**rsa_material["private_jwk"], "key_ops": caller_operations},
+    )
+
+    caller_operations[:] = ["decrypt"]
+    provider_key = object.__getattribute__(key, "_provider_key")
+    compact = jws.serialize_compact(
+        {"alg": "RS256"},
+        b"caller mutation cannot alter policy",
+        provider_key,
+        algorithms=["RS256"],
+    )
+
+    assert provider_key.get("key_ops") == ["sign", "verify"]
+    assert (
+        jws.deserialize_compact(
+            compact,
+            provider_key,
+            algorithms=["RS256"],
+        ).payload
+        == b"caller mutation cannot alter policy"
+    )
+
+
 def test_rsa_jwk_rejects_invalid_mapping_keys_and_key_type(
     rsa_material: dict[str, Any],
 ) -> None:
@@ -425,6 +488,17 @@ def test_direct_construction_cannot_bypass_factory_validation() -> None:
 
     with pytest.raises(TypeError):
         JWTKey("unsafe", JWSAlgorithm.HS256, True, object())  # type: ignore[call-arg]
+
+
+def test_internal_construction_helper_is_not_exposed_on_key_type() -> None:
+    assert not hasattr(JWTKey, "_create")
+
+
+def test_subclass_cannot_override_validated_factory_construction() -> None:
+    with pytest.raises(TypeError):
+
+        class UnsafeJWTKey(JWTKey):
+            pass
 
 
 def test_dependency_failures_do_not_leak_key_material() -> None:

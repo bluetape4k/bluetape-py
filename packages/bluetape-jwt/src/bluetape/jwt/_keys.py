@@ -70,6 +70,8 @@ def _copy_rsa_material(
     if any(type(name) is not str for name in copied):
         _raise_key_error()
     _validate_jwk_metadata(copied, kid=kid, algorithm=algorithm, private=private)
+    if "key_ops" in copied:
+        copied["key_ops"] = list(copied["key_ops"])
     return copied
 
 
@@ -98,7 +100,7 @@ def _validate_jwk_metadata(
     if len(operation_set) != len(operations):
         _raise_key_error()
     if private:
-        if "sign" not in operation_set or not operation_set <= {"sign", "verify"}:
+        if operation_set != {"sign", "verify"}:
             _raise_key_error()
     elif operation_set != {"verify"}:
         _raise_key_error()
@@ -120,6 +122,20 @@ def _import_rsa_key(
     return key
 
 
+def _new_jwt_key(
+    kid: str,
+    algorithm: JWSAlgorithm,
+    can_sign: bool,
+    provider_key: OctKey | RSAKey,
+) -> JWTKey:
+    key = object.__new__(JWTKey)
+    object.__setattr__(key, "_kid", kid)
+    object.__setattr__(key, "_algorithm", algorithm)
+    object.__setattr__(key, "_can_sign", can_sign)
+    object.__setattr__(key, "_provider_key", provider_key)
+    return key
+
+
 @dataclass(frozen=True, slots=True, eq=False, repr=False, init=False)
 class JWTKey:
     """Opaque, identity-based JWT key material selected for one algorithm."""
@@ -135,20 +151,9 @@ class JWTKey:
         """Reject construction that bypasses the validated factories."""
         raise TypeError("JWTKey must be created by a factory method")
 
-    @classmethod
-    def _create(
-        cls,
-        kid: str,
-        algorithm: JWSAlgorithm,
-        can_sign: bool,
-        provider_key: OctKey | RSAKey,
-    ) -> JWTKey:
-        key = object.__new__(cls)
-        object.__setattr__(key, "_kid", kid)
-        object.__setattr__(key, "_algorithm", algorithm)
-        object.__setattr__(key, "_can_sign", can_sign)
-        object.__setattr__(key, "_provider_key", provider_key)
-        return key
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """Keep factory validation bound to the exact sealed wrapper type."""
+        raise TypeError("JWTKey cannot be subclassed")
 
     @classmethod
     def from_hmac_secret(
@@ -169,7 +174,9 @@ class JWTKey:
             provider_key = OctKey.import_key(secret_copy)
         except Exception:
             _raise_key_error()
-        return cls._create(validated_kid, validated_algorithm, True, provider_key)
+        if cls is not JWTKey:
+            _raise_key_error()
+        return _new_jwt_key(validated_kid, validated_algorithm, True, provider_key)
 
     @classmethod
     def from_rsa_private(
@@ -196,7 +203,9 @@ class JWTKey:
         provider_key = _import_rsa_key(copied_material, password=password)
         if not provider_key.is_private:
             _raise_key_error()
-        return cls._create(validated_kid, validated_algorithm, True, provider_key)
+        if cls is not JWTKey:
+            _raise_key_error()
+        return _new_jwt_key(validated_kid, validated_algorithm, True, provider_key)
 
     @classmethod
     def from_rsa_public(
@@ -217,7 +226,9 @@ class JWTKey:
         provider_key = _import_rsa_key(copied_material, password=None)
         if provider_key.is_private:
             _raise_key_error()
-        return cls._create(validated_kid, validated_algorithm, False, provider_key)
+        if cls is not JWTKey:
+            _raise_key_error()
+        return _new_jwt_key(validated_kid, validated_algorithm, False, provider_key)
 
     @property
     def kid(self) -> str:
