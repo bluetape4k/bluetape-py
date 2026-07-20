@@ -23,6 +23,7 @@ PUBLIC_EXPORTS = [
     "JWTIssuancePolicyError",
     "JWTCacheError",
     "JWSAlgorithm",
+    "JWTKey",
 ]
 
 
@@ -75,7 +76,7 @@ def test_namespace_and_typing_marker_are_packaged_without_root_initializer() -> 
     assert (package_root / "jwt/py.typed").is_file()
 
 
-def test_task_one_public_exports_are_staged_without_placeholders() -> None:
+def test_public_exports_are_staged_without_placeholders() -> None:
     assert jwt.__all__ == PUBLIC_EXPORTS
 
 
