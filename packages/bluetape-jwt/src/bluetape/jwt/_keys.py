@@ -69,9 +69,12 @@ def _copy_rsa_material(
         _raise_key_error()
     if any(type(name) is not str for name in copied):
         _raise_key_error()
-    _validate_jwk_metadata(copied, kid=kid, algorithm=algorithm, private=private)
     if "key_ops" in copied:
-        copied["key_ops"] = list(copied["key_ops"])
+        operations = copied["key_ops"]
+        if type(operations) is not list:
+            _raise_key_error()
+        copied["key_ops"] = list(operations)
+    _validate_jwk_metadata(copied, kid=kid, algorithm=algorithm, private=private)
     return copied
 
 
