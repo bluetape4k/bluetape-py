@@ -5,9 +5,11 @@ from __future__ import annotations
 import base64
 import json
 import re
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from datetime import datetime
+from typing import Any, ClassVar, Protocol
 
 from bluetape.jwt._algorithms import JWSAlgorithm
+from bluetape.jwt._cache import VerifiedTokenCacheOptions, _VerifiedTokenCache
 from bluetape.jwt._claims import (
     TokenClaims,
     VerifiedToken,
@@ -34,9 +36,6 @@ from joserfc import jwt
 from joserfc.errors import BadSignatureError, DecodeError, InvalidPayloadError, JoseError
 from joserfc.jws import JWSRegistry
 from joserfc.registry import HeaderParameter
-
-if TYPE_CHECKING:
-    from bluetape.jwt._cache import VerifiedTokenCacheOptions
 
 _MAX_TOKEN_BYTES = 16_384
 _MAX_PROTECTED_HEADER_BYTES = 512
@@ -80,7 +79,7 @@ class TokenProvider(Protocol):
 class JWSProvider:
     """Issue and verify compact JWS tokens under one immutable policy."""
 
-    __slots__ = ("_algorithm", "_profile", "_registry", "_repository")
+    __slots__ = ("_algorithm", "_cache", "_profile", "_registry", "_repository")
 
     def __init__(
         self,
@@ -94,7 +93,7 @@ class JWSProvider:
             type(algorithm) is not JWSAlgorithm
             or not callable(getattr(repository, "snapshot", None))
             or type(validation_profile) is not ValidationProfile
-            or cache is not None
+            or (cache is not None and type(cache) is not VerifiedTokenCacheOptions)
         ):
             raise JWTConfigurationError() from None
         custom_headers = {
@@ -104,6 +103,7 @@ class JWSProvider:
         self._algorithm = algorithm
         self._repository = repository
         self._profile = validation_profile
+        self._cache = None if cache is None else _VerifiedTokenCache(cache)
         self._registry = _RestrictedJWSRegistry(
             header_registry=custom_headers,
             algorithms=[algorithm.value],
@@ -147,6 +147,11 @@ class JWSProvider:
         segments = self._validate_token_shape(token)
         snapshot = self._snapshot()
         now = _capture_reference_time(self._profile)
+        if self._cache is not None:
+            cached = self._cache.get(token, self._profile, snapshot)
+            if cached is not None:
+                self._validate_cached(cached, now=now)
+                return cached
         header = self._read_header(segments[0])
         entry = snapshot.entries.get(header["kid"])
         if (
@@ -187,13 +192,51 @@ class JWSProvider:
             protected_headers=custom_headers,
             now=now,
         )
-        return _to_verified_token(
+        verified = _to_verified_token(
             claims,
             kid=entry.key.kid,
             algorithm=self._algorithm,
             token_type=header["typ"],
             headers=custom_headers,
         )
+        if self._cache is not None:
+            live_epoch = self._live_epoch()
+            if live_epoch is not None:
+                self._cache.set(
+                    token,
+                    self._profile,
+                    snapshot,
+                    verified,
+                    now=now,
+                    live_epoch=live_epoch,
+                )
+        return verified
+
+    def _validate_cached(self, value: VerifiedToken, *, now: datetime) -> None:
+        claims = TokenClaims(
+            issuer=value.issuer,
+            subject=value.subject,
+            audience=value.audience,
+            expires_at=value.expires_at,
+            not_before=value.not_before,
+            issued_at=value.issued_at,
+            jwt_id=value.jwt_id,
+            custom=value.custom,
+        )
+        _validate_claims(
+            claims,
+            self._profile,
+            token_type=value.token_type,
+            protected_headers=value.headers,
+            now=now,
+        )
+
+    def _live_epoch(self) -> int | None:
+        try:
+            snapshot = self._repository.snapshot()
+        except Exception:
+            return None
+        return snapshot.epoch if type(snapshot) is KeySnapshot else None
 
     def _snapshot(self) -> KeySnapshot:
         try:

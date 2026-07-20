@@ -37,6 +37,7 @@ PUBLIC_EXPORTS = [
     "TokenProvider",
     "IssuanceProfileProvider",
     "JWSProvider",
+    "VerifiedTokenCacheOptions",
 ]
 
 
@@ -89,7 +90,7 @@ def test_namespace_and_typing_marker_are_packaged_without_root_initializer() -> 
     assert (package_root / "jwt/py.typed").is_file()
 
 
-def test_public_exports_are_staged_without_placeholders() -> None:
+def test_public_surface_has_exact_reviewed_order() -> None:
     assert jwt.__all__ == PUBLIC_EXPORTS
 
 
