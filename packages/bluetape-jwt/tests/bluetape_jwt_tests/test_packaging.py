@@ -35,6 +35,7 @@ PUBLIC_EXPORTS = [
     "IssuanceProfile",
     "ValidationProfile",
     "TokenProvider",
+    "IssuanceProfileProvider",
     "JWSProvider",
 ]
 
