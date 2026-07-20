@@ -3,6 +3,7 @@
 from pkgutil import extend_path
 
 from bluetape.jwt._algorithms import JWSAlgorithm
+from bluetape.jwt._claims import JSONValue, TokenClaims, VerifiedToken
 from bluetape.jwt._errors import (
     JWTCacheError,
     JWTClaimError,
@@ -20,6 +21,7 @@ from bluetape.jwt._errors import (
     JWTUnsupportedTokenError,
 )
 from bluetape.jwt._keys import JWTKey
+from bluetape.jwt._profiles import IssuanceProfile, ValidationProfile
 from bluetape.jwt._repository import (
     InMemoryKeyRepository,
     KeyEntry,
@@ -47,9 +49,14 @@ __all__ = [  # noqa: RUF022 - public order is part of the contract
     "JWTCacheError",
     "JWSAlgorithm",
     "KeyStatus",
+    "JSONValue",
     "JWTKey",
     "KeyEntry",
     "KeySnapshot",
     "KeyRepository",
     "InMemoryKeyRepository",
+    "TokenClaims",
+    "VerifiedToken",
+    "IssuanceProfile",
+    "ValidationProfile",
 ]
