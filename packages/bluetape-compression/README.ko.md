@@ -112,6 +112,6 @@ Serializer schema와 compressor 설정은 application configuration에서 고정
 
 ## 범위 밖
 
-- Streaming, file/path, registry, auto-detection API.
+- 스트리밍, file/path, registry, 자동 감지 API.
 - Encryption 또는 serializer/compressor 자동 협상.
 - 이번 변경에서의 PyPI 배포.
