@@ -1,63 +1,62 @@
-# Issue #45 Strict Serde JSON — Step 3-R Plan Review
+# Issue #45 Strict Serde JSON — Step 3-R 계획 검토
 
-Date: 2026-07-10
-Baseline: `3ff99dc`
+날짜: 2026-07-10
+기준선: `3ff99dc`
 Spec: `docs/superpowers/specs/2026-07-10-issue-45-serde-json-design.md`
 Plan: `docs/superpowers/plans/2026-07-10-issue-45-serde-json-implementation-plan.md`
 
-## Scope
+## 범위
 
-Six independent read-only perspectives reviewed task ordering, API precision,
-strict JSON boundaries, bounded work, packaging, documentation, rollout, and
-delivery evidence. The current session integrated findings, revised the plan,
-and reran every affected lane.
+여섯 개의 독립적인 read-only 관점에서 task ordering, API precision, strict
+JSON boundary, bounded work, packaging, documentation, rollout, delivery
+evidence를 검토했다. 현재 session은 발견 사항을 통합하고 plan을 수정한 뒤
+영향받은 모든 lane을 다시 실행했다.
 
-## Perspective Results
+## 관점별 결과
 
-| Perspective | Initial findings | Required revision | Final result |
+| 관점 | 초기 발견 | 필수 수정 | 최종 결과 |
 | --- | --- | --- | --- |
-| Performance | P1=2 | O(depth) cursor frames; bounded-allocation evidence for wide preflight and linear scanner | P0=0 P1=0 |
-| Stability | P1=4 P2=3 | Exact input boundaries; context-free UTF-8 and encoder translation; unmatched-closer regression; parser and config edges | P0=0 P1=0 |
-| Security | P1=1 | Reject exponent overflow through a finite `parse_float` hook under both trust profiles | P0=0 P1=0 |
-| Operator/Ops | P1=2 P2=1 | Enumerated rollout/rollback; durable #46 constraints; final PR-head CI evidence | P0=0 P1=0 |
-| Developer/API | P1=4 P2=1 | Buildable README ordering; both workspace sources; staged exports; exact aliases and signatures | P0=0 P1=0 |
-| User/Caller | P1=3 P2=1 | Exact ordered exports; trusted-profile misuse warning; concrete migration and install guidance | P0=0 P1=0 |
+| Performance | P1=2 | O(depth) cursor frame, wide preflight의 bounded-allocation evidence와 linear scanner | P0=0 P1=0 |
+| Stability | P1=4 P2=3 | 정확한 input boundary, context-free UTF-8/encoder translation, unmatched-closer regression, parser/config edge | P0=0 P1=0 |
+| Security | P1=1 | 두 trust profile에서 finite `parse_float` hook으로 exponent overflow 거부 | P0=0 P1=0 |
+| Operator/Ops | P1=2 P2=1 | 명시적인 rollout/rollback, durable #46 제약, 최종 PR-head CI evidence | P0=0 P1=0 |
+| Developer/API | P1=4 P2=1 | buildable README ordering, 두 workspace source, staged export, 정확한 alias와 signature | P0=0 P1=0 |
+| User/Caller | P1=3 P2=1 | 정확한 ordered export, trusted-profile misuse 경고, 구체적인 migration/install guidance | P0=0 P1=0 |
 
-## Main-Session Integration
+## Main-session 통합
 
-The integration review mapped every acceptance criterion and DoD item to a
-concrete task and verified that no task depends on a later artifact. It also
-confirmed:
+통합 검토에서 모든 acceptance criterion과 DoD item을 구체적인 task에 매핑하고,
+어떤 task도 이후 artifact에 의존하지 않음을 확인했다. 또한 다음을 확인했다.
 
-- strict TDD ordering from package scaffold through contracts, encode, decode,
-  documentation, wheel proof, review, PR, and CI;
-- exact public signatures, recursive `JsonValue`, staged exports, and final
-  ordered `__all__` verification;
-- deterministic configuration, metadata, byte, UTF-8, structural, and parser
-  gates with fixed context-free errors;
-- O(depth) encode traversal bookkeeping, incremental output consumption, and a
-  one-pass constant-state decode scanner with named allocation evidence;
+- package scaffold부터 contract, encode, decode, documentation, wheel proof,
+  review, PR, CI까지 strict TDD 순서
+- 정확한 public signature, recursive `JsonValue`, staged export, 최종 ordered
+  `__all__` 검증
+- deterministic configuration, metadata, byte, UTF-8, structural, parser gate와
+  고정된 context-free error
+- O(depth) encode traversal bookkeeping, incremental output consumption,
+  named allocation evidence가 있는 one-pass constant-state decode scanner
 - dependency-free wheel metadata, core-only default install, local-extra smoke,
-  multilingual documentation, reader-first rollback, and the #46 Fory handoff;
-- final required-check evidence pinned to the last pushed PR head SHA.
+  multilingual documentation, reader-first rollback, #46 Fory handoff
+- 마지막 pushed PR head SHA에 고정한 최종 required-check evidence
 
-## Explicit Reject With Rationale
+## 명시적으로 거부한 항목과 근거
 
-The plan does not map every unexpected encoder `ValueError` to
-`CIRCULAR_REFERENCE`. Circularity is classified deterministically during the
-active-path preflight. Parsing stdlib exception text afterward would create a
-runtime-message dependency; an unexpected encoder `ValueError` therefore maps
-to `UNSUPPORTED_VALUE`. The stability rerun accepted this mapping.
+Plan은 모든 예상하지 못한 encoder `ValueError`를 `CIRCULAR_REFERENCE`로
+매핑하지 않는다. Circularity는 active-path preflight에서 deterministic하게
+분류한다. 이후 parsing stdlib exception text를 사용하면 runtime-message
+dependency가 생기므로, 예상하지 못한 encoder `ValueError`는
+`UNSUPPORTED_VALUE`로 매핑한다. Stability rerun은 이 매핑을 승인했다.
 
-## Convergence
+## 수렴
 
-| Priority | Initial | Remaining |
+| 우선순위 | 초기 | 잔여 |
 | --- | ---: | ---: |
 | P0 | 0 | 0 |
 | P1 | 16 | 0 |
 | P2 | 6 | 0 |
 | P3 | 0 | 0 |
 
-Open questions: none.
+열린 질문: 없음.
 
-Verdict: Step 3-R PASS. `P0=0 P1=0`.
+판정: Step 3-R PASS. `P0=0 P1=0`.

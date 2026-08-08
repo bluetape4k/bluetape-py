@@ -1,77 +1,51 @@
-# Issue #14 SQL, Repository, Audit, and Outbox Strategy
+# Issue #14 SQL, Repository, Audit, Outbox 전략
 
 Issue: [#14](https://github.com/bluetape4k/bluetape-py/issues/14)
 Milestone: `0.2.0`
 Date: 2026-07-16
 
-## Decision
+## 결정
 
-Use three focused production boundaries instead of one SQL/audit/outbox package:
+하나의 SQL/audit/outbox package 대신 세 가지 focused production boundary를 사용합니다.
 
-1. A future `bluetape-sql` distribution should use SQLAlchemy Core 2.x as its
-   expression and result layer. It should expose separate sync and async helper
-   families that accept a caller-owned `Connection` or `AsyncConnection` and
-   never create, close, commit, or roll back that connection.
-2. A future `bluetape-audit` distribution should be stdlib-only and
-   storage-neutral. It should own immutable audit event/value contracts and
-   conformance behavior, not a SQL schema, engine, repository base class,
-   publisher process, or broker.
-3. Durable audit delivery should use a separate PostgreSQL-first adapter. Its
-   enqueue operation participates in the caller's application transaction;
-   its claim/mark operations use bounded PostgreSQL transactions and
-   `FOR UPDATE SKIP LOCKED`. The caller owns relay invocation, scheduling,
-   cancellation, publisher clients, and shutdown.
+1. 향후 `bluetape-sql` distribution은 SQLAlchemy Core 2.x를 expression/result layer로 사용합니다. Caller-owned `Connection` 또는 `AsyncConnection`을 받는 sync/async helper family를 분리하여 노출하고 connection을 생성, close, commit, rollback하지 않습니다.
+2. 향후 `bluetape-audit` distribution은 표준 라이브러리 전용 storage-neutral package입니다. Immutable audit event/value contract와 conformance behavior를 소유하되 SQL schema, engine, repository base class, publisher process, broker는 소유하지 않습니다.
+3. Durable audit delivery는 별도의 PostgreSQL-first adapter를 사용합니다. Enqueue는 caller의 application transaction에 참여하고 claim/mark는 bounded PostgreSQL transaction과 `FOR UPDATE SKIP LOCKED`를 사용합니다. Relay invocation, scheduling, cancellation, publisher client, shutdown은 caller가 소유합니다.
 
-Psycopg remains the supported PostgreSQL DB-API baseline and escape hatch. It
-is not a second public toolkit. Direct asyncpg is similarly retained as the
-validated SQLAlchemy async driver rather than exposed as a parallel query API.
+Psycopg는 지원하는 PostgreSQL DB-API baseline이자 escape hatch이며 두 번째 public toolkit이 아닙니다. Direct asyncpg도 parallel query API로 노출하지 않고 검증된 SQLAlchemy async driver로 유지합니다.
 
-Do not add a generic repository base class, unit-of-work container, identity
-map, engine factory, implicit CRUD surface, automatic migration, hidden relay
-worker, or exactly-once claim. Application repositories should remain explicit
-functions or composed classes that own SQL statements and domain mapping while
-receiving a transaction-bound connection.
+Generic repository base class, unit-of-work container, identity map, engine factory, implicit CRUD surface, automatic migration, hidden relay worker, exactly-once claim을 추가하지 않습니다. Application repository는 transaction-bound connection을 받으면서 SQL statement와 domain mapping을 소유하는 명시적 function 또는 composed class로 유지합니다.
 
-This research decision does not authorize implementation. Each production
-slice still requires a separately approved design, dependency policy, public
-API, tests, packaging impact, and release evidence.
+이 research decision은 implementation을 승인하지 않습니다. 각 production slice에는 별도의 승인된 design, dependency policy, public API, test, packaging impact, release evidence가 필요합니다.
 
-## Why SQLAlchemy Core
+## SQLAlchemy Core를 선택한 이유
 
-The first SQL surface needs one expression and result model across sync and
-async applications without adopting ORM session state. SQLAlchemy Core
-provides that boundary:
+첫 SQL surface는 ORM session state 없이 sync/async application에서 하나의 expression/result model이 필요합니다. SQLAlchemy Core가 이 경계를 제공합니다.
 
-- `Connection` and `AsyncConnection` carry the transaction-bound execution
-  capability;
-- Core statements are shared across sync and async paths;
-- `RowMapping` supports explicit, reviewable conversion into application
-  dataclasses;
-- the PostgreSQL dialect supports Psycopg and asyncpg;
-- connection, engine, pool, isolation, commit, and rollback ownership can stay
-  outside helper functions.
+- `Connection`과 `AsyncConnection`은 transaction-bound execution capability를 전달합니다.
+- Core statement는 sync/async path에서 공유할 수 있습니다.
+- `RowMapping`은 application dataclass로 명시적이고 검토 가능한 변환을 지원합니다.
+- PostgreSQL dialect는 Psycopg와 asyncpg를 지원합니다.
+- Connection, engine, pool, isolation, commit, rollback ownership은 helper function 밖에 둘 수 있습니다.
 
-SQLAlchemy Core is not selected as an excuse for generic SQL abstraction. The
-first conformance target is PostgreSQL only. Helpers may use portable Core
-constructs, but the package must not claim MySQL, MariaDB, SQLite, CockroachDB,
-or another backend until that backend has its own tests and semantics review.
+SQLAlchemy Core를 generic SQL abstraction의 구실로 선택한 것은 아닙니다. 첫 conformance target은 PostgreSQL뿐입니다. Helper는 portable Core construct를 사용할 수 있지만 MySQL, MariaDB, SQLite, CockroachDB 또는 다른 backend는 자체 test와 semantics review가 생길 때까지 지원한다고 주장하지 않습니다.
 
-## Candidate Matrix
+## Candidate matrix
 
-| Candidate | Result | Reason |
-| --- | --- | --- |
-| Psycopg DB-API sync | Keep as PostgreSQL baseline and escape hatch | Small explicit transaction surface and useful diagnostic baseline, but a separate DB-API helper family would duplicate sync/async mapping and statement contracts. |
-| SQLAlchemy Core sync + Psycopg | Select for the first sync toolkit | Explicit connection/transaction boundary, composable statements, mappings, and no ORM session requirement. |
-| SQLAlchemy `AsyncEngine` + asyncpg | Select for the first async toolkit | Uses the same Core statement model while preserving explicit async connection ownership. |
-| Direct asyncpg public helpers | Reject for the first toolkit | PostgreSQL-only placeholder, result, pool, and transaction APIs would create a second public query/mapping contract. Keep it behind SQLAlchemy's async dialect. |
-| SQLAlchemy ORM or SQLModel repository base | Reject | Adds session identity, flush, relationship, and model lifecycle decisions that application repositories must own. |
-| Driver-neutral protocol over DB-API/Core/asyncpg | Reject | The lowest common denominator would erase transaction and result semantics while still requiring backend-specific implementations. |
+| Candidate | 결과 | 이유 |
+|---|---|---|
+| Psycopg DB-API sync | PostgreSQL baseline 및 escape hatch로 유지 | 작고 명시적인 transaction surface와 진단 기준을 제공하지만 별도 DB-API helper family는 sync/async mapping과 statement contract를 중복합니다. |
+| SQLAlchemy Core sync + Psycopg | 첫 sync toolkit으로 선택 | 명시적 connection/transaction boundary, 조합 가능한 statement와 mapping, ORM session 불필요. |
+| SQLAlchemy `AsyncEngine` + asyncpg | 첫 async toolkit으로 선택 | 동일한 Core statement model을 사용하면서 명시적인 async connection ownership을 유지합니다. |
+| Direct asyncpg public helper | 첫 toolkit에서는 거부 | PostgreSQL 전용 placeholder, result, pool, transaction API가 두 번째 public query/mapping contract를 만듭니다. SQLAlchemy async dialect 뒤에 둡니다. |
+| SQLAlchemy ORM 또는 SQLModel repository base | 거부 | Application repository가 소유해야 하는 session identity, flush, relationship, model lifecycle 결정을 추가합니다. |
+| DB-API/Core/asyncpg 위의 driver-neutral protocol | 거부 | Lowest common denominator가 transaction/result semantics를 지우면서도 backend-specific implementation을 요구합니다. |
 
-## Transaction Ownership Contract
+## Transaction ownership contract
 
-### Application writes
+### Application write
 
-The application service is the single owner of a business transaction:
+Application service가 business transaction의 단일 owner입니다.
 
 ```text
 application transaction owner
@@ -81,28 +55,17 @@ application transaction owner
   -> commit or rollback once
 ```
 
-Every nested helper receives the same transaction-bound connection. It may
-execute SQL and return values or errors, but it must not commit, roll back,
-close the connection, replace it with an engine, or silently open another
-connection. This rule applies equally to sync and async helpers.
+모든 nested helper는 같은 transaction-bound connection을 받습니다. SQL을 실행하고 value/error를 반환할 수 있지만 commit, rollback, close, engine 교체, 묵시적인 다른 connection open을 해서는 안 됩니다. 이 규칙은 sync/async helper에 동일합니다.
 
-### Relay transactions
+### Relay transaction
 
-Outbox relay work has a different owner. A caller explicitly invokes one
-bounded relay iteration. The adapter may own short claim and mark transactions
-inside that invocation, but it must not own the surrounding loop, timer, task,
-thread, process, broker client, or application shutdown.
+Outbox relay work에는 다른 owner가 있습니다. Caller가 하나의 bounded relay iteration을 명시적으로 호출합니다. Adapter는 그 호출 안에서 짧은 claim/mark transaction을 소유할 수 있지만 surrounding loop, timer, task, thread, process, broker client, application shutdown은 소유하지 않습니다.
 
-The implementation issue must define claim ownership tokens, lease expiry,
-retry/attempt state, stale-claim recovery, publisher failure, and mark-published
-compare-and-set behavior. The spike proved distinct concurrent claims only; it
-did not prove crash recovery or a production lease schema.
+Implementation issue는 claim ownership token, lease expiry, retry/attempt state, stale-claim recovery, publisher failure, mark-published compare-and-set behavior를 정의해야 합니다. Spike는 서로 다른 concurrent claim만 입증했고 crash recovery나 production lease schema는 입증하지 않았습니다.
 
-## Mapping And Repository Scope
+## Mapping과 repository 범위
 
-The SQL package should provide narrow mapping utilities only where repeated
-typed behavior is demonstrated. The default repository pattern remains an
-application-owned function or class:
+SQL package는 반복되는 typed behavior가 입증된 경우에만 좁은 mapping utility를 제공합니다. 기본 repository pattern은 application-owned function 또는 class입니다.
 
 ```python
 def find_order(connection: Connection, order_id: str) -> Order | None:
@@ -110,75 +73,49 @@ def find_order(connection: Connection, order_id: str) -> Order | None:
     return None if row is None else Order(id=row["id"], status=row["status"])
 ```
 
-Async code uses the matching `AsyncConnection` and an explicit `await`. Public
-helpers must preserve missing-row, duplicate-row, constraint, cancellation,
-and caller value behavior without turning every driver error into one generic
-exception.
+Async code는 대응하는 `AsyncConnection`과 명시적인 `await`를 사용합니다. Public helper는 모든 driver error를 하나의 generic exception으로 바꾸지 않고 missing-row, duplicate-row, constraint, cancellation, caller value behavior를 보존해야 합니다.
 
-The first toolkit may consider typed pagination inputs, bounded result helpers,
-and mapper protocols only after concrete callers prove repetition. It should
-not provide model discovery, reflection-driven CRUD, dynamic repository
-generation, global registries, session-local caches, or implicit retries.
+Concrete caller가 반복을 입증한 뒤에만 typed pagination input, bounded result helper, mapper protocol을 고려할 수 있습니다. Model discovery, reflection-driven CRUD, dynamic repository generation, global registry, session-local cache, implicit retry는 제공하지 않습니다.
 
-## Storage-Neutral Audit Boundary
+## Storage-neutral audit 경계
 
-`bluetape-audit` should begin with immutable Python value contracts and remain
-stdlib-only. A follow-up design should settle exact fields and serialization,
-but the boundary should distinguish at least:
+`bluetape-audit`는 immutable Python value contract로 시작하고 표준 라이브러리 전용으로 유지합니다. 후속 design이 정확한 field와 serialization을 정하되 최소한 다음을 구분해야 합니다.
 
-- stable event identity and occurrence time;
+- stable event identity와 occurrence time;
 - action/type;
-- subject identity and optional actor identity;
+- subject identity와 optional actor identity;
 - correlation/causation metadata;
-- caller-owned payload or change representation;
-- explicit validation, redaction, and size policy.
+- caller-owned payload 또는 change representation;
+- 명시적 validation, redaction, size policy.
 
-The package must not read a global current user, request, logger, trace, or
-database session. It must not choose a SQL schema or broker. In-memory
-conformance helpers may be useful for contract tests, but they are not durable
-history or an outbox.
+Package가 global current user, request, logger, trace, database session을 읽어서는 안 됩니다. SQL schema나 broker를 선택하지 않습니다. In-memory conformance helper는 contract test에 유용할 수 있지만 durable history나 outbox가 아닙니다.
 
-## PostgreSQL Outbox Boundary
+## PostgreSQL outbox 경계
 
-The durable adapter should be PostgreSQL-specific and explicit about its
-delivery guarantee:
+Durable adapter는 PostgreSQL-specific이어야 하며 delivery guarantee를 명시해야 합니다.
 
-- enqueue shares the exact caller-owned application transaction;
-- claim selects a bounded ordered batch;
-- concurrent claimers use `FOR UPDATE SKIP LOCKED` only for queue-like rows;
-- successful publish followed by a crash before durable mark can cause a
-  duplicate;
-- publishers and consumers therefore require idempotency by event identity;
-- claim lease and attempt state must permit deterministic stale-claim recovery;
-- relay execution is caller-driven and contains no hidden scheduler or worker;
-- migrations, role permissions, TLS, pool sizing, retention, partitioning, and
-  operational monitoring remain caller/operator-owned.
+- enqueue는 정확히 caller-owned application transaction을 공유합니다.
+- claim은 bounded ordered batch를 선택합니다.
+- Concurrent claimer는 queue-like row에만 `FOR UPDATE SKIP LOCKED`를 사용합니다.
+- Publish 성공 후 durable mark 전에 crash하면 duplicate가 발생할 수 있습니다.
+- 따라서 publisher와 consumer는 event identity로 idempotency를 보장해야 합니다.
+- Claim lease와 attempt state는 deterministic stale-claim recovery를 허용해야 합니다.
+- Relay execution은 caller-driven이며 hidden scheduler나 worker가 없습니다.
+- Migration, role permission, TLS, pool sizing, retention, partitioning, operational monitoring은 caller/operator가 소유합니다.
 
-At-least-once is the honest first contract. Exactly-once publication across a
-PostgreSQL transaction and an external broker is rejected because this scope
-does not introduce distributed transactions or broker-specific coordination.
+At-least-once가 첫 contract로 정직합니다. 이 scope에는 distributed transaction이나 broker-specific coordination이 없으므로 PostgreSQL transaction과 external broker 사이의 exactly-once publication은 거부합니다.
 
-## PostgreSQL Testcontainers Boundary
+## PostgreSQL Testcontainers 경계
 
-Issue [#15](https://github.com/bluetape4k/bluetape-py/issues/15) already owns
-the fixture package. Its PostgreSQL slice should wrap the official
-`PostgresContainer` lifecycle and expose sanitized connection coordinates or
-explicit URL renderers suitable for DB-API, SQLAlchemy sync, and SQLAlchemy
-async callers.
+Issue [#15](https://github.com/bluetape4k/bluetape-py/issues/15)가 fixture package를 이미 소유합니다. PostgreSQL slice는 공식 `PostgresContainer` lifecycle을 감싸고 DB-API, SQLAlchemy sync, SQLAlchemy async caller가 사용할 sanitized connection coordinate 또는 명시적 URL renderer를 노출해야 합니다.
 
-The fixture must not create an application engine, choose pool sizes, run
-migrations, begin transactions, seed domain data, enable container reuse, or
-hold global singleton state. Tests that use PostgreSQL or other external
-containers remain serial where shared Docker resources can conflict.
+Fixture는 application engine을 만들거나 pool size를 선택하거나 migration, transaction, domain seed, container reuse를 실행하거나 global singleton state를 보유하지 않습니다. PostgreSQL 또는 다른 external container를 사용하는 test는 공유 Docker resource가 충돌할 수 있는 경우 serial로 실행합니다.
 
-## Disposable PostgreSQL Evidence
+## Disposable PostgreSQL 근거
 
-The spike ran outside the repository from
-`/tmp/bluetape-issue14-spike/spike.py`. The source and dependencies are not
-committed, and `pyproject.toml`, `uv.lock`, production packages, and CI remain
-unchanged.
+Spike는 repository 밖 `/tmp/bluetape-issue14-spike/spike.py`에서 실행했습니다. Source와 dependency는 commit하지 않았으며 `pyproject.toml`, `uv.lock`, production package, CI는 바뀌지 않았습니다.
 
-Successful command:
+성공한 command:
 
 ```bash
 uv run --no-project \
@@ -192,7 +129,7 @@ uv run --no-project \
 Resolved environment:
 
 | Component | Version |
-| --- | --- |
+|---|---|
 | Python | `3.13.14` |
 | PostgreSQL server | `18.4` from `postgres:18-alpine` |
 | Testcontainers Python | `4.14.2` |
@@ -200,75 +137,56 @@ Resolved environment:
 | SQLAlchemy | `2.0.51` |
 | asyncpg | `0.31.0` |
 
-Proof results:
+Proof result:
 
 | Proof | Result | Evidence |
-| --- | --- | --- |
-| Psycopg commit + explicit dataclass mapping | PASS | business/audit/outbox counts `[1, 1, 1]` |
-| Psycopg forced rollback | PASS | counts `[0, 0, 0]` |
-| SQLAlchemy Core sync commit + `RowMapping` to dataclass | PASS | counts `[1, 1, 1]` |
-| SQLAlchemy Core sync forced rollback | PASS | counts `[0, 0, 0]` |
-| SQLAlchemy Core async + asyncpg commit + mapping | PASS | counts `[1, 1, 1]` |
-| SQLAlchemy Core async forced rollback | PASS | counts `[0, 0, 0]` |
-| Two concurrent `SKIP LOCKED` claims | PASS | first connection claimed `claim-1`; second claimed `claim-2` while the first lock remained open |
+|---|---|---|
+| Psycopg commit + explicit dataclass mapping | PASS | business/audit/outbox count `[1, 1, 1]` |
+| Psycopg forced rollback | PASS | count `[0, 0, 0]` |
+| SQLAlchemy Core sync commit + `RowMapping` to dataclass | PASS | count `[1, 1, 1]` |
+| SQLAlchemy Core sync forced rollback | PASS | count `[0, 0, 0]` |
+| SQLAlchemy Core async + asyncpg commit + mapping | PASS | count `[1, 1, 1]` |
+| SQLAlchemy Core async forced rollback | PASS | count `[0, 0, 0]` |
+| Two concurrent `SKIP LOCKED` claim | PASS | 첫 connection은 lock을 열어 둔 채 `claim-1`, 둘째는 `claim-2`를 claim |
 
-The successful run took `5.890` seconds after dependency installation. The
-first bounded run used plain `sqlalchemy` and reached the async phase without
-the separately declared asyncio runtime extra. It failed there with
-`ValueError`; no transaction proof was rewritten. The only retry changed the
-dependency to `sqlalchemy[asyncio]`, which installs the async `greenlet`
-runtime required by SQLAlchemy's official asyncio installation guidance. All
-seven proofs then passed. Future async test environments must declare the
-asyncio extra explicitly instead of relying on platform-dependent transitive
-installation.
+Dependency installation 후 성공 run은 `5.890`초가 걸렸습니다. 첫 bounded run은 plain `sqlalchemy`를 사용하여 별도로 선언한 asyncio runtime extra 없이 async phase에 도달했고 `ValueError`로 실패했습니다. Transaction proof는 다시 쓰지 않았습니다. 유일한 retry는 dependency를 `sqlalchemy[asyncio]`로 바꾸었고, 이는 SQLAlchemy 공식 asyncio installation guidance가 요구하는 async `greenlet` runtime을 설치합니다. 이후 일곱 proof가 모두 통과했습니다. 향후 async test environment는 platform-dependent transitive installation에 기대지 말고 asyncio extra를 명시해야 합니다.
 
-## What The Spike Does Not Prove
+## Spike가 입증하지 않은 항목
 
-- Production throughput, latency, pool sizing, or backpressure.
+- Production throughput, latency, pool sizing, backpressure.
 - Cross-database SQL portability.
-- ORM or SQLModel behavior.
+- ORM 또는 SQLModel behavior.
 - Nested transaction/savepoint policy.
-- Serialization, encryption, payload size, or schema evolution.
-- Claim lease expiry, stale-claim recovery, retry schedule, retention, or
-  dead-letter policy.
-- Broker publishing, idempotent consumers, or exactly-once delivery.
-- PostgreSQL failover, commit-unknown recovery, network partition, TLS, or role
-  permissions.
+- Serialization, encryption, payload size, schema evolution.
+- Claim lease expiry, stale-claim recovery, retry schedule, retention, dead-letter policy.
+- Broker publishing, idempotent consumer, exactly-once delivery.
+- PostgreSQL failover, commit-unknown recovery, network partition, TLS, role permission.
 
-These limitations belong in the follow-up implementation designs and their
-Testcontainers integration suites.
+이 제한은 후속 implementation design과 Testcontainers integration suite에 기록해야 합니다.
 
-## Follow-Up Mapping
+## 후속 mapping
 
-- [#30](https://github.com/bluetape4k/bluetape-py/issues/30) should narrow to
-  the SQLAlchemy Core toolkit and application repository guidance. Remove
-  outbox storage and optional encrypted-column scope from its first slice.
-- [#25](https://github.com/bluetape4k/bluetape-py/issues/25) should narrow to
-  the stdlib-only storage-neutral audit model and conformance contracts. Broker
-  and SQL adapters should become separate follow-ups.
-- [#77](https://github.com/bluetape4k/bluetape-py/issues/77) owns the focused
-  PostgreSQL transactional outbox adapter, including enqueue, bounded
-  claim/mark/fail operations, lease recovery, at-least-once semantics, and
-  caller-driven relay behavior.
-- [#15](https://github.com/bluetape4k/bluetape-py/issues/15) remains the owner
-  of the PostgreSQL Testcontainers fixture required by #30 and #77.
+- [#30](https://github.com/bluetape4k/bluetape-py/issues/30)은 SQLAlchemy Core toolkit과 application repository guidance로 좁힙니다. Outbox storage와 optional encrypted-column scope는 첫 slice에서 제거합니다.
+- [#25](https://github.com/bluetape4k/bluetape-py/issues/25)은 표준 라이브러리 전용 storage-neutral audit model과 conformance contract로 좁힙니다. Broker와 SQL adapter는 별도 follow-up이 됩니다.
+- [#77](https://github.com/bluetape4k/bluetape-py/issues/77)은 enqueue, bounded claim/mark/fail operation, lease recovery, at-least-once semantics, caller-driven relay behavior를 포함한 focused PostgreSQL transactional outbox adapter를 소유합니다.
+- [#15](https://github.com/bluetape4k/bluetape-py/issues/15)은 #30과 #77에 필요한 PostgreSQL Testcontainers fixture owner로 남습니다.
 
-## Rejected Alternatives
+## 거부한 대안
 
-| Alternative | Reason for rejection |
-| --- | --- |
-| One `bluetape-data` or SQL/audit/outbox distribution | Couples storage-neutral values, query helpers, PostgreSQL schema, and delivery lifecycle. |
-| Generic repository base class | Hides application query, mapping, aggregate, transaction, and error decisions behind inheritance. |
-| ORM/SQLModel first | Introduces session, identity, flush, and model lifecycle before a concrete ORM consumer exists. |
-| Separate DB-API and direct asyncpg public toolkits | Creates divergent sync/async statements, placeholders, mappings, and errors. |
-| Storage-neutral durable outbox | Claim, locking, lease, and recovery behavior is database-specific; a generic promise would be misleading. |
-| Relay-owned background worker | Hides task/process lifecycle, scheduling, cancellation, shutdown, and publisher ownership. |
-| Exactly-once publication | Not supportable across PostgreSQL and an external publisher without a broader distributed coordination contract. |
-| Committed spike harness | Would create a dependency, CI, and maintenance surface before production design approval. |
+| Alternative | 거부 이유 |
+|---|---|
+| 하나의 `bluetape-data` 또는 SQL/audit/outbox distribution | Storage-neutral value, query helper, PostgreSQL schema, delivery lifecycle을 결합합니다. |
+| Generic repository base class | Application query, mapping, aggregate, transaction, error 결정을 inheritance 뒤에 숨깁니다. |
+| ORM/SQLModel first | Concrete ORM consumer 전에 session, identity, flush, model lifecycle을 도입합니다. |
+| Separate DB-API와 direct asyncpg public toolkit | Divergent sync/async statement, placeholder, mapping, error를 만듭니다. |
+| Storage-neutral durable outbox | Claim, lock, lease, recovery behavior는 database-specific이므로 generic promise가 오해를 만듭니다. |
+| Relay-owned background worker | Task/process lifecycle, scheduling, cancellation, shutdown, publisher ownership을 숨깁니다. |
+| Exactly-once publication | 더 넓은 distributed coordination contract 없이 PostgreSQL과 external publisher 사이에서 지원할 수 없습니다. |
+| Committed spike harness | Production design 승인 전에 dependency, CI, maintenance surface를 만듭니다. |
 
-## Sources
+## Source
 
-Official Python and database sources:
+공식 Python 및 database source:
 
 - [PEP 249 - Python Database API Specification v2.0](https://peps.python.org/pep-0249/)
 - [Psycopg transaction management](https://www.psycopg.org/psycopg3/docs/basic/transactions.html)
@@ -281,7 +199,7 @@ Official Python and database sources:
 - [PostgreSQL transaction isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
 - [Testcontainers Python PostgreSQL](https://testcontainers-python.readthedocs.io/en/latest/modules/postgres/README.html)
 
-Repository and sibling evidence:
+Repository 및 sibling 근거:
 
 - `WIP.md`
 - `docs/package-layout.md`
@@ -292,13 +210,10 @@ Repository and sibling evidence:
 - `bluetape-go/docs/superpowers/specs/2026-06-28-issue-346-sql-audit-outbox-spec.md`
 - `bluetape-go/docs/lessons/2026-06-28-issue-346-sql-audit-outbox.md`
 
-## Version And Retrieval Notes
+## Version과 retrieval note
 
-- Official sources and live GitHub issues were retrieved on 2026-07-16 KST.
-- SQLAlchemy official documentation identified `2.0.51` as the current 2.0
-  release; the disposable environment independently resolved the same version.
-- Package versions above are the exact `uv run --no-project` environment, not
-  new workspace constraints.
-- PostgreSQL `SKIP LOCKED` is used only for queue-like claim work and not as a
-  general consistent read mechanism.
-- No external images were required.
+- 공식 source와 live GitHub issue를 2026-07-16 KST에 가져왔습니다.
+- SQLAlchemy 공식 documentation은 `2.0.51`을 current 2.0 release로 식별했으며 disposable environment에서도 같은 version을 resolve했습니다.
+- 위 package version은 정확한 `uv run --no-project` environment이며 새로운 workspace constraint가 아닙니다.
+- PostgreSQL `SKIP LOCKED`는 queue-like claim work에만 사용하고 general consistent read mechanism으로 사용하지 않습니다.
+- 외부 image는 필요하지 않았습니다.

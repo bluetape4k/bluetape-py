@@ -1,18 +1,17 @@
-# Issue #25 Audit Contracts Specification Review
+# Issue #25 Audit Contracts Specification 검토
 
-Date: 2026-07-16 KST
+날짜: 2026-07-16 KST
 Issue: #25 - `feat: add storage-neutral audit event contracts`
-Artifact:
-`docs/superpowers/specs/2026-07-16-issue-25-audit-contracts-design.md`
+Artifact: `docs/superpowers/specs/2026-07-16-issue-25-audit-contracts-design.md`
 
-## Review Scope
+## 검토 범위
 
-Six independent read-only perspectives reviewed the written design before
-implementation planning. Reviewers had no write, commit, GitHub mutation,
-build, or test authority. The main session normalized severity, repaired the
-specification, and requested convergence review only for affected lenses.
+여섯 independent read-only perspective가 implementation planning 전에 written
+design을 검토했다. Reviewer에게 write, commit, GitHub mutation, build, test
+권한은 없었다. Main session이 severity를 정규화하고 spec을 수정한 뒤 affected
+lens만 convergence review를 요청했다.
 
-| Perspective | Role surface | Initial result | Final result |
+| Perspective | Role surface | 초기 | 최종 |
 |---|---|---:|---:|
 | Performance | `code-reviewer` | P0=0, P1=1 | P0=0, P1=0 |
 | Stability/reliability | `verifier` | P0=0, P1=3 | P0=0, P1=0 |
@@ -21,100 +20,93 @@ specification, and requested convergence review only for affected lenses.
 | Developer/public API | `code-reviewer` | P0=0, P1=5 | P0=0, P1=0 |
 | User/caller | `writer` | P0=0, P1=3 | P0=0, P1=0 |
 
-Final independent verdict: **P0=0, P1=0 across all six perspectives**.
+최종 independent 판정: 여섯 관점 모두 **P0=0, P1=0**.
 
-## Material Repairs
+## 주요 수정
 
-### Bounded construction and immutable snapshots
+### Bounded construction 및 immutable snapshot
 
-Initial performance, stability, and security reviews found that copying an
-arbitrary `Mapping` before explicit validation could invoke caller code and
-allocate without a package bound. The repaired contract:
+임의의 `Mapping`을 explicit validation 전에 복사하면 caller code를 실행하거나
+package bound 없이 allocate할 수 있다는 발견을 수정했다.
 
-- accepts an exact built-in metadata `dict` input only;
-- checks the package hard entry ceiling before copying;
-- performs one private shallow copy and rechecks its length;
-- validates only the private copy in insertion order;
-- publishes the read-only proxy only after complete validation;
-- documents the caller precondition for concurrent source mutation.
+- Exact built-in metadata `dict`만 받는다.
+- Copy 전에 package hard entry ceiling을 확인한다.
+- Private shallow copy 한 번만 수행하고 length를 재확인한다.
+- Insertion order로 private copy만 validate한다.
+- Complete validation 후에만 read-only proxy를 publish한다.
+- Concurrent source mutation에 대한 caller precondition을 문서화한다.
 
-Opaque payload bytes are length-checked without copying or scanning and retain
-the exact caller bytes object. Default `AuditLimits` are package hard ceilings;
-explicit policies may be equal or stricter, not wider.
+Opaque payload byte는 copy/scan 없이 length-check하고 exact caller bytes object를
+보존한다. Default `AuditLimits`는 package hard ceiling이며 explicit policy는
+같거나 더 엄격할 수 있지만 넓힐 수 없다.
 
 ### Stable timestamp semantics
 
-The initial design accepted any aware datetime, which allowed mutable or
-stateful caller `tzinfo`. The repaired contract accepts an exact built-in
-`datetime` with exact stdlib `datetime.timezone` or `zoneinfo.ZoneInfo`, rejects
-custom/subclass behavior, preserves wall-clock fields, UTC offset, and `fold`,
-and defines structural timestamp equality explicitly.
+Mutable/stateful caller `tzinfo`를 허용하던 임의의 aware datetime을 수정했다.
+Exact built-in `datetime`과 stdlib `datetime.timezone` 또는 `zoneinfo.ZoneInfo`
+만 받고 custom/subclass behavior를 거부한다. Wall-clock field, UTC offset, `fold`
+를 보존하며 structural timestamp equality를 명시한다.
 
-### Safe and actionable errors
+### 안전하고 실행 가능한 error
 
-The repaired error surface adds `InvalidAuditLimitsError`, defines exact
-constructor-versus-validator exception ownership, and makes every value type's
-`repr` a constant redacted literal. `AuditLimitExceededError` exposes only
-bounded `field_category` and `limit_name` attributes from a closed mapping; it
-stores no rejected value. Wrong validator argument types and testing-helper
-unknown overrides use deterministic value-free `TypeError` messages.
+`InvalidAuditLimitsError`를 추가하고 constructor/validator exception ownership을
+정의했다. 모든 value type의 `repr`은 constant redacted literal이다.
+`AuditLimitExceededError`는 closed mapping의 bounded `field_category`와
+`limit_name`만 노출하고 rejected value를 저장하지 않는다. 잘못된 validator
+argument와 testing-helper unknown override는 value-free deterministic
+`TypeError` message를 사용한다.
 
-### Exact Python API behavior
+### 정확한 Python API
 
-The repaired design fixes constructor positional/keyword behavior, exact
-metadata input typing, final/subclass policy, equality, hashing, representation,
-validation precedence, helper comparison order, mismatch categories, and the
-complete deterministic factory value. `AuditEvent` is explicitly unhashable,
-metadata equality is order-insensitive, and `dataclasses.replace()` is outside
-the public contract.
+Constructor positional/keyword behavior, exact metadata typing, final/subclass
+policy, equality, hashing, repr, validation precedence, helper comparison order,
+mismatch category, deterministic factory value를 고정했다. `AuditEvent`는
+명시적으로 unhashable이고 metadata equality는 order-insensitive다.
+`dataclasses.replace()`는 public contract 밖이다.
 
-### Caller and operator ownership
+### Caller/operator ownership
 
-The repaired design adds normative semantics for event identity, action,
-occurrence time, subject, actor, correlation, and causation. It makes adapter
-validation immediately before the first side effect authoritative; earlier
-application validation is optional and cannot satisfy that gate.
+Event identity, action, occurrence time, subject, actor, correlation, causation의
+normative semantics를 추가했다. Adapter validation은 first side effect 직전의
+authoritative gate이며 앞선 application validation으로 대체할 수 없다.
 
-Successful validation is explicitly not durable capture. Atomic capture,
-idempotency by stable event ID, retry classification, ordering, backpressure,
-retention, quarantine/dead-letter behavior, and partial-failure recovery remain
-adapter/operator-owned. Package ceilings prevent additional retention/copy,
-not upstream request allocation or decoding.
+Successful validation은 durable capture가 아니다. Atomic capture, stable event ID
+idempotency, retry classification, ordering, backpressure, retention,
+quarantine/dead-letter, partial-failure recovery는 adapter/operator가 소유한다.
 
-### Executable documentation boundary
+### 실행 가능한 documentation 경계
 
-The design now pins one direct/meta install and install-to-adapter example,
-safe error handling, `(content_type, schema_version)` dispatch, incremental
-adoption, removal rollback, and an English/Korean parity checklist. Framework
-values require explicit caller conversion to the supported built-ins.
+Direct/meta install, install-to-adapter example, safe error handling,
+`(content_type, schema_version)` dispatch, incremental adoption, removal rollback,
+English/Korean parity checklist를 고정했다. Framework value는 지원되는 built-in으로
+caller가 명시적으로 변환해야 한다.
 
-## Main-Session Integration Checks
+## Main-session 통합 check
 
-| Check | Evidence | Result |
+| Check | 근거 | 결과 |
 |---|---|---|
-| Issue boundary | Live issue #25 and issue #14 research keep audit values separate from SQL and outbox packages | PASS |
-| Public surface | Exact exports, signatures, exception taxonomy, equality/hash/repr, and helper behavior are declared | PASS |
-| Storage neutrality | No repository, history, SQL, outbox, broker, worker, serializer, logging, or global context surface | PASS |
-| Package boundary | Python 3.13+, stdlib-only, optional `audit` extra, unchanged core-only default | PASS |
-| Testability | Boundary, limit+1, hostile-marker, snapshot, timezone, helper, packaging, wheel, and bilingual examples are specified | PASS |
-| Operational honesty | Validation is separated from durability, transaction, delivery, and upstream allocation guarantees | PASS |
-| Placeholders | No TBD, TODO, FIXME, deferred API choice, or unresolved implementation branch | PASS |
+| Issue boundary | Live issue #25와 #14 research가 audit value를 SQL/outbox와 분리 | PASS |
+| Public surface | Exact export/signature, exception taxonomy, equality/hash/repr, helper behavior 선언 | PASS |
+| Storage neutrality | Repository/history/SQL/outbox/broker/worker/serializer/logging/global context 없음 | PASS |
+| Package boundary | Python 3.13+, stdlib-only, optional `audit` extra, core-only default 불변 | PASS |
+| Testability | Boundary, limit+1, hostile-marker, snapshot, timezone, helper, packaging, wheel, bilingual example 지정 | PASS |
+| Operational honesty | Validation을 durability/transaction/delivery/upstream allocation 보장과 분리 | PASS |
+| Placeholder | TBD/TODO/FIXME/deferred API choice/unresolved branch 없음 | PASS |
 | Diff hygiene | `git diff --check` | PASS |
 
-## Remaining Non-Blocking Risks
+## 잔여 non-blocking 위험
 
-- No durable adapter exists yet, so atomic capture, idempotency, replay, and
-  delivery behavior remain future adapter obligations rather than proven code.
-- Character ceilings do not bound encoded database or transport bytes; adapters
-  must enforce destination-specific constraints.
-- Exact built-in inputs deliberately trade framework convenience for
-  deterministic, side-effect-free construction.
-- Caller-owned persistence, logging, tracing, serialization, and transport can
-  still disclose values if the caller ignores the documented classification
-  and redaction boundary.
+- Durable adapter가 없으므로 atomic capture, idempotency, replay, delivery는
+  future adapter obligation이며 검증된 code가 아니다.
+- Character ceiling은 encoded database/transport byte를 제한하지 않으므로
+  adapter가 destination-specific constraint를 적용해야 한다.
+- Exact built-in input은 deterministic side-effect-free construction을 위해
+  framework convenience를 의도적으로 포기한다.
+- Caller가 classification/redaction 경계를 무시하면 persistence, logging,
+  tracing, serialization, transport가 값을 공개할 수 있다.
 
-## Gate Result
+## Gate 결과
 
-The written specification is internally converged and ready for user review.
-Implementation planning and production-code edits remain blocked until the user
-approves the committed specification.
+Written specification은 내부적으로 수렴했고 user review 준비가 되었다.
+Implementation planning과 production-code edit는 committed specification을
+user가 승인할 때까지 차단된다.

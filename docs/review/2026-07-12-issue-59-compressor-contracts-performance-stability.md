@@ -1,22 +1,21 @@
-# Issue #59 Compressor Performance and Stability Scan
+# Issue #59 Compressor 성능 및 안정성 scan
 
-- Date: 2026-07-12
-- Scope: compressor production code, native providers, package metadata, tests, and CI diff from
-  `origin/develop` through `e8b4100`
-- Verdict: `PASS` (`P0=0`, `P1=0`, `P2=0`, `P3=0`)
+- 날짜: 2026-07-12
+- 범위: `origin/develop`부터 `e8b4100`까지 compressor production code, native provider, package metadata, test, CI diff
+- 판정: `PASS` (`P0=0`, `P1=0`, `P2=0`, `P3=0`)
 
 ## Performance inspection
 
-| Area | Evidence | Result |
+| 영역 | 근거 | 결과 |
 |---|---|---|
-| Stdlib output bound | `_decompress()` feeds at most 64 KiB, requests `remaining + 1`, and appends only accepted output | Bounded logical output; exact and one-over tests pass |
-| Gzip concatenation | Pending input is sliced and unused-data refeeding grows only to the 64 KiB cap | No unbounded refeeding; six targeted stdlib risk tests pass |
-| LZ4 | `LZ4FrameDecompressor` consumes at most 64 KiB input and receives only `remaining + 1` output budget | Spy verifies every input window and budget; no one-shot full decode |
-| Snappy | Declared raw output length is checked before `decompress_raw()` | Oversized spy proves decode is not called |
-| Zstd | Declared frame content size is required and checked before decoder construction | Oversized spy proves decoder is not created; unknown size is rejected |
-| Allocation and state | Frozen/slotted instances retain no per-call buffer or provider context; outputs are assembled once into `bytes` | Repeated calls and weak-reference cleanup pass |
+| Stdlib output bound | `_decompress()`가 최대 64 KiB를 feed하고 `remaining + 1`을 요청하며 accepted output만 append | Bounded logical output; exact와 one-over test 통과 |
+| Gzip concatenation | Pending input을 slice하고 unused-data refeed가 64 KiB cap까지만 증가 | Unbounded refeed 없음; targeted stdlib risk test 6개 통과 |
+| LZ4 | `LZ4FrameDecompressor`가 최대 64 KiB input을 소비하고 `remaining + 1` output budget만 받음 | Spy가 모든 input window와 budget을 검증; one-shot full decode 없음 |
+| Snappy | Declared raw output length를 `decompress_raw()` 전에 검사 | Oversized spy가 decode가 호출되지 않음을 증명 |
+| Zstd | Declared frame content size를 요구하고 decoder construction 전에 검사 | Oversized spy가 decoder가 생성되지 않음을 증명; unknown size 거부 |
+| Allocation 및 state | Frozen/slotted instance가 per-call buffer나 provider context를 보존하지 않고 output을 한 번 `bytes`로 조립 | Repeated call과 weak-reference cleanup 통과 |
 
-Fresh risk commands:
+새 위험 명령:
 
 ```text
 uv run --package bluetape-compression --extra native pytest \
@@ -29,19 +28,20 @@ uv run pytest packages/bluetape-compression/tests/test_compression.py -q \
 => 6 passed, 101 deselected
 ```
 
-The 8 MiB native round-trips are stability evidence, not an absolute latency benchmark. No speed
-or compression-ratio claim is made, so a benchmark chart is N/A.
+8 MiB native round-trip은 stability evidence이며 absolute latency benchmark가
+아니다. Speed나 compression-ratio claim을 하지 않으므로 benchmark chart는 N/A다.
 
 ## Stability inspection
 
-- No async path, thread, lock, file, socket, subprocess, external service, or mutable shared state
-  was added.
-- Provider imports are lazy and focused. Configuration and provider availability fail at
-  construction, so a configured instance does not fail for the first time deep in an operation.
-- Malformed, truncated, trailing, concatenated, checksum-failed, and declared/actual mismatch
-  inputs fail closed.
-- `MemoryError` and `BaseException` subclasses are not translated. Ordinary provider failures are
-  converted outside their handlers with no cause/context or caller payload logging.
-- Dedicated native CI is isolated from Docker/Testcontainers and uses exact provider pins.
+- Async path, thread, lock, file, socket, subprocess, external service, mutable
+  shared state를 추가하지 않았다.
+- Provider import는 lazy하고 focused하다. Configuration과 provider availability는
+  construction에서 실패하므로 configured instance가 operation 중 처음 실패하지 않는다.
+- Malformed, truncated, trailing, concatenated, checksum-failed, declared/actual
+  mismatch input은 fail closed한다.
+- `MemoryError`와 `BaseException` subclass는 translate하지 않는다. Ordinary
+  provider failure는 handler 밖에서 cause/context나 caller payload logging 없이
+  변환한다.
+- Dedicated native CI는 Docker/Testcontainers와 격리되고 exact provider pin을 사용한다.
 
-No performance or stability blocker remains.
+Performance와 stability blocker는 남아 있지 않다.

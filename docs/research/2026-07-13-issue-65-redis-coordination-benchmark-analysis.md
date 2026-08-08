@@ -1,12 +1,10 @@
-# Issue #65 Redis Coordination Benchmark Evidence
+# Issue #65 Redis Coordination benchmark 근거
 
-This note interprets the bounded smoke evidence in
-`docs/review/artifacts/issue-65-redis-coordination-benchmark.json`. It is a
-repeatability and correctness artifact, not a production-capacity or SLO claim.
+이 note는 `docs/review/artifacts/issue-65-redis-coordination-benchmark.json`의 bounded smoke evidence를 해석합니다. Production capacity나 SLO 주장이 아니라 repeatability와 correctness artifact입니다.
 
-## Reproduction
+## 재현
 
-The checked artifact was produced from a clean source tree with:
+검증된 artifact는 clean source tree에서 다음 명령으로 생성했습니다.
 
 ```bash
 uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py \
@@ -14,15 +12,12 @@ uv run python packages/bluetape-cache-redis/benchmarks/coordination_benchmark.py
   --output docs/review/artifacts/issue-65-redis-coordination-benchmark.json
 ```
 
-The fixed smoke registry produced 12 results, 60 measured samples, 10,400
-measured operations, and 12 warmups. Its safety ceilings are inherited from the
-full registry: at most 24 results, 64 callers, 8 coordinators, 8 keys, a
-15,728,640-byte value, and 32 MiB of aggregate payload.
+고정된 smoke registry는 12개 result, 60개 measured sample, 10,400개 measured operation, 12개 warmup을 생성했습니다. Safety ceiling은 full registry에서 상속하며 최대 24개 result, 64 caller, 8 coordinator, 8 key, 15,728,640-byte value, aggregate payload 32 MiB입니다.
 
-## Environment
+## 환경
 
 - Source Git SHA: `b989f8619a10af22f2c4725dcc2e697663709c6b`
-- Python: CPython 3.13.14 on Darwin arm64
+- Python: Darwin arm64의 CPython 3.13.14
 - Redis client: 8.0.1; ephemeral Redis server: 8.8.0
 - Redis image digest: `sha256:2838d5524559494f6f1cd66e97e76b200d64a633a8614200620755ed395daf32`
 - Policy: `redis-coordination-benchmark-v1`
@@ -30,7 +25,7 @@ full registry: at most 24 results, 64 callers, 8 coordinators, 8 keys, a
 - Registry digest: `9e114b562ced345d7c7aab9295ab074173475dc192d25784811f38c37dfd3285`
 - Lock digest: `a825207f86a8935492348035f65b942db501fe4fb6d3609797c3e678cdcbbd36`
 
-## Observed Smoke Medians
+## 관찰된 smoke median
 
 | Mode | Scenario | Median ns | Correctness loaders | Correctness Redis commands |
 | --- | --- | ---: | ---: | ---: |
@@ -47,24 +42,10 @@ full registry: at most 24 results, 64 callers, 8 coordinators, 8 keys, a
 | async | completed-reuse | 1,256,000 | 0 | 10 |
 | async | unrelated-keys | 6,882,959 | 4 | 8 |
 
-Each smoke case has only five measured samples. The schema therefore records
-both p95 and p99 as `null`: p95 requires at least 20 samples and p99 at least
-100. The medians above describe only this captured run and must not be used as
-cross-machine regression thresholds.
+각 smoke case는 측정 sample이 5개뿐입니다. 따라서 schema에는 p95와 p99가 모두 `null`로 기록됩니다. p95에는 최소 20개 sample, p99에는 최소 100개 sample이 필요합니다. 위 median은 이 capture run만 설명하며 machine 간 regression threshold로 사용해서는 안 됩니다.
 
-## Correctness Interpretation
+## Correctness 해석
 
-All correctness invariants passed. The `correctness_*` fields come from a
-separate instrumented phase before warmup and measurement; command recorders,
-loader counters, and envelope-size probes are not installed in the timed path.
-The single- and multi-coordinator cases each converged to one loader, unrelated
-keys used four independent loaders, completed-result reuse invoked no waiter
-loader, and local-only/local-hit issued no Redis commands. Active/completed
-result bytes describe the correctness snapshot only. `process_high_water_bytes`
-is sampled after measurement and is platform-local, so it is not comparable
-across unlike operating systems or process models.
+모든 correctness invariant가 통과했습니다. `correctness_*` field는 warmup과 measurement 전에 실행한 별도의 instrumented phase에서 생성합니다. Command recorder, loader counter, envelope-size probe는 timed path에 설치하지 않습니다. Single 및 multi coordinator case는 각각 하나의 loader로 수렴했고, unrelated key는 독립적인 loader 4개를 사용했으며, completed-result reuse는 waiter loader를 호출하지 않았고 local-only/local-hit는 Redis command를 실행하지 않았습니다. Active/completed result byte는 correctness snapshot만 설명합니다. `process_high_water_bytes`는 measurement 후 sampling하며 platform-local이므로 서로 다른 OS나 process model 사이에서 비교할 수 없습니다.
 
-The artifact demonstrates bounded execution, report integrity, and the intended
-coordination semantics under one ephemeral local Redis environment. It does not
-establish deployment sizing, tail-latency guarantees, throughput capacity,
-production topology behavior, or an SLO.
+이 artifact는 하나의 ephemeral local Redis 환경에서 bounded execution, report integrity, 의도한 coordination semantics를 입증합니다. Deployment sizing, tail-latency guarantee, throughput capacity, production topology behavior, SLO를 입증하지는 않습니다.

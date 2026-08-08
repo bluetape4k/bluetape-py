@@ -1,35 +1,35 @@
-# Issue #8 Async Implementation Review
+# Issue #8 Async 구현 검토
 
-## Result
+## 결과
 
 P0: 0
 
 P1: 0
 
-Verdict: PASS
+판정: PASS
 
-## Verification Evidence
+## 검증 근거
 
-| Check | Result |
+| 검사 | 결과 |
 |---|---|
 | Targeted async contract tests | `31 passed` |
 | Full workspace tests | `84 passed` |
-| Ruff check and format check | PASS |
-| `uv lock --check` and `uv sync --all-packages` | PASS |
-| `uv build --all-packages` | All six distributions built as sdists and wheels |
-| Meta wheel metadata | Default dependency is only `bluetape-core`; `bluetape-async` is gated by the `asyncio` extra |
-| Fresh async wheel smoke | Installed into an isolated Python 3.14 environment and imported `map_bounded` |
-| Documented examples | Ordered bounded-map and self-contained sync examples executed |
+| Ruff check 및 format check | PASS |
+| `uv lock --check` 및 `uv sync --all-packages` | PASS |
+| `uv build --all-packages` | 여섯 distribution을 모두 sdist와 wheel로 빌드 |
+| Meta wheel metadata | 기본 dependency는 `bluetape-core`뿐이며 `bluetape-async`는 `asyncio` extra로 제한 |
+| Fresh async wheel smoke | 격리된 Python 3.14 환경에 설치하고 `map_bounded` import |
+| Documented examples | ordered bounded-map 및 self-contained sync example 실행 |
 | Diff hygiene | `git diff develop...HEAD --check` PASS |
 
-## Independent Review
+## 독립 검토
 
-| Lane | Result | Evidence |
+| Lane | 결과 | 근거 |
 |---|---|---|
-| Code review | APPROVE | No remaining P0/P1 after the self-contained sync comparison example was added. |
-| Architecture review | CLEAR | Call-scoped ownership, cancellation baseline, terminal admission state, thin default install, and the Issue #8 sync/async/bounded comparison all conform. |
+| Code review | APPROVE | self-contained sync comparison example 추가 후 남은 P0/P1 없음 |
+| Architecture review | CLEAR | call-scoped ownership, cancellation baseline, terminal admission state, thin default install, Issue #8 sync/async/bounded comparison이 모두 일치 |
 
-The implementation keeps one public `map_bounded` API, bounds workers to
-`1..1024`, preserves input order, and uses a call-scoped `asyncio.TaskGroup`.
-Direct mapper or iterator cancellation fails closed after cleanup, while
-external cancellation and concurrent races retain native asyncio outcomes.
+구현은 하나의 public `map_bounded` API를 유지하고 worker를 `1..1024`로 제한하며
+input order를 보존한다. Call-scoped `asyncio.TaskGroup`을 사용한다. Direct
+mapper 또는 iterator cancellation은 cleanup 후 fail closed하고, external
+cancellation 및 concurrent race는 native asyncio outcome을 유지한다.

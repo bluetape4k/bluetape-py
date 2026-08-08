@@ -1,64 +1,61 @@
-# PR #6 Python Pattern Review
+# PR #6 Python Pattern 검토
 
-## Scope
+## 범위
 
 - PR: <https://github.com/bluetape4k/bluetape-py/pull/6>
-- Base: `develop` at `0f331dc`
-- Head: `docs/readme-ecosystem-overview` at current PR head
-- Applied guidance: `bluetape4k-workflow` plus `bluetape-py-patterns`
+- 기준: `develop` at `0f331dc`
+- Head: 현재 PR head의 `docs/readme-ecosystem-overview`
+- 적용 지침: `bluetape4k-workflow` 및 `bluetape-py-patterns`
 
-## Findings
+## 발견 사항
 
 - P0: 0
 - P1: 0
 
-The README package boundary matches the Python-native distribution contract:
-`bluetape` remains a thin meta distribution, the default install depends only on
-`bluetape-core`, and `packages/bluetape/pyproject.toml` keeps `packages = []` so
-the root distribution does not create a root `bluetape/__init__.py` import
-surface.
+README package boundary는 Python-native distribution 계약과 일치한다.
+`bluetape`는 thin meta distribution으로 남고, default install은
+`bluetape-core`만 dependency로 가지며, `packages/bluetape/pyproject.toml`은
+`packages = []`를 유지해 root distribution이 root `bluetape/__init__.py`
+import surface를 만들지 않는다.
 
-The README usage snippets use existing public import paths:
+README usage snippet은 기존 public import path를 사용한다:
 `bluetape.core.require_not_blank`, `bluetape.logging.ContextLogFilter`,
-`bluetape.logging.log_context`, and `bluetape.testing.eventually`.
+`bluetape.logging.log_context`, `bluetape.testing.eventually`.
 
-The planned packages are clearly marked as planned and are not presented as
-currently installable import surfaces. The install section also states that the
-public `pip install` shape applies after the first PyPI release.
+계획된 package는 planned 상태로 명확히 표시되어 현재 installable import
+surface로 제시하지 않는다. Install section은 첫 PyPI release 이후에 public
+`pip install` shape가 적용된다고도 명시한다.
 
-The README hero now uses a generated bitmap identity visual similar to sibling
-bluetape ecosystem README heroes. The package relationship diagram remains a
-separate workspace overview asset instead of doubling as the hero image.
+README hero는 sibling bluetape ecosystem README hero와 유사한 generated
+bitmap identity visual을 사용한다. Package relationship diagram은 hero와
+중복하지 않고 별도의 workspace overview asset으로 유지한다.
 
-The ecosystem backlog is tracked in milestone `0.2.0` through issues #7-#34.
-Research-first issues #10, #14, #16, #21, #23, #31, and #34 cover areas where
-Python package boundaries and dependency choices need source-backed evaluation
-before implementation.
+Ecosystem backlog는 milestone `0.2.0`에서 issue #7-#34로 추적한다.
+Research-first issue #10, #14, #16, #21, #23, #31, #34는 구현 전에 source-backed
+평가가 필요한 Python package boundary와 dependency 선택을 다룬다.
 
-The project-management document shape follows `bluetape-go`: detailed planning
-and task queues live in `WIP.md`, completed user-facing changes live in
-`CHANGELOG.md`, release policy lives under `docs/release*`, package boundary
-rules live in `docs/package-layout.md`, and research gates are indexed under
-`docs/research/`.
+Project-management document shape는 `bluetape-go`를 따른다. 상세한 planning과
+task queue는 `WIP.md`, 완료된 user-facing 변경은 `CHANGELOG.md`, release policy는
+`docs/release*`, package boundary rule은 `docs/package-layout.md`, research gate는
+`docs/research/`에 둔다.
 
-## Validation
+## 검증
 
-- `git diff --check`: pass
-- `rg -n "WIP.md|CHANGELOG.md|docs/release|docs/research|docs/package-layout.md" README.md README.ko.md`: pass
-- `uv sync --all-packages`: pass
-- `uv build --all-packages`: pass
-- `uv run pytest`: pass, 11 tests
-- `uv run ruff check .`: pass
-- `uv run ruff format --check .`: pass
-- `xmllint --noout docs/images/readme-diagrams/bluetape-py-workspace-overview.svg`: pass
-- `/Users/debop/.local/bin/cairosvg docs/images/readme-diagrams/bluetape-py-workspace-overview.svg -o docs/images/readme-diagrams/bluetape-py-workspace-overview.png -s 2`: pass
-- `file` and `sips` PNG dimension checks for the README hero and workspace overview PNG assets: pass
-- `actionlint`: pass
+- `git diff --check`: 통과
+- `rg -n "WIP.md|CHANGELOG.md|docs/release|docs/research|docs/package-layout.md" README.md README.ko.md`: 통과
+- `uv sync --all-packages`: 통과
+- `uv build --all-packages`: 통과
+- `uv run pytest`: 통과, 11 tests
+- `uv run ruff check .`: 통과
+- `uv run ruff format --check .`: 통과
+- `xmllint --noout docs/images/readme-diagrams/bluetape-py-workspace-overview.svg`: 통과
+- `/Users/debop/.local/bin/cairosvg docs/images/readme-diagrams/bluetape-py-workspace-overview.svg -o docs/images/readme-diagrams/bluetape-py-workspace-overview.png -s 2`: 통과
+- README hero 및 workspace overview PNG asset의 `file`/`sips` dimension check: 통과
+- `actionlint`: 통과
 
-## Notes
+## 참고
 
-The Python-package `cairosvg` import path was not used as final render evidence
-because the local Python installation could not load the system cairo library.
-The installed CairoSVG CLI at `/Users/debop/.local/bin/cairosvg` successfully
-rendered the workspace overview PNG after the hero moved to generated
-bitmap-only output.
+최종 render 근거로 Python-package `cairosvg` import를 사용하지 않았다. 로컬
+Python이 system cairo library를 로드하지 못했기 때문이다. 설치된 CairoSVG
+CLI `/Users/debop/.local/bin/cairosvg`는 workspace overview PNG를 hero 이동 후
+성공적으로 render했다.

@@ -1,40 +1,40 @@
-# Issue #55 Redis Load Coordination Pre-PR Code Review
+# Issue #55 Redis Load Coordination Pre-PR 코드 검토
 
-Review base: `59bf79be891af8f8db07ac0658706fd5cc7d1d5a`  
+Review base: `59bf79be891af8f8db07ac0658706fd5cc7d1d5a`
 Verified implementation: `06c94efda6b6b7f3a958d27ab3e034b6f6f82893`
 
-## Findings and convergence
+## 발견 및 수렴
 
-| Priority | Lens | Finding | Resolution |
+| Priority | Lens | 발견 | 해결 |
 |---|---|---|---|
-| P1 | Performance/stability | Deadline work could begin a Redis command after the wall deadline; a valid large poll budget could overflow exponentiation. | Recheck immediately before every command, count only actual attempts, cap the exponent, and lock both modes with deterministic tests. |
-| P1 | Stability | The async surface lacked the approved failure-path parity proof. | Added artifact, mismatch, loader/cleanup, encode, provider, attempt, policy, input, cancellation, and burst cases. |
-| P1 | Operator/Ops | Blocking pool admission was outside the socket timeout bound; TLS and rollback guidance was incomplete. | Reject blocking pools and provide concrete authenticated TLS, quiescence, bounded scan/unlink, and count commands. |
-| P1 | Developer/API | README examples were not fully standalone or lifecycle-safe on construction failure. | Made both snippets standalone, context-managed, bilingual-identical, and executable through failure paths. |
-| P1 | User/caller | Lease-loss and local-cache behavior were underdocumented. | Added a caller-visible outcome table and explicit primary-error/cancellation preservation. |
-| P2 | Performance | Active-marker snapshots transfer a bounded result prefix that is ignored. | Deferred: this follows the approved atomic snapshot contract and is bounded by artifact, poll, and wall limits. A change requires a contract amendment. |
-| P2 | Developer/API | `CLEANUP_FAILURE` is exported but no safe cleanup-only state exists. | Deferred as reserved API debt. Existing primary failure or cancellation remains authoritative; do not manufacture a new runtime path. |
+| P1 | Performance/stability | Deadline work가 wall deadline 뒤에 Redis command를 시작할 수 있고 valid large poll budget이 exponentiation overflow를 일으킬 수 있음 | 모든 command 직전에 재확인하고 actual attempt만 세며 exponent를 cap하고 두 mode를 deterministic test로 고정 |
+| P1 | Stability | Async surface에 승인된 failure-path parity proof가 없음 | Artifact, mismatch, loader/cleanup, encode, provider, attempt, policy, input, cancellation, burst case 추가 |
+| P1 | Operator/Ops | Blocking pool admission이 socket timeout bound 밖에 있고 TLS/rollback guidance가 불완전 | Blocking pool을 거부하고 authenticated TLS, quiescence, bounded scan/unlink, count command를 구체화 |
+| P1 | Developer/API | README example이 완전히 standalone하지 않고 construction failure에서 lifecycle-safe하지 않음 | 두 snippet을 standalone, context-managed, bilingual-identical로 만들고 failure path까지 실행 |
+| P1 | User/caller | Lease-loss와 local-cache 동작이 불충분하게 문서화됨 | Caller-visible outcome table과 primary-error/cancellation preservation 추가 |
+| P2 | Performance | Active-marker snapshot이 bounded result prefix를 전송하지만 무시함 | 승인된 atomic snapshot contract를 따르며 artifact/poll/wall limit로 bounded하므로 보류. 변경에는 contract amendment 필요 |
+| P2 | Developer/API | `CLEANUP_FAILURE`가 export되지만 safe cleanup-only state가 없음 | Reserved API debt로 보류. 기존 primary failure 또는 cancellation이 authoritative하며 새 runtime path를 만들지 않음 |
 
-Final unresolved findings: P0=0, P1=0, P2=2, P3=0.
+최종 미해결 발견: P0=0, P1=0, P2=2, P3=0.
 
-## Six-perspective result
+## 여섯 관점 결과
 
-| Lens | P0 | P1 | P2 | Evidence | Verdict |
+| Lens | P0 | P1 | P2 | 근거 | 판정 |
 |---|---:|---:|---:|---|---|
-| Performance | 0 | 0 | 1 | bounded backoff, command guards, benchmark metadata | PASS |
-| Stability | 0 | 0 | 0 | 1,398 full tests, 19 real Redis tests, five repeated stress runs | PASS |
-| Security | 0 | 0 | 0 | exact ACL commands, fixed Lua, TLS and redaction checks | PASS |
-| Operator/Ops | 0 | 0 | 0 | bounded pool policy, secure rollback, build and actionlint | PASS |
-| Developer/API | 0 | 0 | 1 | exact exports/signatures, async parity, executable examples | PASS |
-| User/caller | 0 | 0 | 0 | bilingual outcome and lifecycle contracts | PASS |
+| Performance | 0 | 0 | 1 | bounded backoff, command guard, benchmark metadata | PASS |
+| Stability | 0 | 0 | 0 | 1,398 full test, 19 real Redis test, 다섯 반복 stress run | PASS |
+| Security | 0 | 0 | 0 | exact ACL command, fixed Lua, TLS 및 redaction check | PASS |
+| Operator/Ops | 0 | 0 | 0 | bounded pool policy, secure rollback, build 및 actionlint | PASS |
+| Developer/API | 0 | 0 | 1 | exact export/signature, async parity, executable example | PASS |
+| User/caller | 0 | 0 | 0 | bilingual outcome와 lifecycle contract | PASS |
 
-## Verification
+## 검증
 
-- `uv run pytest`: 1,398 passed.
-- Focused coordination/provider/docs/packaging: 191 passed.
-- Serial real Redis coordination: 19 passed.
-- Independent/stale-owner/cancellation selection: 5 passed per run for five runs.
-- Ruff check and format, all-package build, actionlint, and diff check: passed.
+- `uv run pytest`: 1,398 passed
+- Focused coordination/provider/docs/packaging: 191 passed
+- Serial real Redis coordination: 19 passed
+- Independent/stale-owner/cancellation selection: run마다 5 passed, 5회
+- Ruff check와 format, all-package build, actionlint, diff check: 통과
 
-The pre-PR gate is converged at P0=0 and P1=0. PR checks and review threads
-must still pass before merge.
+Pre-PR gate는 P0=0, P1=0으로 수렴했다. Merge 전에 PR check와 review thread도
+통과해야 한다.

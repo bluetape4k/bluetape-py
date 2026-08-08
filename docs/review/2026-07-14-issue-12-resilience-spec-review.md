@@ -1,52 +1,51 @@
-# Issue #12 Resilience Spec Review
+# Issue #12 Resilience 사양 검토
 
-Date: 2026-07-14 KST
+날짜: 2026-07-14 KST
 Artifact: `docs/superpowers/specs/2026-07-14-issue-12-resilience-design.md`
 Artifact kind: spec
 
-## Scope
+## 범위
 
-The review covered the approved `bluetape-resilience` package boundary, public
-sync/async API, fluent decorator composition, retry/backoff behavior, cooperative
-async timeout, circuit and bulkhead state ownership, observability, packaging,
-acceptance criteria, and validation evidence.
+승인된 `bluetape-resilience` package boundary, public sync/async API, fluent
+decorator composition, retry/backoff, cooperative async timeout, circuit와
+bulkhead state ownership, observability, packaging, acceptance criteria,
+validation evidence를 검토했다.
 
-The current collaboration surface did not expose a role-selectable native review
-dispatcher, so the six required perspectives were run as separate read-only passes in
-the main session. No delegated assertion was treated as evidence. The main integration
-pass normalized findings and reread every repaired section.
+현재 collaboration surface에 role-selectable native review dispatcher가 없어
+필수 여섯 관점을 main session에서 별도 read-only pass로 수행했다. Delegated
+assertion을 근거로 취급하지 않았고, main integration pass에서 발견 사항을
+정규화하고 수정된 모든 section을 다시 읽었다.
 
-## Initial Findings and Repairs
+## 초기 발견 및 수정
 
-| Priority | Lens | Evidence | Required edit | Result |
+| Priority | Lens | 근거 | 필수 수정 | 결과 |
 |---|---|---|---|---|
-| P1 | Stability | Cancellation observation could allow an observer error to replace `CancelledError`. | Propagate cancellation before observer invocation and emit no cancellation event in v1. | Fixed in failure classification and acceptance coverage. |
-| P1 | Stability | An operation-raised `TimeoutError` could be confused with the timeout context's own expiry. | Translate only policy-owned expiry and preserve an operation's original `TimeoutError`. | Fixed in the async timeout contract. |
-| P1 | Stability | A raising circuit failure predicate did not explicitly release a half-open probe. | Release the generation-tagged slot without recording an outcome, then propagate the predicate error. | Fixed in the circuit contract and failure-mode table. |
-| P1 | Developer/API | Public exports, enum members, event fields, snapshots, constructor inputs, and event ordering were category-level rather than executable contracts. | Fix the ordered exports, exact value shapes, signatures, pipeline methods, and event matrix. | Fixed in the public API and observability sections. |
-| P1 | Security/Ops | Caller-provided policy names could become sensitive or high-cardinality labels. | Require stable non-sensitive names and document their presence in events and domain errors. | Fixed in the naming and observability contracts. |
+| P1 | Stability | Cancellation observation이 `CancelledError`를 observer error로 대체할 수 있음 | Observer 호출 전에 cancellation을 전파하고 v1에서 cancellation event를 emit하지 않음 | Failure classification 및 acceptance coverage에서 수정 |
+| P1 | Stability | Operation-raised `TimeoutError`가 timeout context 자체 expiry와 혼동될 수 있음 | Policy-owned expiry만 translate하고 operation의 원래 `TimeoutError` 보존 | Async timeout contract에서 수정 |
+| P1 | Stability | Raising circuit failure predicate가 half-open probe를 release하는지 명시되지 않음 | Generation-tagged slot을 outcome 없이 release한 뒤 predicate error 전파 | Circuit contract와 failure-mode table에서 수정 |
+| P1 | Developer/API | Public export, enum member, event field, snapshot, constructor input, event ordering이 executable contract가 아닌 category 수준 | Ordered export, exact value shape, signature, pipeline method, event matrix 고정 | Public API 및 observability section에서 수정 |
+| P1 | Security/Ops | Caller policy name이 sensitive/high-cardinality label이 될 수 있음 | Stable non-sensitive name을 요구하고 event/domain error에 포함됨을 문서화 | Naming 및 observability contract에서 수정 |
 
-## Final Perspective Results
+## 최종 관점 결과
 
-| Perspective | Result | Evidence reviewed |
+| 관점 | 결과 | 검토 근거 |
 |---|---:|---|
-| Performance | PASS | Bounded concurrency/waiting, no background reset/scheduler, user code outside locks, inline hook latency ownership |
+| Performance | PASS | Bounded concurrency/waiting, background reset/scheduler 없음, lock 밖 user code, inline hook latency ownership |
 | Stability | PASS | Cancellation precedence, owned timeout distinction, generation-tagged circuit completion, predicate/permit/probe cleanup, loop binding |
-| Security | PASS | No caller arguments/results/raw exceptions in events, no global logging/exporter, stable non-sensitive policy-name boundary |
-| Operator/Ops | PASS | Typed event matrix, immutable snapshots, lazy recovery, explicit observer failure semantics, package/README/release boundaries |
-| Developer/API | PASS | Exact exports and value shapes, keyword-only constructors, separate sync/async families, immutable last-added-outermost pipeline, decorator/direct-call typing |
-| User/caller | PASS | Small sync/async examples, explicit state sharing, order-dependent semantics, generator/sync-timeout exclusions, domain errors |
+| Security | PASS | Event에 caller argument/result/raw exception 없음, global logging/exporter 없음, stable non-sensitive policy-name boundary |
+| Operator/Ops | PASS | Typed event matrix, immutable snapshot, lazy recovery, explicit observer failure semantics, package/README/release boundary |
+| Developer/API | PASS | Exact export/value shape, keyword-only constructor, sync/async family 분리, immutable last-added-outermost pipeline, decorator/direct-call typing |
+| User/caller | PASS | 작은 sync/async example, explicit state sharing, order-dependent semantics, generator/sync-timeout exclusion, domain error |
 
-## Main Integration Verdict
+## Main integration 판정
 
 - P0: 0
 - P1: 0
 - P2: 0
 - P3: 0
-- Verdict: PASS
+- 판정: PASS
 
-The repaired specification remains within the user-approved design: stdlib-only
-focused distribution, separate sync/async policies, async-only cooperative timeout,
-and individual policy plus fluent pipeline decorators. The repairs close ambiguity
-without adding HTTP/framework adapters, sync preemption, global state, or implementation
-authority.
+수정된 specification은 user-approved design 안에 남는다. Stdlib-only focused
+distribution, separate sync/async policy, async-only cooperative timeout,
+individual policy 및 fluent pipeline decorator를 유지하며 HTTP/framework
+adapter, sync preemption, global state, implementation authority를 추가하지 않는다.

@@ -1,50 +1,42 @@
 # Release Guide
 
-Detailed release procedure: [`docs/release/release-guide.md`](release/release-guide.md).
-PyPI package preflight: [`docs/release/pypi-preflight.md`](release/pypi-preflight.md).
+상세 release 절차: [`docs/release/release-guide.md`](release/release-guide.md)
+PyPI package preflight: [`docs/release/pypi-preflight.md`](release/pypi-preflight.md)
 
-## Branches
+## Branch
 
-- `develop` is the default integration branch.
-- `main` is release-only and should be updated from `develop` through a pull
-  request.
+- `develop`은 default integration branch입니다.
+- `main`은 release 전용이며 pull request로 `develop`에서 갱신해야 합니다.
 
 ## Versioning
 
-Use semantic versioning once the first tag is published.
+첫 tag를 publish한 뒤 semantic versioning을 사용합니다.
 
-- `v0.1.0`: first foundation release.
-- `v0.x.0`: new package families or meaningful feature groups.
-- `v0.x.y`: bug fixes, docs, compatibility adjustments, and small non-breaking
-  improvements.
+- `v0.1.0`: 첫 foundation release.
+- `v0.x.0`: 새 package family 또는 의미 있는 feature group.
+- `v0.x.y`: bug fix, docs, compatibility 조정, 작은 non-breaking 개선.
 
-Before `v1.0.0`, public APIs may still change. Document breaking changes in
-`CHANGELOG.md`.
+`v1.0.0` 전에는 public API가 바뀔 수 있습니다. Breaking change는 `CHANGELOG.md`에 기록합니다.
 
-## Release Tag Criteria
+## Release tag 기준
 
-- `README.md` and `README.ko.md` are current for the release scope.
-- Package READMEs are current for every published distribution.
-- `CHANGELOG.md` has an `Unreleased` section that can become the target
-  `vX.Y.Z` section.
-- `WIP.md` records the target release-preparation state.
-- The matching milestone is closed with zero open issues.
-- `uv sync --all-packages` passes locally.
-- `uv build --all-packages` passes locally.
-- `uv run pytest` passes locally.
-- `uv run ruff check .` passes locally.
-- `uv run ruff format --check .` passes locally.
-- GitHub Actions CI passes on `develop`, including the `uv build --all-packages`
-  distribution build step.
-- PyPI credentials or trusted publishing are explicitly confirmed before any
-  publish action.
-- Release selection classifies every workspace distribution through the exact
-  allowlist in `docs/release/pypi-preflight.md`; an unknown workspace member
-  blocks preflight. `bluetape-benchmark` is private and must never be uploaded.
+- `README.md`와 `README.ko.md`가 release scope에 맞게 최신입니다.
+- publish하는 모든 distribution의 package README가 최신입니다.
+- `CHANGELOG.md`에 대상 `vX.Y.Z` section으로 전환할 수 있는 `Unreleased` section이 있습니다.
+- `WIP.md`가 대상 release-preparation 상태를 기록합니다.
+- 일치하는 milestone이 열린 issue 0개로 닫혀 있습니다.
+- 로컬에서 `uv sync --all-packages`가 통과합니다.
+- 로컬에서 `uv build --all-packages`가 통과합니다.
+- 로컬에서 `uv run pytest`가 통과합니다.
+- 로컬에서 `uv run ruff check .`가 통과합니다.
+- 로컬에서 `uv run ruff format --check .`가 통과합니다.
+- `uv build --all-packages` distribution build를 포함한 GitHub Actions CI가 `develop`에서 통과합니다.
+- publish action 전에 PyPI credential 또는 trusted publishing을 명시적으로 확인합니다.
+- Release selection이 `docs/release/pypi-preflight.md`의 정확한 allowlist로 모든 workspace distribution을 분류합니다. 알 수 없는 workspace member는 preflight를 차단하며 `bluetape-benchmark`는 private이므로 절대로 upload하지 않습니다.
 
-## Changelog Rule
+## Changelog 규칙
 
-Keep `CHANGELOG.md` in Keep a Changelog style:
+`CHANGELOG.md`는 Keep a Changelog 형식을 유지합니다.
 
 - `Added`
 - `Changed`
@@ -53,15 +45,15 @@ Keep `CHANGELOG.md` in Keep a Changelog style:
 - `Fixed`
 - `Security`
 
-Move entries from `Unreleased` into the version section when tagging.
+Tag를 만들 때 `Unreleased` entry를 version section으로 옮깁니다.
 
-## Tag Procedure
+## Tag 절차
 
-1. Ensure `develop` is green.
-2. Update `CHANGELOG.md`.
-3. Update `WIP.md`.
-4. Open and merge a `develop` to `main` release PR.
-5. Tag on `main`.
-6. Push the tag.
-7. Create GitHub release notes from `CHANGELOG.md`.
-8. Publish PyPI artifacts only from the verified release commit.
+1. `develop`이 green인지 확인합니다.
+2. `CHANGELOG.md`를 갱신합니다.
+3. `WIP.md`를 갱신합니다.
+4. `develop`을 base로 `main`을 향하는 release PR을 열고 merge합니다.
+5. `main`에 tag를 붙입니다.
+6. tag를 push합니다.
+7. `CHANGELOG.md`로 GitHub release note를 만듭니다.
+8. 검증된 release commit에서만 PyPI artifact를 publish합니다.
