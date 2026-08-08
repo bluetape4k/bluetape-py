@@ -2,9 +2,9 @@
 
 [English](README.md) | 한국어
 
-bluetape-py용 Python 3.13+ 선택형 Redis 바이트 provider, 크기 제한 result
-envelope, sync/async load coordinator를 제공합니다. 직렬화, 압축, key 이름,
-rollout 정책은 애플리케이션이 소유합니다.
+bluetape-py용 Python 3.13+ 선택형 Redis 바이트 provider, 크기 제한 결과
+envelope, 동기/비동기 로드 조정기를 제공합니다. 직렬화, 압축, key 이름,
+롤아웃 정책은 애플리케이션이 소유합니다.
 
 ## 설치
 
@@ -15,12 +15,12 @@ pip install bluetape-cache-redis
 ```
 
 현재 PyPI 배포는 보류 중입니다. 이 저장소에서는
-`uv sync --all-packages --locked`를 사용하거나 로컬에서 빌드한 focused wheel을
+`uv sync --all-packages --locked`를 사용하거나 로컬에서 빌드한 집중 wheel을
 설치합니다. 이 패키지는 `bluetape-cache==0.1.0`, `redis==8.0.1`,
 `bluetape-serde`, `bluetape-compression`에 의존하며 meta 패키지의 기본,
 `dev`, `all` 의존성에는 포함되지 않습니다.
 
-## Result Envelope
+## 결과 envelope
 
 `ResultEnvelopeCodec`은 호출자가 소유하는 `PayloadCodec`, 명시적인 envelope
 format 하나, 선택적인 compressor를 조합합니다. 기본값인 binary v1은 작은
@@ -91,18 +91,18 @@ compressor는 write에 항상 사용합니다. Read는 envelope에 기록된 alg
 migration을 수행할 수 있습니다. Native LZ4, Snappy, Zstandard compressor는 계속
 명시적인 `bluetape-compression` extra로만 설치합니다.
 
-## Redis Load Coordination
+## Redis 로드 조정
 
 `SyncRedisLoadCoordinator`와 `AsyncRedisLoadCoordinator`는 호출자가 소유하는
 local cache, Redis provider, result codec, observer를 조합합니다. Local hit에는
 Redis I/O가 없습니다. Cold miss는 local same-key flight에 참여한 뒤 제한된 Redis
 snapshot/lease/load/atomic-publish 상태 머신을 사용하므로 서로 다른 process에서도
 보통 loader 하나만 실행합니다. `pip install bluetape-cache-redis` 또는
-`pip install "bluetape[cache-redis]"`로 설치합니다. Focused 패키지는
+`pip install "bluetape[cache-redis]"`로 설치합니다. 집중 패키지는
 `bluetape-cache==0.1.0`에 의존하고, 기본 meta 설치는 core-only이며 Redis-free입니다.
-두 focused 설치 방식 모두 `bluetape-cache`를 transitively 설치합니다.
+두 집중 설치 방식 모두 `bluetape-cache`를 transitively(전이적으로) 설치합니다.
 
-Namespace는 wire contract의 일부입니다.
+네임스페이스는 wire contract의 일부입니다.
 `orders:prod:tenant-a:order-v3`처럼 버전이 있는 pseudonym을 사용하고 참여자 사이에
 호환되는 codec과 설정 하나를 공유합니다. `ttl`은 local entry만 제어하며 Redis
 result와 lease TTL은 `RedisLoadOptions`에서 설정합니다.
@@ -303,7 +303,7 @@ printf 'remaining: %s\n' "$remaining"
 Active namespace digest에는 이 명령을 실행하지 않습니다. Scanned, deleted,
 remaining count를 기록하고 quiescence와 readiness를 다시 확인합니다.
 
-## Redis Provider
+## Redis provider
 
 `SyncRedisProvider`와 `AsyncRedisProvider`는 같은 byte-only operation을
 제공합니다.
@@ -363,9 +363,9 @@ algorithm을 바꿀 때 reader를 writer보다 먼저 배포하며, TTL을 제�
 사용하지 않습니다. Coordination도 같은 versioned namespace와 bounded TTL 규칙을
 따릅니다. Local mutation은 local 범위이며 distributed invalidation이 아닙니다.
 
-## Coordination Benchmark
+## 조정 benchmark
 
-Private source-workspace benchmark는 Docker가 필요하며 ephemeral Redis container
+비공개 소스 작업공간 benchmark는 Docker가 필요하며 ephemeral Redis container
 하나를 소유합니다. Smoke 제한은 120초, full 제한은 900초입니다. Matrix는 최대
 24 result, caller 64개, coordinator/key 8개, 단일 payload 15,728,640 byte,
 aggregate payload 32 MiB도 제한합니다.

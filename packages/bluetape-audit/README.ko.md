@@ -15,9 +15,9 @@ Python 네이티브 bluetape 애플리케이션을 위한 저장소 독립적이
 
 ## 설치
 
-Package ownership과 trusted publishing을 확인하는 동안 PyPI 공개는 현재 보류
-상태입니다. 현재 개발에는 source workspace를 사용하고 wheel 수준 검증이 필요하면
-전용 artifact를 로컬에서 빌드합니다.
+패키지 소유권과 trusted publishing을 확인하는 동안 PyPI 공개는 현재 보류
+상태입니다. 현재 개발에는 소스 workspace를 사용하고 wheel 수준 검증이 필요하면
+전용 산출물을 로컬에서 빌드합니다.
 
 ```bash
 uv sync --all-packages
@@ -75,7 +75,7 @@ except AuditError:
 ```
 <!-- audit-example:end -->
 
-애플리케이션 수준 사전 검증은 빠른 실패에 유용하지만 adapter 검증이 정본입니다.
+애플리케이션 수준 사전 검증은 빠른 실패에 유용하지만 adapter 검증이 기준입니다.
 검증은 영속 캡처가 아닙니다. 호출자 소유 storage/outbox/transport의 부작용만
 영속성 또는 전달을 성립시킬 수 있습니다.
 
@@ -170,9 +170,9 @@ pip uninstall bluetape
 ## 소유하는 것과 소유하지 않는 것
 
 패키지는 불변 감사 값, 생성자 ceiling, 명시적 정책 검증, 값 안전 오류, 결정적 테스트
-도우미를 소유합니다. 호출자는 직렬화, allocation limit, 정책 version, repository,
-transaction, durable history, outbox, relay, broker, delivery, retry, retention,
-authorization, redaction, logging, telemetry를 소유합니다. 즉 repository, history,
+도우미를 소유합니다. 호출자는 직렬화, 할당 한도, 정책 version, repository, transaction,
+durable history, outbox, relay, broker, delivery, retry, retention, authorization,
+redaction, logging, telemetry를 소유합니다. 즉 repository, history,
 outbox는 외부에 남습니다.
 
 ## 테스트 도우미

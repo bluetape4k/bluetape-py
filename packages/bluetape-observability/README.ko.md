@@ -42,7 +42,7 @@ Domain 패키지는 이 bridge의 test-only dependency입니다. Application이 
 Redis key/value/namespace, exception message, 임의 attribute, log context, baggage, trace ID 값은
 자동으로 올리지 않습니다.
 
-## API-only 예제
+## API 전용 예제
 
 SDK를 설정하지 않아도 OpenTelemetry API의 no-op 경로로 안전하게 호출할 수 있습니다.
 
@@ -222,7 +222,7 @@ SDK/exporter 전송 상태는 application-owned OpenTelemetry 설정으로 진�
 암묵적 전파 보장이 없습니다. Log context나 baggage를 telemetry로 올리지 않으며, log에 trace ID나
 span ID를 자동으로 추가하지 않습니다.
 
-## rollback
+## 롤백 (rollback)
 
 Rollback은 producer에서 adapter를 제거하고 기존 observer를 복원하거나
 (`restores the prior observer`) caller-owned composite를 복원하는 작업입니다. Data/schema
