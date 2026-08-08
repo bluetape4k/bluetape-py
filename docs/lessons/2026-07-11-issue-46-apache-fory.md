@@ -1,54 +1,51 @@
-# Issue #46 Apache Fory Integration Lessons
+# Issue #46 Apache Fory 통합 교훈
 
-Date: 2026-07-11
+날짜: 2026-07-11
 
-## Context
+## 배경
 
-Issue #46 added a CPython 3.13-only Apache Fory adapter to the existing serde
-contracts without widening the default install or allowing payload-selected
-type/codec behavior.
+Issue #46에서는 기존 serde contract에 CPython 3.13 전용 Apache Fory adapter를
+추가했다. default install의 범위를 넓히거나 payload가 type/codec 동작을 선택하도록
+허용하지 않았다.
 
-## Decisions and Outcome
+## 결정과 결과
 
-- Keep provider-independent error codes in `bluetape.serde`, but import
-  `pyfory` only from the explicit `bluetape.serde.fory` module.
-- Put a fixed 20-byte `BTFY` envelope around Fory bytes so metadata, schema,
-  type, length, and root-header gates run before reconstruction.
-- Treat `(schema_id, schema_version, type_id)` as application-owned route
-  configuration. A schema change creates a new route; it never mutates the
-  meaning of an existing tuple.
-- Use varint mappings and explicit field IDs in every language. Removing the
-  Python/Go/Rust/Kotlin annotations produced superficially similar types but
-  weakened the cross-language identity contract.
-- Translate provider encode/decode/registration failures at fresh public error
-  boundaries. Preserve direct provider initialization failures where the API
-  contract requires diagnosis, but never include payload or provider exception
-  text in serde domain failures.
-- Use the public Fory `Buffer` reader index to prove exact body consumption.
-  Length equality alone cannot detect a decoder that stops before trailing
-  bytes.
-- Bound provider access with a semaphore in front of `ThreadSafeFory`; prove
-  permit release and same-runtime reuse after ordinary failures with barriers
-  and identity assertions rather than sleeps.
+- provider와 무관한 error code는 `bluetape.serde`에 유지하되, `pyfory`는 명시적인
+  `bluetape.serde.fory` module에서만 import한다.
+- Fory bytes를 고정 20-byte `BTFY` envelope로 감싼다. reconstruction 전에
+  metadata, schema, type, length, root-header gate를 실행할 수 있어야 한다.
+- `(schema_id, schema_version, type_id)`를 application-owned route configuration으로
+  취급한다. schema가 바뀌면 새 route를 만들며, 기존 tuple의 의미를 변경하지 않는다.
+- 모든 언어에서 varint mapping과 explicit field ID를 사용한다. Python/Go/Rust/Kotlin
+  annotation을 제거하면 겉보기에는 비슷한 type이 만들어지지만 cross-language
+  identity contract가 약해진다.
+- provider의 encode/decode/registration failure는 새 public error boundary에서
+  변환한다. API contract상 진단이 필요한 direct provider initialization failure는
+  보존하되, serde domain failure에 payload나 provider exception text를 절대 넣지
+  않는다.
+- public Fory `Buffer` reader index로 body를 정확히 소비했는지 증명한다. length가
+  같다는 사실만으로는 trailing bytes 앞에서 멈추는 decoder를 감지할 수 없다.
+- `ThreadSafeFory` 앞에 semaphore를 두어 provider access를 제한한다. sleep 대신
+  barrier와 identity assertion으로 ordinary failure 뒤 permit release와 동일
+  runtime 재사용을 증명한다.
 
-## Verification Evidence
+## 검증 증거
 
-- 339 focused contract, Fory, and packaging tests passed.
-- 5 performance/allocation/RSS observations passed.
-- 737 workspace tests passed on CPython 3.13.14.
-- Python, Go, Rust, and Kotlin generated fresh deterministic fixtures and
-  verified the Python artifact; Python verified every producer artifact.
-- Ruff, all-package build, actionlint, manifest verification, and diff checks
-  passed.
+- focused contract, Fory, packaging test 339개가 통과했다.
+- performance/allocation/RSS observation 5개가 통과했다.
+- workspace test 737개가 CPython 3.13.14에서 통과했다.
+- Python, Go, Rust, Kotlin이 새 deterministic fixture를 생성해 Python artifact를
+  검증했고, Python은 모든 producer artifact를 검증했다.
+- Ruff, all-package build, actionlint, manifest verification, diff check가 통과했다.
 
-## Review Misses and Future Guards
+## 검토에서 놓친 점과 향후 보호 장치
 
-- A focused feature suite can miss a stale shared export assertion. Always run
-  the full workspace suite before Step 6-R.
-- A prior `uv sync` is not an adequate CI contract. Every provider command must
-  state the package, extra, and exact Python version itself.
-- Examples in approved specs are part of the public contract. Compare them
-  against the final callable signature during API review.
-- Keep committed fixtures, canonical manifest metadata, runtime-generated
-  artifacts, and downloaded executable verifiers as separate proofs. Do not
-  replace artifact verification with recompilation in the final CI job.
+- focused feature suite만으로는 오래된 shared export assertion을 놓칠 수 있다. 항상
+  Step 6-R 전에 full workspace suite를 실행한다.
+- 이전에 실행한 `uv sync`만으로는 충분한 CI contract가 아니다. 각 provider command에
+  package, extra, exact Python version을 명시한다.
+- 승인된 spec의 example도 public contract의 일부다. API review에서 최종 callable
+  signature와 대조한다.
+- committed fixture, canonical manifest metadata, runtime-generated artifact,
+  downloaded executable verifier는 서로 다른 증거로 유지한다. 최종 CI job에서
+  artifact verification을 recompilation으로 대체하지 않는다.
