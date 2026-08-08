@@ -9,7 +9,7 @@
 - Release branch: `main`
 - Tag: `v0.1.0`
 
-## 대상 distribution
+## Target Distributions — 대상 distribution
 
 | Distribution | Import path | Default `bluetape` dependency | `v0.1.0`에 publish |
 |---|---|---:|---:|
@@ -20,7 +20,7 @@
 
 `bluetape` meta distribution의 default dependency list는 `bluetape-core`로 제한해야 합니다.
 
-## Fail-closed workspace 분류
+## Fail-Closed Workspace Classification — Fail-closed workspace 분류
 
 현재 workspace의 모든 distribution을 아래 두 집합 중 하나로 분류합니다. workspace member가 어느 집합에도 없으면 release tooling과 review가 실패해야 합니다.
 
@@ -52,7 +52,7 @@
 
 - `bluetape-benchmark`
 
-`bluetape-benchmark`의 classifier는 PyPI 방어를 위한 보조 장치입니다. 정확한 release selection이 주 통제 수단이므로 알 수 없는 member가 있으면 preflight가 차단되며, publish command는 publishable set에서 명시적으로 승인한 subset만 사용해야 합니다.
+`bluetape-benchmark` is PyPI defense in depth. 이 classifier는 PyPI 방어를 위한 보조 장치입니다. 정확한 release selection이 주 통제 수단이므로 알 수 없는 member가 있으면 preflight가 차단되며, publish command는 publishable set에서 명시적으로 승인한 subset만 사용해야 합니다.
 
 ## Trusted publishing 상태
 
