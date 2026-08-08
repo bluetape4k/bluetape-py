@@ -8,17 +8,17 @@
       <stop offset="55%" stop-color="#F2F9F7"/>
       <stop offset="100%" stop-color="#FFF8EE"/>
     </linearGradient>
-    <marker id="arrow-primary" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#4C6FA8"/>
+    <marker id="arrow-primary" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 14 14" data-role="primary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#4C6FA8" stroke-dasharray="none"/>
     </marker>
-    <marker id="arrow-validation" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#16856B"/>
+    <marker id="arrow-validation" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 14 14" data-role="primary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#16856B" stroke-dasharray="none"/>
     </marker>
-    <marker id="arrow-side-effect" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#D97706"/>
+    <marker id="arrow-side-effect" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 14 14" data-role="primary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#D97706" stroke-dasharray="none"/>
     </marker>
-    <marker id="arrow-optional" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#7C879A"/>
+    <marker id="arrow-optional" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto" markerUnits="userSpaceOnUse" viewBox="0 0 14 14" data-role="primary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#7C879A" stroke-dasharray="none"/>
     </marker>
     <style>
       .heading { font-family: "Architects Daughter", ui-rounded, system-ui, sans-serif; fill: #172033; }

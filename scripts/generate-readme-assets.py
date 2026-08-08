@@ -141,12 +141,12 @@ def defs() -> str:
       <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#60728A" flood-opacity="0.14"/>
     </filter>
     <marker id="arrow" markerWidth="14" markerHeight="14" refX="12" refY="7"
-      orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#57708F"/>
+      orient="auto" markerUnits="userSpaceOnUse" data-role="primary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 12 7 L 2 12 Z" fill="#57708F" stroke-dasharray="none"/>
     </marker>
     <marker id="arrow-soft" markerWidth="10" markerHeight="10" refX="8" refY="5"
-      orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M 2 2 L 8 5 L 2 8 Z" fill="#8A9BB0"/>
+      orient="auto" markerUnits="userSpaceOnUse" data-role="secondary" data-tip-direction="positive-x">
+      <path d="M 2 2 L 8 5 L 2 8 Z" fill="#8A9BB0" stroke-dasharray="none"/>
     </marker>
   </defs>
 """
