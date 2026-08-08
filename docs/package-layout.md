@@ -12,7 +12,7 @@
 
 Distribution은 `packages/` 아래에 두고 집중된 import path에 대응시킵니다.
 
-현재 public distribution:
+Current public distributions: 현재 public distribution:
 
 - `bluetape`
 - `bluetape-async`
@@ -35,7 +35,7 @@ Distribution은 `packages/` 아래에 두고 집중된 import path에 대응시�
 - `bluetape-serde`
 - `bluetape-testing`
 
-Private workspace distribution:
+Private workspace distributions: Private workspace distribution:
 
 - `bluetape-benchmark`는 `bluetape.benchmark`를 소유합니다. 표준 라이브러리 전용이며 workspace와 함께 build/test하지만 source-only이고 모든 publish allowlist와 meta extra에서 금지합니다. `Private :: Do Not Upload` classifier는 defense in depth이며 release-selection mechanism이 아닙니다.
 
