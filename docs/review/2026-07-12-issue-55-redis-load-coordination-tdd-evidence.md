@@ -1,35 +1,34 @@
-# Issue #55 Redis Load Coordination TDD Evidence
+# Issue #55 Redis Load Coordination TDD 근거
 
-Baseline: `origin/develop@59bf79b`  
+기준선: `origin/develop@59bf79b`
 Verified implementation: `06c94efda6b6b7f3a958d27ab3e034b6f6f82893`
 
-## RED/GREEN record
+## RED/GREEN 기록
 
-| Task | RED evidence | GREEN evidence |
+| Task | RED 근거 | GREEN 근거 |
 |---|---|---|
-| Contracts and packaging | New contract imports and exact dependency assertions failed before implementation. | Commit `2018e16`; contracts, envelope, and packaging tests passed. |
-| Provider primitives | Recording clients rejected missing bounded snapshot/publish APIs and policy. | Commit `3e1d419`; sync/async fixed-Lua, response, policy, and no-fallback tests passed. |
-| Sync coordinator | New cache-first state-machine tests failed before the coordinator existed. | Commit `395befc`; 29 sync coordinator tests and related provider tests passed. |
-| Async coordinator | Async parity and cancellation tests failed before the async coordinator existed. | Commit `ff6be13`; shared-waiter, last-waiter, cleanup, and parity tests passed. |
-| Real Redis and benchmark | Integration helpers and behavior were absent. | Commits `31b5dec`, `fd75af6`, and `06c94ef`; 19 serial Redis tests plus five stress repetitions passed. |
-| Documentation and wheels | README marker and contract assertions failed 5 tests before docs were updated. | Commit `5dde417`; 14 packaging/README tests and isolated wheel smokes passed. |
+| Contracts 및 packaging | 구현 전에 새 contract import와 exact dependency assertion 실패 | Commit `2018e16`; contract, envelope, packaging test 통과 |
+| Provider primitive | Recording client가 bounded snapshot/publish API와 policy 누락을 거부 | Commit `3e1d419`; sync/async fixed-Lua, response, policy, no-fallback test 통과 |
+| Sync coordinator | Coordinator 전이라 새 cache-first state-machine test 실패 | Commit `395befc`; sync coordinator 29개 및 관련 provider test 통과 |
+| Async coordinator | Async parity와 cancellation test가 async coordinator 전이라 실패 | Commit `ff6be13`; shared-waiter, last-waiter, cleanup, parity test 통과 |
+| Real Redis 및 benchmark | Integration helper와 동작이 없음 | Commit `31b5dec`, `fd75af6`, `06c94ef`; serial Redis test 19개와 stress 5회 통과 |
+| Documentation 및 wheel | README marker와 contract assertion이 docs update 전 5개 test를 실패시킴 | Commit `5dde417`; packaging/README test 14개와 isolated wheel smoke 통과 |
 
-## Fresh evidence
+## 새 근거
 
-- `uv run pytest`: 1,398 passed.
-- Focused coordination/provider/docs/packaging suite: 191 passed.
-- Serial Redis coordination integration: 19 passed.
-- Five repetitions of `independent or stale_owner or cancellation`: 5 passed
-  per run.
-- Benchmark: 64 callers, 8 coordinators, 10 cold bursts, loader count 10;
-  `production_capacity_claim=false`.
+- `uv run pytest`: 1,398 passed
+- Focused coordination/provider/docs/packaging suite: 191 passed
+- Serial Redis coordination integration: 19 passed
+- `independent or stale_owner or cancellation` 5회 반복: run마다 5 passed
+- Benchmark: 64 caller, 8 coordinator, cold burst 10회, loader count 10;
+  `production_capacity_claim=false`
 - `uv run ruff check .`, `uv run ruff format --check .`,
-  `uv build --all-packages`, `actionlint`, and `git diff --check`: passed.
+  `uv build --all-packages`, `actionlint`, `git diff --check`: 통과
 
-The final async matrix includes malformed and oversized artifacts, owner-token
-mismatch, loader and cleanup precedence, encode overflow, provider publication
-failure, bounded attempts, invalid policy/input, cancellation, and burst
-behavior. The initial focused run after `uv sync --all-packages --locked` exposed one
-environment-only failure because optional native compressor dependencies were
-removed. Re-running from `uv sync --all-packages --all-extras --locked` produced
-209/209 passes; no product code was changed to mask that failure.
+최종 async matrix는 malformed/oversized artifact, owner-token mismatch,
+loader/cleanup precedence, encode overflow, provider publication failure,
+bounded attempt, invalid policy/input, cancellation, burst behavior를 포함한다.
+`uv sync --all-packages --locked` 후 첫 focused run은 optional native
+compressor dependency가 제거된 environment-only failure를 노출했다.
+`uv sync --all-packages --all-extras --locked`에서 재실행한 결과 209/209가
+통과했으며 그 failure를 가리기 위해 product code를 변경하지 않았다.

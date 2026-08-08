@@ -1,48 +1,47 @@
-# Issue #13 Value Packages Packaging Review
+# Issue #13 Value Packages Packaging 검토
 
-Date: 2026-07-15
+날짜: 2026-07-15
 
-## Verified Integration
+## 확인된 통합
 
-- `bluetape-id`, `bluetape-measure`, and `bluetape-money` are each classified
-  as publishable workspace distributions.
-- The historical `v0.1.0` target table remains limited to its original four
-  distributions; the three value packages are not release targets.
-- `scripts/verify-value-wheels.sh` builds exactly one wheel for every workspace
-  distribution and verifies focused installs, `id`, `measure`, `money`,
-  `values`, `dev`, `all`, and default meta environments.
-- External dependencies are prepared from `uv export --locked --no-emit-local`
-  with hashes. Workspace wheels are installed only after switching to
-  `UV_OFFLINE=1`, `--offline`, `--no-index`, and `--no-deps`.
-- Every environment passes `uv pip check` and a `python -I` module-origin
-  probe outside the checkout. The default meta environment exposes only
-  `bluetape.core` and none of the three value modules.
-- Focused wheel metadata has no runtime dependency and none of the focused
-  wheels contains `bluetape/__init__.py`.
+- `bluetape-id`, `bluetape-measure`, `bluetape-money`를 각각 publishable
+  workspace distribution으로 분류했다.
+- Historical `v0.1.0` target table은 기존 네 distribution으로 제한하며
+  세 value package는 release target이 아니다.
+- `scripts/verify-value-wheels.sh`가 모든 workspace distribution에 대해 wheel
+  하나씩을 build하고 focused install, `id`, `measure`, `money`, `values`,
+  `dev`, `all`, default meta environment를 검증한다.
+- External dependency는 hash가 있는 `uv export --locked --no-emit-local`에서
+  준비한다. Workspace wheel은 `UV_OFFLINE=1`, `--offline`, `--no-index`,
+  `--no-deps`로 전환한 뒤에만 설치한다.
+- 모든 environment가 `uv pip check`와 checkout 밖 `python -I` module-origin
+  probe를 통과한다. Default meta environment는 `bluetape.core`만 노출하고
+  세 value module은 노출하지 않는다.
+- Focused wheel metadata에 runtime dependency가 없고 focused wheel 어디에도
+  `bluetape/__init__.py`가 없다.
 
-## Workflow Registration Review
+## Workflow registration 검토
 
-The repository contains only `.github/workflows/ci.yml` and
-`.github/workflows/fory-conformance.yml`. Generic CI has no path filter and
-already runs workspace Ruff, pytest discovery, and `uv build --all-packages`.
-No workflow file changed.
+Repository에는 `.github/workflows/ci.yml`과
+`.github/workflows/fory-conformance.yml`만 있다. Generic CI는 path filter가
+없고 workspace Ruff, pytest discovery, `uv build --all-packages`를 이미 실행한다.
+Workflow file은 변경하지 않았다.
 
-- Dedicated value-package workflow: N/A; the packages are stdlib/data-only and
-  generic discovery executes their tests and builds.
-- Nightly registration: N/A; there is no nightly workflow or external service,
-  container, clock, or provider matrix owned by these packages.
-- Example registration: N/A at this task; installed-wheel README examples are
-  added and verified in the documentation task.
-- Coverage aggregation: N/A; the repository has no coverage aggregation
-  workflow or registration chain, and this change does not introduce one.
-- `actionlint`: N/A for this task because no workflow file changed.
+- Dedicated value-package workflow: N/A. Stdlib/data-only package이며 generic
+  discovery가 test와 build를 실행한다.
+- Nightly registration: N/A. Nightly workflow나 이 package가 소유하는 external
+  service, container, clock, provider matrix가 없다.
+- Example registration: 이 task에서는 N/A. Installed-wheel README example은
+  documentation task에서 추가하고 검증한다.
+- Coverage aggregation: N/A. Repository에 coverage aggregation workflow가 없다.
+- `actionlint`: Workflow file을 변경하지 않아 이 task에서는 N/A.
 
-## Duplication Decision
+## 중복 결정
 
-The value-wheel verifier keeps domain-specific probes separate from
-`verify-observability-wheels.sh`. Both scripts share only generic shell setup,
-wheel counting, and isolated import concepts. The observability verifier owns
-OpenTelemetry API/SDK and Redis observer behavior; the value verifier owns
-three-way focused/meta-extra/default absence matrices, lock hashes, every
-workspace wheel hash, and stdlib-only focused metadata. Extracting a common
-framework would add a new abstraction without a stable shared contract.
+Value-wheel verifier는 `verify-observability-wheels.sh`와 domain-specific probe를
+분리한다. 두 script는 generic shell setup, wheel count, isolated import concept만
+공유한다. Observability verifier는 OpenTelemetry API/SDK와 Redis observer를
+소유하고, value verifier는 three-way focused/meta-extra/default absence matrix,
+lock hash, 모든 workspace wheel hash, stdlib-only focused metadata를 소유한다.
+안정된 shared contract 없이 common framework를 추출하면 새 abstraction이 되므로
+추출하지 않았다.

@@ -1,17 +1,13 @@
-# Issue #25 Audit Contracts Implementation Plan Review
+# Issue #25 Audit Contracts 구현 계획 검토
 
-## Scope
+## 범위
 
-- Approved specification:
-  `docs/superpowers/specs/2026-07-16-issue-25-audit-contracts-design.md`
-- Reviewed plan:
-  `docs/superpowers/plans/2026-07-16-issue-25-audit-contracts-implementation-plan.md`
-- Review mode: six independent, read-only perspectives followed by
-  main-session normalization and affected-lens reruns
-- Mutation boundary: reviewers did not edit files, run tests, browse the web,
-  or use GitHub
+- 승인된 specification: `docs/superpowers/specs/2026-07-16-issue-25-audit-contracts-design.md`
+- 검토한 plan: `docs/superpowers/plans/2026-07-16-issue-25-audit-contracts-implementation-plan.md`
+- Review mode: 여섯 independent read-only perspective 후 main-session normalization과 affected-lens rerun
+- Mutation boundary: Reviewer는 file edit, test, web/GitHub mutation을 수행하지 않음
 
-## Initial Independent Findings
+## 초기 독립 발견
 
 | Perspective | Role lens | P0 | P1 | P2 | P3 |
 |---|---|---:|---:|---:|---:|
@@ -21,47 +17,41 @@
 | Operator/Ops | verifier | 0 | 2 | 0 | 0 |
 | Developer/public API | code-reviewer | 0 | 3 | 1 | 0 |
 | User/caller | writer | 0 | 2 | 1 | 0 |
-| **Total** | | **0** | **14** | **3** | **0** |
+| **합계** | | **0** | **14** | **3** | **0** |
 
-## Material Repairs
+## 주요 수정
 
-- Added executable no-copy/no-scan and bounded-operation proof for maximum
-  payloads, metadata snapshots, validator length checks, datetime equality,
-  wheel builds, and the explicit rejection of wall-clock microbenchmarks.
-- Added all-field hostile-marker matrices, exact owning signature/decorator
-  tests, event hard-ceiling precedence tests, and positive metadata key/value
-  preservation cases.
-- Added a deterministic `_copy_metadata` seam so copied-length recheck,
-  copy-only validation, and failed-construction atomicity are testable without
-  threads.
-- Replaced hand-assembled meta-extra proof with offline local-wheelhouse
-  dependency resolution; expected-present probes now import the module, verify
-  installed origins, and pin the exact public surface.
-- Made removal rollback executable in the meta-extra venv, including network-
-  denied namespace/core checks, audit absence, and `uv pip check`.
-- Moved all repository evidence commits before final validation, six-lens
-  review, and verification so those gates run at one unchanged exact head;
-  final results belong in workflow receipts and the PR body.
-- Added fetched, range-aware committed-diff checks before PR creation and again
-  before merge-ready reporting.
-- Expanded bilingual documentation and the SVG+PNG plan with untrusted codec
-  allowlisting, strict-limit rollout, exact adoption/removal, safe error/helper
-  usage, optional fast-fail validation, and the authoritative adapter-owned
-  validation call immediately before the first side effect.
+- Maximum payload, metadata snapshot, validator length, datetime equality, wheel
+  build에 no-copy/no-scan과 bounded-operation proof를 추가하고 wall-clock
+  microbenchmark를 명시적으로 거부했다.
+- All-field hostile-marker matrix, exact owning signature/decorator test,
+  event hard-ceiling precedence, positive metadata key/value preservation을 추가했다.
+- Deterministic `_copy_metadata` seam으로 copied-length recheck, copy-only
+  validation, failed-construction atomicity를 thread 없이 검증했다.
+- Hand-assembled meta-extra proof를 offline local-wheelhouse dependency
+  resolution으로 교체했다. Expected-present probe는 module import, installed
+  origin, exact public surface를 확인한다.
+- Meta-extra venv에서 network-denied namespace/core check, audit absence,
+  `uv pip check`를 포함한 removal rollback을 실행 가능하게 만들었다.
+- Evidence commit을 final validation, six-lens review, verifier보다 먼저 두어
+  하나의 unchanged exact head에서 gate를 실행하도록 했다.
+- PR 전과 merge-ready 보고 전에 fetched, range-aware committed-diff check를 추가했다.
+- Bilingual docs와 SVG+PNG plan에 untrusted codec allowlist, strict-limit rollout,
+  exact adoption/removal, safe error/helper usage, optional fast-fail validation,
+  first side effect 직전 authoritative adapter-owned validation을 추가했다.
 
-## Rerun History
+## Rerun history
 
-- Performance and security/privacy converged on the first affected-lens rerun.
-- Stability/reliability required one additional repair so expected-present
-  wheel probes import the installed module rather than only finding its spec.
-- Developer/public API required one additional P2 repair for positive metadata
-  key preservation coverage.
-- Operator/Ops required two narrow repairs: concrete uninstall subprocesses,
-  then namespace-package-aware root `bluetape` verification. An unresponsive
-  final narrow lane was replaced; the replacement produced the final verdict.
-- User/caller converged on the first affected-lens rerun.
+- Performance와 security/privacy는 첫 affected-lens rerun에서 수렴했다.
+- Stability/reliability은 expected-present wheel probe가 spec만 찾지 않고
+  installed module을 import하도록 한 번 더 수정했다.
+- Developer/public API는 positive metadata key preservation coverage를 위한 P2
+  수정이 한 번 더 필요했다.
+- Operator/Ops는 concrete uninstall subprocess와 namespace-package-aware root
+  `bluetape` verification을 좁게 두 번 수정했다.
+- User/caller는 첫 affected-lens rerun에서 수렴했다.
 
-## Final Verdict
+## 최종 판정
 
 | Perspective | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
@@ -74,14 +64,14 @@
 
 Final plan review gate: **P0=0, P1=0**.
 
-## Main-Session Self-Review
+## Main-session self-review
 
-- Nine ordered tasks cover package registration, value/event/validator/helper
-  TDD, three install shapes plus rollback, bilingual SVG+PNG documentation,
-  exact-head verification, PR creation, and the fresh merge-approval stop.
-- Every public behavior begins in its owning RED step, and every task names
-  files, commands, commit intent, dependency, and rollback boundary.
-- Placeholder scan, code-fence balance, task count, changed-path scope, and
-  `git diff --check` pass before commit.
-- No production implementation, push, PR, merge, tag, release, publish, or
-  destructive cleanup is authorized by this plan-review commit.
+- 아홉 ordered task가 package registration, value/event/validator/helper TDD,
+  세 install shape와 rollback, bilingual SVG+PNG docs, exact-head verification,
+  PR creation, fresh merge-approval stop을 다룬다.
+- 모든 public behavior는 owning RED step에서 시작하고 각 task에 file, command,
+  commit intent, dependency, rollback boundary가 있다.
+- Placeholder scan, code-fence balance, task count, changed-path scope,
+  `git diff --check`가 commit 전에 통과한다.
+- 이 plan-review commit은 production implementation, push, PR, merge, tag,
+  release, publish, destructive cleanup을 허가하지 않는다.

@@ -1,69 +1,63 @@
-# Issue #13 Value Packages Implementation Plan Review
+# Issue #13 Value Packages 구현 계획 검토
 
-Date: 2026-07-15 KST
+날짜: 2026-07-15 KST
 Issue: #13
-Decision: PASS
-Final findings: P0=0, P1=0
+판정: PASS
+최종 발견: P0=0, P1=0
 
-## Exact Review Target
+## 정확한 검토 대상
 
-- Spec SHA-256:
-  `0988eef8463eca44f485b91a472fe2958d3dbdf419a783a0c24a53de9f48923e`
-- Plan SHA-256:
-  `81ededc7b59a0d21c2ad9da5727288012fb8a18df60c99e86a1c4bad7c2da812`
+- Spec SHA-256: `0988eef8463eca44f485b91a472fe2958d3dbdf419a783a0c24a53de9f48923e`
+- Plan SHA-256: `81ededc7b59a0d21c2ad9da5727288012fb8a18df60c99e86a1c4bad7c2da812`
 
-## Convergence Record
+## 수렴 기록
 
-Three independent read-only perspectives reviewed the same final hashes:
+세 독립 read-only 관점이 같은 최종 hash를 검토했다.
 
-- Developer/API: P0=0, P1=0. All 36 stable node contracts have full node IDs,
-  concrete fixtures, intended RED causes, required GREEN assertions, and exact
-  one-node commands. Literal Measure/TOML declarations and task ownership are
-  executable.
-- Operations: P0=0, P1=0. The 36 node contracts and commands are one-to-one.
-  External dependencies are installed from hash-pinned lock exports before the
-  network-disabled local wheel phase. Provenance, rollback, rebase, diagram,
-  and exact-head replay remain closed.
-- User/caller: P0=0, P1=0. Compatibility, process-local persistence limits,
-  versionless schemas, custom-unit ownership, current-ISO limits, uninstall
-  rollback, deferred work, and EN/KO section parity have task ownership.
+- Developer/API: P0=0, P1=0. 36개 stable node contract 모두 full node ID,
+  concrete fixture, intended RED cause, required GREEN assertion, exact one-node
+  command를 가지며 literal Measure/TOML declaration과 task ownership이 실행 가능하다.
+- Operations: P0=0, P1=0. 36 node contract와 command가 일대일이다. External
+  dependency는 network-disabled local wheel phase 전에 hash-pinned lock export로
+  설치한다. Provenance, rollback, rebase, diagram, exact-head replay가 닫혀 있다.
+- User/caller: P0=0, P1=0. Compatibility, process-local persistence limit,
+  versionless schema, custom-unit ownership, current-ISO limit, uninstall rollback,
+  deferred work, EN/KO section parity에 task ownership이 있다.
 
-The main session independently reviewed performance, stability, and security;
-each finished at P0=0, P1=0. The detailed rationale is recorded in the sibling
-spec review.
+Main session은 performance, stability, security를 독립 검토했고 각각 P0=0,
+P1=0으로 끝냈다. 상세 근거는 sibling spec review에 기록했다.
 
-Task 1 reproduced a default pytest import mismatch when three package-local
-files shared the basename `test_packaging.py`. The files became
-`test_id_packaging.py`, `test_measure_packaging.py`, and
-`test_money_packaging.py`; every owning-file, stable-node, and exact-command
-path was updated. Three independent read-only re-reviews of the corrected plan
-hash found P0=0, P1=0, with 36 unique registry entries and 36 unique commands.
+Task 1에서 세 package-local file이 `test_packaging.py` basename을 공유하여
+default pytest import mismatch를 재현했다. 파일을
+`test_id_packaging.py`, `test_measure_packaging.py`,
+`test_money_packaging.py`로 이름을 바꾸고 모든 owning-file/stable-node/exact
+command path를 갱신했다. 수정된 plan hash를 세 독립 read-only re-review가
+P0=0, P1=0으로 확인했으며 unique registry entry와 command는 각각 36개다.
 
-## Execution Readiness
+## 실행 준비
 
-- Task dependencies and rollback units are explicit.
-- Task 1 owns executable publish classification as well as release documentation.
-- Every implementation family begins with an exact RED node and ends with its
-  owning-file/package verification.
-- ISO regeneration has a literal offline updater invocation and byte comparison.
-- Wheel proofs separate hash-pinned external dependency preparation from the
-  network-disabled `--no-deps --no-index` local-wheel phase.
-- README examples run from installed wheels outside the checkout.
-- `$bluetape-diagram` owns SVG+PNG generation, audits, visual inspection, hashes,
-  and root English/Korean embeds; Mermaid is excluded.
-- Final convergence rebases before review, invalidates stale evidence, reruns
-  generic and specialized proofs, commits evidence, and repeats them at an
-  unchanged exact HEAD.
-- PR creation is in approved scope; merge remains a fresh approval gate.
+- Task dependency와 rollback unit을 명시했다.
+- Task 1이 executable publish classification과 release documentation을 함께 소유한다.
+- 모든 implementation family가 exact RED node로 시작하고 owning-file/package
+  verification으로 끝난다.
+- ISO regeneration은 literal offline updater invocation과 byte comparison을 가진다.
+- Wheel proof는 hash-pinned external dependency preparation과 network-disabled
+  `--no-deps --no-index` local-wheel phase를 분리한다.
+- README example은 checkout 밖 installed wheel에서 실행한다.
+- `$bluetape-diagram`이 SVG+PNG generation, audit, visual inspection, hash,
+  root English/Korean embed를 소유하며 Mermaid는 제외한다.
+- 최종 convergence는 review 전에 rebase하고 stale evidence를 무효화하며
+  generic/specialized proof를 exact unchanged HEAD에서 반복한다.
+- PR creation은 승인된 범위지만 merge는 별도의 새 승인 gate다.
 
-## Validation
+## 검증
 
-- Stable node contracts: 36.
-- Exact one-node invocations: 36.
-- Missing or duplicate invocations: 0.
-- Python code fences compiled: 6.
-- Literal Measure import/signature smoke: pass on Python 3.13.14.
-- `git diff --check`: pass.
+- Stable node contract: 36
+- Exact one-node invocation: 36
+- Missing/duplicate invocation: 0
+- Python code fence compile: 6
+- Literal Measure import/signature smoke: Python 3.13.14에서 통과
+- `git diff --check`: 통과
 
-Implementation stop condition: do not advance a behavior family when its named
-RED fails for an unintended reason or its GREEN/owning-suite proof is absent.
+구현 stop condition: 의도하지 않은 이유로 named RED가 실패하거나
+GREEN/owning-suite proof가 없으면 behavior family를 진행하지 않는다.

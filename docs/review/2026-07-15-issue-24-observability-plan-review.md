@@ -1,50 +1,49 @@
-# Issue #24 Observability Implementation Plan Review
+# Issue #24 Observability 구현 계획 검토
 
-Date: 2026-07-15 KST  
-Target: issue #24, milestone `0.2.0`  
-Plan: `docs/superpowers/plans/2026-07-15-issue-24-observability-implementation-plan.md`  
+날짜: 2026-07-15 KST
+Target: issue #24, milestone `0.2.0`
+Plan: `docs/superpowers/plans/2026-07-15-issue-24-observability-implementation-plan.md`
 Reviewed plan SHA256: `1943735f953f0d854a699d4ee7701851684223b9e803d3ed745401568e312339`
 
-## Review Method
+## 검토 방법
 
-Six fresh, independent Step 3-R perspectives reviewed the approved spec and implementation
-plan. Every P0/P1 finding blocked closure until the plan was edited and the owning perspective
-re-reviewed the updated file. The main agent then integrated the perspectives against the
-required Step 3-R checklist.
+여섯 개의 fresh independent Step 3-R 관점이 approved spec과 implementation plan을
+검토했다. 모든 P0/P1 finding은 plan을 수정하고 owning perspective가 다시 검토할
+때까지 close를 차단했다. Main agent가 Step 3-R checklist에 맞춰 관점을 통합했다.
 
-## Finding Integration
+## 발견 통합
 
-| Perspective | Initial blocking findings | Required integration | Final verdict |
+| 관점 | 초기 blocker | 필수 통합 | 최종 판정 |
 |---|---:|---|---|
-| Performance | P1=3, then P1=2 regression | Isolate API/SDK benchmark modes, use fresh SDK state per run, define incremental quantiles, prove per-adapter allocation/event release, and cover concurrent same-instance calls | P0=0 P1=0 |
-| Stability | P1=6, then P1=3 regression | Parameterize setup/runtime `BaseException`, retry clean construction, prove nested/sequential/concurrent context isolation, deterministic SDK selection, exact teardown, reusable wheel gate, and forward rollback | P0=0 P1=0 |
-| Security/privacy | P1=4, then P1=1 regression | Pin literal enum allowlists and drift sentinels, never access forbidden Redis fields, execute logging/baggage separation, use locked isolated installs, and commit every required gate file | P0=0 P1=0 |
-| Operator/ops | P1=4, then P1=2, then P1=1 | Split API/SDK CI lanes, fail on SDK skips/zero tests through JUnit aggregation, create venvs before hash sync, print cleanup-safe evidence, use package-scoped README exports, and rerun final exact-head gates | P0=0 P1=0 |
-| Developer/API | P1=2, then P1=3 | Keep Task 2 private-only, create public classes atomically in Tasks 3/4, add stable node IDs, complete production/test-support blueprints, concrete fixtures/assertions, and Ruff-clean exact export ordering | P0=0 P1=0 |
-| User/caller | P1=4 | Add domain prerequisite matrix, execute the exact API-only README snippet without SDK, document both composition shapes/order/failure policy, and pin no-health/diagnostics/unsupported-boundary/rollback guidance in both locales | P0=0 P1=0 |
+| Performance | P1=3, 이후 P1=2 regression | API/SDK benchmark mode 분리, run마다 fresh SDK state, incremental quantile, adapter별 allocation/event release, concurrent same-instance call 증명 | P0=0 P1=0 |
+| Stability | P1=6, 이후 P1=3 regression | Setup/runtime `BaseException` parameterization, clean construction retry, nested/sequential/concurrent context isolation, deterministic SDK selection, exact teardown, reusable wheel gate, forward rollback | P0=0 P1=0 |
+| Security/privacy | P1=4, 이후 P1=1 regression | Literal enum allowlist와 drift sentinel 고정, forbidden Redis field 접근 금지, logging/baggage separation, locked isolated install, required gate file commit | P0=0 P1=0 |
+| Operator/ops | P1=4, 이후 P1=2, 이후 P1=1 | API/SDK CI lane 분리, JUnit aggregation으로 SDK skip/zero test에서 fail, hash sync 전 venv 생성, cleanup-safe evidence, package-scoped README export, exact-head gate 재실행 | P0=0 P1=0 |
+| Developer/API | P1=2, 이후 P1=3 | Task 2 private-only, Task 3/4 atomic public class, stable node ID, production/test-support blueprint, concrete fixture/assertion, Ruff-clean exact export order | P0=0 P1=0 |
+| User/caller | P1=4 | Domain prerequisite matrix, SDK 없이 exact API-only README snippet 실행, 두 composition shape/order/failure policy 문서화, no-health/diagnostic/unsupported-boundary/rollback guidance를 두 locale에 고정 | P0=0 P1=0 |
 
-## Step 3-R Integration Checklist
+## Step 3-R 통합 checklist
 
-| Check | Evidence | Verdict |
+| Check | 근거 | 판정 |
 |---|---|---|
-| Spec and DoD coverage | Final plan has an explicit acceptance/DoD coverage map across Tasks 1-8 | PASS |
-| Implementable ordering | Registration -> private helpers -> atomic resilience -> atomic Redis -> SDK/context -> performance -> docs/CI -> final evidence | PASS |
-| No forward artifact dependency | Evidence/lesson files are deferred; public classes are never committed with placeholder methods | PASS |
-| Success/failure/edge/concurrency/coroutine/lifecycle/capability tests | Stable node registry plus fixture/input/GREEN assertion table names each owning proof | PASS |
-| Concrete validation commands | Focused API, focused SDK with no-skip JUnit gate, generic provider-light suite, full build/lint, actionlint, and reusable wheel script are exact | PASS |
-| English/Korean docs | Package/root locale pairs, executable source-identical snippets, prerequisite/composition/failure/rollback parity are assigned | PASS |
-| Package/release registration | Workspace/source/member/lock, fail-closed publish classifier, package layout, WIP, changelog, CI, and default-meta isolation are assigned | PASS |
-| Performance/stability | Three-run mode-isolated benchmark, per-adapter retained allocation, weak event release, no owned resources, SDK teardown, and repeated-run proof are assigned | PASS |
-| Reuse/duplication decision | `_recording.py` owns shared bounded normalization and OTel wrappers; domain mappings remain separate to preserve observer shapes | PASS |
-| Compatibility/rollback | No root extra/default widening; prior observer replacement is explicit; reverse-dependency `git revert` matrix invalidates stale exact-head evidence | PASS |
+| Spec/DoD coverage | Final plan이 Task 1-8 전체 acceptance/DoD map을 가짐 | PASS |
+| Implementable ordering | Registration -> private helper -> atomic resilience -> atomic Redis -> SDK/context -> performance -> docs/CI -> final evidence | PASS |
+| Forward artifact dependency 없음 | Evidence/lesson은 deferred; public class를 placeholder method와 함께 commit하지 않음 | PASS |
+| Success/failure/edge/concurrency/coroutine/lifecycle/capability test | Stable node registry와 fixture/input/GREEN assertion table이 owning proof를 명시 | PASS |
+| Concrete validation command | Focused API, no-skip JUnit gate가 있는 focused SDK, generic provider-light suite, full build/lint, actionlint, reusable wheel script | PASS |
+| English/Korean docs | Package/root locale pair, executable source-identical snippet, prerequisite/composition/failure/rollback parity | PASS |
+| Package/release registration | Workspace/source/member/lock, fail-closed publish classifier, package layout, WIP, changelog, CI, default-meta isolation | PASS |
+| Performance/stability | Mode-isolated 3-run benchmark, adapter allocation, weak event release, owned resource 없음, SDK teardown, repeated-run proof | PASS |
+| Reuse/duplication 결정 | `_recording.py`가 shared bounded normalization/OTel wrapper를 소유하고 domain mapping은 observer shape 보존을 위해 분리 | PASS |
+| Compatibility/rollback | Root extra/default widening 없음, prior observer replacement 명시, reverse-dependency `git revert` matrix가 stale exact-head evidence 무효화 | PASS |
 
-Kotlin/Spring/Exposed/JDK-preview checks are not applicable to this Python package. External
-collector/exporter, Testcontainers, publication, tag, release, dispatch, PR, and merge remain
-outside the implementation-plan authority.
+Kotlin/Spring/Exposed/JDK-preview check는 Python package에 적용되지 않는다.
+External collector/exporter, Testcontainers, publication, tag, release, dispatch,
+PR, merge는 implementation-plan authority 밖이다.
 
-## Executability Validation
+## 실행 가능성 검증
 
-Fresh main-thread validation against the reviewed plan:
+검토된 plan에 대한 fresh main-thread validation:
 
 ```text
 git diff --check: PASS
@@ -52,14 +51,14 @@ Python 3.13.14 compile: all 8 Python fenced blocks PASS
 Ruff: _recording.py, resilience.py, redis.py, and tests/_support.py blueprints PASS
 ```
 
-The developer/API reviewer independently repeated Python 3.13.14 compilation and Ruff for the
-four executable blueprints and also reported PASS.
+Developer/API reviewer도 Python 3.13.14 compilation과 네 executable blueprint의
+Ruff를 독립적으로 반복하고 PASS를 보고했다.
 
-## Integrated Verdict
+## 통합 판정
 
 - P0: 0
 - P1: 0
 - Step 3-R: PASS
 - Implementation status: not started
-- Next gate: explicit user approval of the reviewed implementation plan
-- PR/merge/publication status: not authorized by this plan-review closeout
+- Next gate: reviewed implementation plan에 대한 explicit user approval
+- PR/merge/publication: 이 plan-review closeout에서 권한 없음

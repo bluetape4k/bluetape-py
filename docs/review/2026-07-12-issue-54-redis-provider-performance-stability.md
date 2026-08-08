@@ -1,19 +1,19 @@
-# Issue #54 Redis Provider Performance and Stability
+# Issue #54 Redis Provider 성능 및 안정성
 
-Date: 2026-07-12 KST
+날짜: 2026-07-12 KST
 
 ## Non-Gating Envelope Snapshot
 
-Command:
+명령:
 
 ```bash
 uv run python packages/bluetape-cache-redis/benchmarks/envelope_benchmark.py \
   | tee /tmp/issue-54-envelope-benchmark.json
 ```
 
-Environment: Python 3.13.14, macOS 26.5.1, arm64. The benchmark performs a
-short warmup, then measures encode plus decode. It makes no absolute latency,
-throughput, production-capacity, or cross-machine ranking claim.
+환경: Python 3.13.14, macOS 26.5.1, arm64. Benchmark는 짧은 warmup 후 encode와
+decode를 측정한다. Absolute latency, throughput, production-capacity, machine
+간 ranking을 주장하지 않는다.
 
 | Case | Format | Encoded bytes | Samples | Median ns | p95 ns |
 |---|---|---:|---:|---:|---:|
@@ -24,29 +24,27 @@ throughput, production-capacity, or cross-machine ranking claim.
 | near-limit, 8 MiB | binary-v1 | 8,388,702 | 10 | 603,562 | 616,041 |
 | near-limit, 8 MiB | json-v1 | 11,185,007 | 10 | 23,473,166 | 25,121,584 |
 
-Binary is smaller than JSON for the byte-heavy cases. Both encoded near-limit
-results remain below the configured 16 MiB outer bound. The raw output was
-captured at `/tmp/issue-54-envelope-benchmark.json`; that temporary path is
-evidence location, not a tracked release artifact.
+Byte-heavy case에서 Binary가 JSON보다 작다. 두 near-limit encoded result는
+설정된 16 MiB outer bound보다 작다. Raw output은
+`/tmp/issue-54-envelope-benchmark.json`에 저장했으며 이 temporary path는
+evidence location이지 tracked release artifact가 아니다.
 
-## Stability Evidence
+## 안정성 근거
 
-The sync close subset ran 10 consecutive times: 6 passed per run, 60 total.
-The async close/cancel/loop subset ran 10 consecutive times: 9 passed per run,
-90 total. There were zero hangs, pending-task warnings, leaked-task warnings,
-or flaky failures.
+Sync close subset은 10회 연속 실행했고 run마다 6 passed, 총 60개였다. Async
+close/cancel/loop subset은 10회 연속 실행했고 run마다 9 passed, 총 90개였다.
+Hang, pending-task warning, leaked-task warning, flaky failure는 0개였다.
 
-Redis integration ran serially through the ecosystem `RedisServer`: 8 passed.
-Coverage includes TTL expiry, `SET NX PX`, fixed Lua compare-delete, borrowed
-sync/async lifecycle, binary/JSON round trips, script ACL denial without an
-unsafe fallback, and redacted connection failures.
+Redis integration은 ecosystem `RedisServer`를 통해 serial로 실행했고 8개가
+통과했다. TTL expiry, `SET NX PX`, fixed Lua compare-delete, borrowed
+sync/async lifecycle, binary/JSON round trip, unsafe fallback 없는 script ACL
+denial, redacted connection failure를 포함한다.
 
-## Scan Result
+## Scan 결과
 
-| Priority | File:Line | Lens | Finding | Disposition |
+| Priority | File:Line | Lens | 발견 | 처리 |
 |---|---|---|---|---|
-| none | `_formats.py:125`, `_formats.py:269` | performance | Binary and JSON predict/enforce the outer bound before large output construction. | PASS |
-| none | `_async_provider.py:230-302` | performance | Async commands await redis-py directly; no executor or blocking sync client appears in async paths. | PASS |
-| none | `_provider.py:326`, `_async_provider.py:304` | stability | Admission drains before owned close; no lifecycle lock spans Redis command I/O. | PASS |
-| none | `_async_provider.py:328-386` | stability | Exactly one transient cleanup task is shielded, joined, and cleared. | PASS |
-
+| none | `_formats.py:125`, `_formats.py:269` | performance | Binary와 JSON이 큰 output을 구성하기 전에 outer bound를 예측하고 적용한다. | PASS |
+| none | `_async_provider.py:230-302` | performance | Async command가 redis-py를 직접 await하며 async path에 executor나 blocking sync client가 없다. | PASS |
+| none | `_provider.py:326`, `_async_provider.py:304` | stability | Owned close 전에 admission을 drain하며 lifecycle lock이 Redis command I/O를 감싸지 않는다. | PASS |
+| none | `_async_provider.py:328-386` | stability | 정확히 하나의 transient cleanup task를 shield하고 join한 뒤 clear한다. | PASS |

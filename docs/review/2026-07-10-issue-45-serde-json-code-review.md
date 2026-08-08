@@ -1,81 +1,80 @@
-# Issue #45 JSON Serde Code Review
+# Issue #45 JSON Serde 코드 검토
 
-## Scope
+## 범위
 
-- Base: `develop@5b804865b4db0331207d09e3ded040505f920d4c`
-- Reviewed head: `a4727082cbe97c39e620605165ace69fe21dd50e`
-- Contract: strict, bounded JSON serialization in `bluetape-serde`
-- Follow-up boundary: binary serialization remains in Issue #46 and must reuse
-  the payload/error/limit contracts introduced here.
+- 기준: `develop@5b804865b4db0331207d09e3ded040505f920d4c`
+- 검토 head: `a4727082cbe97c39e620605165ace69fe21dd50e`
+- 계약: `bluetape-serde`의 strict, bounded JSON serialization
+- 후속 경계: binary serialization은 Issue #46에 남기며, 여기서 도입한
+  payload/error/limit 계약을 재사용해야 한다.
 
-## Verification Gate
+## 검증 gate
 
-The implementation passed the independent Step 5 verifier after correcting two
-P1 findings: a forbidden regex-based validation path and an obsolete performance
-test selector. Final Step 5 result: `P0=0 P1=0`.
+금지된 regex 기반 validation 경로와 오래된 performance test selector라는 두
+P1 발견 사항을 수정한 뒤 독립 Step 5 verifier를 통과했다. 최종 Step 5 결과는
+`P0=0 P1=0`이다.
 
-## Step 6-R Review Matrix
+## Step 6-R 검토 matrix
 
-| Lane | Initial findings | Resolution | Final result |
+| Lane | 초기 발견 | 해결 | 최종 결과 |
 | --- | --- | --- | --- |
-| Performance | P1: `list[bytes]` chunk assembly caused excessive allocation growth | Replaced chunk accumulation with one incremental `bytearray`; added allocation regression coverage | `P0=0 P1=0` |
-| Stability | P1: failure tracebacks retained source or partial output objects | Re-raised fresh typed errors outside handlers and explicitly released large locals | `P0=0 P1=0` |
-| Security | P1: rejected input could remain reachable through exception state; rerun found native decoder/encoder configuration errors with the same risk | Sanitized public and native configuration error boundaries; targeted security suite passed | `P0=0 P1=0` |
-| Operator | P1: encode failures retained partial output; P1: durable Apache Fory follow-up evidence was not yet live | Released partial output and verified live Issue #46 with assignee, milestone, dependency, limits, trust policy, schema IDs, and cross-language conformance scope | `P0=0 P1=0` |
-| Developer | P1: integer acceptance depended on CPython's process-global digit setting; P1: one commit did not expose parseable Lore trailers | Added a symmetric public 640-digit integer limit and error code; repaired commit metadata | `P0=0 P1=0` |
-| User | P2: local-wheel commands were incomplete; P2: native caller-configuration failures were not clearly documented | Updated English/Korean/package documentation and normalized caller-visible failure wording | `P0=0 P1=0 P2=0 P3=0` |
+| Performance | P1: `list[bytes]` chunk assembly가 allocation growth를 과도하게 유발 | 하나의 incremental `bytearray`로 chunk accumulation을 교체하고 allocation regression coverage 추가 | `P0=0 P1=0` |
+| Stability | P1: failure traceback이 source 또는 partial output object를 보존 | handler 밖에서 새 typed error를 재발생시키고 큰 local을 명시적으로 해제 | `P0=0 P1=0` |
+| Security | P1: rejected input이 exception state를 통해 도달 가능; 재실행에서 같은 위험을 가진 native decoder/encoder configuration error 발견 | public 및 native configuration error boundary를 정리하고 targeted security suite 통과 | `P0=0 P1=0` |
+| Operator | P1: encode failure가 partial output을 보존; P1: durable Apache Fory 후속 근거가 아직 live하지 않음 | partial output을 해제하고 assignee, milestone, dependency, limits, trust policy, schema ID, cross-language conformance scope가 있는 live Issue #46 확인 | `P0=0 P1=0` |
+| Developer | P1: integer acceptance가 CPython process-global digit setting에 의존; P1: 한 commit이 parseable Lore trailer를 노출하지 않음 | 대칭적인 public 640-digit integer limit과 error code를 추가하고 commit metadata 보완 | `P0=0 P1=0` |
+| User | P2: local-wheel command가 불완전; P2: native caller-configuration failure가 명확히 문서화되지 않음 | English/Korean/package 문서를 갱신하고 caller-visible failure wording 정규화 | `P0=0 P1=0 P2=0 P3=0` |
 
-## Integrated Review
+## 통합 검토
 
-- The public boundary exports 21 names and 17 stable error codes, including
-  `MAX_JSON_INTEGER_DIGITS` and `INTEGER_DIGIT_LIMIT`.
-- Serialize and deserialize paths enforce byte, depth, reference, collection,
-  string, and integer-digit limits without relying on process-global CPython
-  settings.
-- Rejected values, source buffers, decoded text, metadata intermediates, and
-  partial output are not retained by public error tracebacks.
-- The optional package boundary is isolated: `bluetape-serde` has no runtime
-  dependency and the meta package includes it only through `serde`, `dev`, and
-  `all` extras.
-- README, localized README, package layout, changelog, and WIP scope agree with
-  the implemented API and the Issue #46 binary-serde follow-up.
-- Release and workflow changes are not required for this additive package;
-  repository-wide tests and package builds cover the registration path.
-- Local verification used Python 3.14.6. Repository CI remains the Python 3.13
-  compatibility authority and must pass on the exact PR head before merge.
+- Public boundary는 `MAX_JSON_INTEGER_DIGITS`와 `INTEGER_DIGIT_LIMIT`을 포함해
+  21개 name과 17개 stable error code를 export한다.
+- Serialize 및 deserialize 경로는 process-global CPython 설정에 의존하지 않고
+  byte, depth, reference, collection, string, integer-digit limit를 적용한다.
+- Rejected value, source buffer, decoded text, metadata intermediate, partial
+  output은 public error traceback에 보존되지 않는다.
+- Optional package boundary는 격리되어 있다. `bluetape-serde`에는 runtime
+  dependency가 없으며 meta package는 `serde`, `dev`, `all` extra를 통해서만
+  포함한다.
+- README, localized README, package layout, changelog, WIP 범위가 구현된 API와
+  Issue #46 binary-serde 후속 작업에 동의한다.
+- 이 additive package에는 release나 workflow 변경이 필요하지 않으며,
+  repository-wide test와 package build가 registration 경로를 검증한다.
+- 로컬 검증에는 Python 3.14.6을 사용했다. Repository CI는 Python 3.13
+  compatibility authority이므로 merge 전에 정확한 PR head에서 통과해야 한다.
 
-## Result
+## 결과
 
-All blocking review findings are resolved: `P0=0 P1=0`. All recorded
-non-blocking findings are also resolved: `P2=0 P3=0`.
+모든 blocking review finding을 해결했다: `P0=0 P1=0`. 기록된 non-blocking
+finding도 모두 해결했다: `P2=0 P3=0`.
 
-## Post-PR Review
+## PR 이후 검토
 
-PR #48 review against exact head
-`a6f5b0fc496ddfe0f11b8fa5e38a6d4de2c3abc8` found one P1 and one deduplicated
-P2:
+정확한 head `a6f5b0fc496ddfe0f11b8fa5e38a6d4de2c3abc8`에 대한 PR #48 검토에서
+P1 하나와 중복 제거된 P2 하나를 발견했다.
 
-- P1: shared-reference DAGs were validated once per expanded path, allowing
-  exponential preflight CPU before a tiny output limit could stop encoding.
-- P2: decode accepted escaped unpaired UTF-16 surrogates even though encode
-  rejected the resulting Python string, breaking the strict round-trip model.
+- P1: shared-reference DAG를 expanded path마다 검증하여, 작은 output limit가
+  encoding을 멈추기 전에 exponential preflight CPU를 허용했다.
+- P2: encode가 거부한 Python string과 달리 decode가 escaped unpaired UTF-16
+  surrogate를 허용하여 strict round-trip model을 깨뜨렸다.
 
-Commit `5f3774c21538792c32d597b8c7724443dac36242` resolved both findings. Completed
-container memoization initially bounded repeated-DAG work but introduced
-O(unique containers) auxiliary state, violating the approved O(depth) design.
-The follow-up correction restores active-path-only cycle state and uses the
-output budget as a conservative encoded-byte lower bound; current-node type,
-cycle, and depth errors still precede that guard. Strings contribute two
-quotes plus UTF-8 scalar widths during their existing validation scan, and dict
-keys plus colons are charged lazily without retained sibling state.
-Strings now require Unicode scalar values; decode normalizes valid escaped
-surrogate pairs and rejects unpaired surrogates before returning a value.
-Deterministic bounded-visit, distinct-sibling memory, validation-order,
-Unicode, duplicate-key, and source-retention regressions cover the corrected
-contracts. The performance rerun at exact PR head `05845fc` found the
-completed-memo O(unique containers) P1. A third rerun at exact head `b4e7eda`
-found that the intermediate one-byte occurrence guard could rescan large
-shared strings and keys. Deterministic large-value counters now cover that
-case without wall-clock thresholds. The exact selector passed `8 passed, 237
-deselected`, the serde suite passed `389 passed`, and the workspace passed `535
-passed`. Final rerun status: `P0=0 P1=0 P2=0 P3=0`.
+Commit `5f3774c21538792c32d597b8c7724443dac36242`가 두 finding을 해결했다.
+처음의 completed container memoization은 repeated-DAG work를 bounded하게
+했지만 O(unique containers) auxiliary state를 도입해 승인된 O(depth) 설계를
+위반했다. 후속 수정은 active-path-only cycle state를 복원하고 output budget을
+보수적인 encoded-byte lower bound로 사용한다. current-node type, cycle,
+depth error가 여전히 해당 guard보다 먼저 발생한다. String은 기존 validation
+scan 중 두 quote와 UTF-8 scalar width를 더하고, dict key와 colon은 sibling
+state를 보존하지 않고 lazy하게 계산한다.
+
+String은 이제 Unicode scalar value만 허용한다. Decode는 유효한 escaped
+surrogate pair를 정규화하고, 값을 반환하기 전에 unpaired surrogate를
+거부한다. Deterministic bounded-visit, distinct-sibling memory,
+validation-order, Unicode, duplicate-key, source-retention regression이 수정된
+계약을 검증한다. 정확한 PR head `05845fc`의 performance rerun은 completed-memo
+O(unique containers) P1을 발견했다. exact head `b4e7eda`의 세 번째 rerun은
+중간 one-byte occurrence guard가 큰 shared string과 key를 재검사할 수 있음을
+발견했다. Deterministic large-value counter가 이 경우를 wall-clock threshold
+없이 검증한다. Exact selector는 `8 passed, 237 deselected`, serde suite는
+`389 passed`, workspace는 `535 passed`였다. 최종 rerun 상태는
+`P0=0 P1=0 P2=0 P3=0`이다.

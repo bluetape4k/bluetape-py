@@ -1,61 +1,57 @@
-# Issue #50 Local Cache Code Review
+# Issue #50 Local Cache 코드 검토
 
-Date: 2026-07-11
-Scope: `origin/develop...feat/issue-50-local-cache`
+날짜: 2026-07-11
+범위: `origin/develop...feat/issue-50-local-cache`
 Gate: Type A Step 6-R pre-PR review
 
-## Review convergence
+## 검토 수렴
 
-The implementation was reviewed incrementally after every planned task. The
-following P1 findings were reproduced and repaired before this final pass:
+구현은 계획된 각 task 이후 incremental하게 검토했다. 다음 P1 발견 사항을
+최종 pass 전에 재현하고 수정했다.
 
-- finite positive TTL values large enough to overflow float nanosecond
-  conversion;
-- non-callable clocks accepted until first state access;
-- thread teardown that stopped joining after the first failed assertion;
-- sync publication exceptions that stranded waiters and flight capacity;
-- async task-factory rejection that leaked admitted flights;
-- repeated caller cancellation that interrupted waiter release;
-- release-task factory rejection that leaked a coroutine and overrode caller
-  cancellation;
-- root examples that were shorter than the package contract examples.
+- float nanosecond conversion에서 overflow할 만큼 큰 finite positive TTL
+- 첫 state access까지 허용되던 non-callable clock
+- 첫 assertion failure 이후 join을 중단하던 thread teardown
+- waiter와 flight capacity를 고립시키던 sync publication exception
+- admitted flight를 누수시키던 async task-factory rejection
+- waiter release를 중단하던 반복 caller cancellation
+- coroutine을 누수시키고 caller cancellation을 덮어쓰던 release-task factory rejection
+- package contract example보다 짧았던 root example
 
-Every repair has deterministic regression coverage. The final branch review is
-against the current integrated diff and raw benchmark/package evidence.
+모든 수정에는 deterministic regression coverage가 있다. 최종 branch review는
+현재 통합 diff와 raw benchmark/package 근거를 대상으로 한다.
 
-| Lens | P0 | P1 | Final evidence |
+| Lens | P0 | P1 | 최종 근거 |
 |---|---:|---:|---|
-| Performance | 0 | 0 | Deterministic raw JSON passes hit-cost, contention, expiry-scaling, and rebuild-proxy thresholds; no blocking loader body runs under a cache lock. |
-| Stability | 0 | 0 | Finite lifecycle tests cover sync threads, loop binding, cancellation, repeated cancellation, task-factory/publication failure, supersession, saturation, and terminal cleanup. |
-| Security | 0 | 0 | No logging/callback surface formats keys, values, loaders, flights, or errors. Unsanitized `KeyError(key)` and loader exceptions are explicitly caller-owned/redaction-required surfaces. |
-| Operator/Ops | 0 | 0 | Immutable lifetime counters and point-in-time gauges are documented; default install remains core-only; no hidden thread, scheduler, listener, or external backend exists. |
-| Developer/API | 0 | 0 | Exact exports, keyword-only constructors, sync/async concept parity, native hash errors, `None` identity, focused distribution, lockfile, wheel metadata, and doctest examples agree. |
-| User/Caller | 0 | 0 | English/Korean root docs and package docs cover install state, TTL/loading/mutation/cancellation behavior, limits, monitoring, secret redaction, and Redis issue #51. |
+| Performance | 0 | 0 | Deterministic raw JSON이 hit-cost, contention, expiry-scaling, rebuild-proxy threshold를 통과하며 cache lock 안에서 blocking loader body를 실행하지 않는다. |
+| Stability | 0 | 0 | Sync thread, loop binding, cancellation, repeated cancellation, task-factory/publication failure, supersession, saturation, terminal cleanup을 finite lifecycle test로 다룬다. |
+| Security | 0 | 0 | Logging/callback surface는 key, value, loader, flight, error를 format하지 않는다. Unsanitized `KeyError(key)`와 loader exception은 caller-owned/redaction-required surface로 명시한다. |
+| Operator/Ops | 0 | 0 | Immutable lifetime counter와 point-in-time gauge를 문서화하고 default install은 core-only로 유지한다. 숨은 thread, scheduler, listener, external backend는 없다. |
+| Developer/API | 0 | 0 | Exact export, keyword-only constructor, sync/async concept parity, native hash error, `None` identity, focused distribution, lockfile, wheel metadata, doctest example이 일치한다. |
+| User/Caller | 0 | 0 | English/Korean root/package docs가 install state, TTL/loading/mutation/cancellation behavior, limit, monitoring, secret redaction, Redis issue #51을 다룬다. |
 
-## Main-session integration review
+## Main-session 통합 검토
 
-- State ownership is centralized in `_CacheState`; sync and async wrappers own
-  their respective locks and flight lifecycles.
-- Version, epoch, and active-flight identity gates prevent stale loader
-  publication after `set`, `invalidate`, `clear`, cancellation, or supersession.
-- Versioned expiry nodes and post-write rebuilding keep heap metadata bounded;
-  unused key versions are removed when no entry or owned flight remains.
-- Loader bodies run outside cache locks. Same-key callers coalesce; different
-  keys can progress independently. Hard admission counts owned terminal-pending
-  flights rather than only joinable active flights.
-- The meta package adds only an explicit `cache` extra; default installation
-  remains `bluetape-core` only, with no root `bluetape/__init__.py` surface.
-- The benchmark and review documents use tables instead of a chart because the
-  acceptance signals have different units and thresholds; a combined visual
-  would obscure rather than clarify the result.
+- State ownership은 `_CacheState`에 중앙화하고 sync 및 async wrapper가 각자의
+  lock과 flight lifecycle을 소유한다.
+- Version, epoch, active-flight identity gate가 `set`, `invalidate`, `clear`,
+  cancellation, supersession 이후 stale loader publication을 막는다.
+- Versioned expiry node와 post-write rebuilding으로 heap metadata를 bounded하게
+  유지하며 entry나 owned flight가 남지 않은 unused key version을 제거한다.
+- Loader body는 cache lock 밖에서 실행한다. 같은 key의 caller는 coalesce하고
+  다른 key는 독립적으로 진행한다. Hard admission count는 joinable active
+  flight가 아니라 owned terminal-pending flight를 센다.
+- Meta package는 명시적인 `cache` extra만 추가한다. default install은
+  `bluetape-core`만 유지하고 root `bluetape/__init__.py` surface는 없다.
+- Acceptance signal의 단위와 threshold가 다르므로 benchmark와 review 문서는
+  chart가 아닌 table을 사용한다. 합친 visual은 결과를 더 명확하게 하지 않는다.
 
-## Residual P2/P3 decisions
+## 잔여 P2/P3 결정
 
-- Timing and RSS observations are machine-local regression evidence, not a
-  portable SLA.
+- Timing 및 RSS observation은 portable SLA가 아닌 machine-local regression evidence다.
 - Redis, cross-process invalidation, background expiry, byte-size accounting,
-  callbacks/listeners, and framework adapters remain outside issue #50.
-- A cancellation-resistant async loader continues to own its admission slot
-  until terminal; callers must provide cooperative cancellation and deadlines.
+  callback/listener, framework adapter는 issue #50 범위 밖이다.
+- Cancellation-resistant async loader는 terminal까지 admission slot을 계속
+  소유한다. Caller는 cooperative cancellation과 deadline을 제공해야 한다.
 
-Final gate: **P0=0 P1=0**.
+최종 gate: **P0=0 P1=0**.
