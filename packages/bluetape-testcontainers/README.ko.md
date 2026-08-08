@@ -32,7 +32,7 @@ PostgreSQL driver, boto3, SQLAlchemy, 프로덕션 client를 설치하지 않습
 | `PostgresServer` | `postgres:18-alpine` | connection, pool, schema, transaction, migration, seed data |
 | `LocalStackServer` | `localstack/localstack:4.14.0` | 선택 서비스, SDK client, AWS resource 정리 |
 
-## Pytest fixture
+## Pytest 픽스처
 
 이 패키지는 pytest plugin이나 자동 fixture를 등록하지 않습니다. 더 넓은 scope에
 명시적인 reset policy가 없다면 function scope fixture를 사용합니다.

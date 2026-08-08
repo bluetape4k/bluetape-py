@@ -23,7 +23,7 @@ pip install "bluetape[jwt]"
 RSA key modulus는 2048 bit 이상이어야 합니다.
 
 <!-- jwt-scenario:profile-provider -->
-## 하나의 security profile 고정
+## 하나의 보안 profile 고정
 
 각 `JWSProvider`는 하나의 algorithm, repository, validation profile로
 구성합니다. 호출별로 `typ`, issuer, audience, required claim, algorithm 규칙을
@@ -129,7 +129,7 @@ mechanism이 아닙니다. rotation, retirement, revocation으로 repository epo
 바뀌면 provider가 새 epoch를 관찰할 때 오래된 local entry를 비웁니다.
 
 <!-- jwt-scenario:security-boundary -->
-## Security 경계
+## 보안 경계
 
 compact input은 크기가 제한된 base64url segment 세 개로 정확히 구성해야 합니다.
 provider는 local key를 찾기 전에 duplicate JSON name, `none`, algorithm

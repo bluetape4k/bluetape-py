@@ -16,14 +16,14 @@ PyPI 배포 패키지와 extras로 분리합니다.
 
 `v0.1.0`은 첫 Python-native foundation 릴리스로 공개되었습니다:
 [`v0.1.0`](https://github.com/bluetape4k/bluetape-py/releases/tag/v0.1.0).
-PyPI 배포는 package ownership과 trusted publishing이 확인될 때까지 보류합니다.
-collections, codec, compression, cache, Redis provider, serde, ID, JWT,
+PyPI 배포는 패키지 소유권과 trusted publishing이 확인될 때까지 보류합니다.
+`collections`, `codec`, `compression`, `cache`, Redis provider, `serde`, ID, JWT,
 measure, money, testcontainers, audit 패키지는 source workspace에서 사용할 수 있으며,
 registry 설치 명령은 PyPI 배포가 활성화된 뒤의 목표 형태를 설명합니다.
 
 현재 계획 트랙은
 [`0.2.0`](https://github.com/bluetape4k/bluetape-py/milestone/2) milestone입니다.
-Ecosystem 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compressor
+생태계 이슈 #7-#34, serialization 후속 #45/#46, local cache #50, compressor
 계약 #59, Redis provider #54, coordination #55를 추적합니다. 자세한 계획은
 [`WIP.md`](WIP.md)에 두고, 완료된 사용자-facing 변경은
 [`CHANGELOG.md`](CHANGELOG.md)에 기록합니다.
@@ -204,7 +204,7 @@ PyPI 배포가 활성화되기 전에는 registry에서 사용할 수 없습니�
 
 ## 사용 예
 
-### Core validation
+### 핵심 검증
 
 ```python
 from bluetape.core import require_not_blank
@@ -212,7 +212,7 @@ from bluetape.core import require_not_blank
 service_name = require_not_blank("orders", "service_name")
 ```
 
-### Logging context
+### 로깅 컨텍스트
 
 ```python
 import logging
@@ -226,7 +226,7 @@ with log_context(trace_id="trace-123", tenant="blue"):
     logger.info("order accepted")
 ```
 
-### Testing waits
+### 테스트 대기
 
 ```python
 from bluetape.testing import eventually
@@ -234,7 +234,7 @@ from bluetape.testing import eventually
 eventually(lambda: cache.get("ready"), timeout=2.0)
 ```
 
-### Collections
+### 컬렉션
 
 ```python
 from bluetape.collections import chunked, group_by
@@ -288,7 +288,7 @@ asyncio.run(main())
 집합에만 `asyncio.gather`를 사용합니다. 입력 iterable이 커질 수 있고 호출자가
 cooperative 동시성 상한을 정해야 할 때는 `map_bounded`를 사용합니다.
 
-### Local TTL cache
+### 로컬 TTL 캐시
 
 ```python
 from bluetape.cache import TTLCache
@@ -367,7 +367,7 @@ Redis-backed storage와 bounded cross-process load coordination은 아래 opt-in
 provider로 제공합니다. RESP3 near-cache invalidation은 upstream에 막힌 별도 트랙
 issue #56으로 남아 있습니다.
 
-### Redis byte provider
+### Redis 바이트 provider
 
 ```python
 from bluetape.cache.redis import BinaryEnvelopeFormat, ResultEnvelopeCodec, SyncRedisProvider
@@ -390,7 +390,7 @@ Focused package는 `AsyncRedisProvider`, `JsonEnvelopeFormat`, 명시적인 선�
 `ZstdCompressor`, 안정적인 redacted error, borrowed/factory-owned client
 lifecycle도 제공합니다. 전체 계약과 rollout 규칙은 package README를 참고하십시오.
 
-### Strict JSON serde
+### 엄격한 JSON serde
 
 ```python
 from bluetape.serde import (
@@ -431,7 +431,7 @@ rollout/rollback은 package README를 참고하십시오.
 `SerdeError`는 안정된 serde domain failure를 나타내며, 호출자의 type/configuration
 오류는 native `TypeError` 또는 `ValueError`로 유지됩니다.
 
-### Trusted-internal Apache Fory
+### 신뢰된 내부 Apache Fory
 
 명시적인 `fory` extra는 CPython 3.13에서만 설치합니다. 각 application route가 고정
 `(schema_id, schema_version, type_id)` tuple과 하나의 정확한 root type을 소유합니다.
@@ -488,7 +488,7 @@ assert price == Money.of("12.35", USD)
 `validate_audit_event`를 호출하며, 호출자 소유 storage, outbox, relay, transport가
 영속성과 전달을 성립시킵니다. 기본 `bluetape` 설치는 계속 core-only입니다.
 [한국어 패키지 안내](packages/bluetape-audit/README.ko.md)와
-[English package guide](packages/bluetape-audit/README.md)를 참고하십시오.
+[영문 패키지 안내](packages/bluetape-audit/README.md)를 참고하십시오.
 
 ## 패키지 문서
 
@@ -529,9 +529,9 @@ assert price == Money.of("12.35", USD)
 
 - [WIP.md](WIP.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [Package layout policy](docs/package-layout.md)
-- [Release guide](docs/release.md)
-- [Research index](docs/research/README.ko.md)
+- [패키지 레이아웃 정책](docs/package-layout.md)
+- [릴리스 안내](docs/release.md)
+- [리서치 색인](docs/research/README.ko.md)
 
 ## 생태계 백로그
 

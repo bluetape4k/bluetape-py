@@ -2,12 +2,12 @@
 
 [English](README.md) | 한국어
 
-Python 3.13+에서 표준 라이브러리만 사용해 UUIDv4, 단조 UUIDv7, random ULID,
+Python 3.13+에서 표준 라이브러리만 사용해 UUIDv4, 단조 UUIDv7, 난수 ULID,
 명시적 단조 ULID 값을 제공합니다.
 
 ## 설치
 
-PyPI 배포는 보류 중입니다. 목표 설치 형태는 focused 배포 패키지 또는 opt-in
+PyPI 배포는 보류 중입니다. 목표 설치 형태는 집중 배포 패키지 또는 opt-in
 meta extra입니다.
 
 ```bash
@@ -42,8 +42,8 @@ assert first < second
 
 ## ID는 비밀값이 아님
 
-UUID와 ULID는 식별자이지 credential이 아닙니다. UUIDv7과 ULID는 millisecond
-timestamp를 노출하며 process-local 단조 순서는 분산 total order가 아닙니다. ID에
+UUID와 ULID는 식별자이지 자격 증명이 아닙니다. UUIDv7과 ULID는 밀리초
+타임스탬프를 노출하며 process-local 단조 순서는 분산 전체 순서가 아닙니다. ID에
 비밀을 넣거나 순서를 authorization, uniqueness, cross-process coordination 보장으로
 사용하지 마십시오.
 
@@ -55,7 +55,7 @@ random entropy를 사용하며 단조성을 약속하지 않습니다. 한 프�
 
 단조 상태는 의도적으로 일시적입니다. 재시작, fork, upgrade, rollback 후에는 새
 상태에서 시작합니다. 더 강한 epoch, machine identity, persistence, distributed-order
-정책은 application이 소유합니다.
+정책은 애플리케이션이 소유합니다.
 
 ## 영속성과 롤백
 
@@ -69,5 +69,5 @@ canonical 문자열은 유지합니다.
 
 KSUID는 실제 compatibility consumer가 생길 때까지 보류합니다. Snowflake ID는
 machine identity, epoch, clock rollback, restart persistence를 별도로 설계해야 합니다.
-Secret, database key, distributed coordination, package-owned background worker는
+Secret, database key, distributed coordination, 패키지 소유 background worker는
 제공하지 않습니다.

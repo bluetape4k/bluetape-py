@@ -22,8 +22,8 @@ pip install "bluetape[leader-redis]"
 Adapter는 아직 connection을 열지 않은 정확한 redis-py client만 받습니다.
 `127.0.0.1` 같은 numeric IP, 유한한 양수 connect/command timeout, zero retry,
 `health_check_interval=0`, 비어 있는 기본 `event_dispatcher`를 사용하십시오. TLS,
-hostname, retrying client, health check, credential callback, connection hook,
-custom response callback, proxy, subclass, 이미 사용한 pool은 I/O 전에 거부합니다.
+hostname, 재시도 client, health check, 자격 증명 callback, 연결 hook,
+사용자 정의 response callback, proxy, subclass, 이미 사용한 pool은 I/O 전에 거부합니다.
 
 `bluetape-leader-redis`는 TLS를 지원하지 않습니다. 가능하면 로컬 Unix socket을
 우선하십시오. TCP가 필요하다면 평문 TCP는 호출자가 통제하는 보호된 네트워크에서만
@@ -208,7 +208,7 @@ prefix 밖 key가 계속 거부되는지 검증하십시오.
 <!-- leader-scenario:migration -->
 ## Coordination identity migration과 counter 복원
 
-Prefix, SHA-256 logical-name digest derivation,
+Prefix, SHA-256 logical-name digest 파생,
 `lease`/`fence`/`history` suffix set, persistent `v1` history marker, record
 version `v1`이 하나의 coordination identity를 이룹니다. Rolling migration은
 contender를 갈라놓을 수 있으므로 다음 stop-the-world 순서를 지키십시오.
@@ -245,7 +245,7 @@ Redis signed integer 상한은 `9223372036854775807`입니다. Counter가 이 �
 downstream-recognized coordination epoch로 migration하십시오. Redis prefix만 바꾸거나
 counter를 reset하는 것은 안전하지 않습니다.
 
-## Lease-loss runbook
+## Lease 손실 runbook
 
 Renewal loss, owner mismatch, corruption, uncertain release가 발생하면 다음 순서로
 처리합니다.
@@ -260,7 +260,7 @@ Renewal loss, owner mismatch, corruption, uncertain release가 발생하면 다�
 수행하지 마십시오.
 
 <!-- leader-scenario:rollback -->
-## Rollback
+## 롤백
 
 Contender와 protected work를 중지하고 adapter 사용과 `leader-redis` extra를
 제거하되 counter, history marker, 만료된 lease key를 그대로 둡니다. 이전 application이 동일한
@@ -293,7 +293,7 @@ node/audit ID, owner token, Redis key/prefix, fencing token과 추측한 backend
 log field나 metric label로 사용하면 안 됩니다.
 
 <!-- leader-scenario:deployment-checklist -->
-## Deployment checklist
+## 배포 체크리스트
 
 - [ ] `redis==8.0.1`을 pin하고 numeric IP 또는 Unix socket, 유한한 양수 timeout,
   zero retry로 새 exact sync/async client를 구성합니다. TLS, hostname, health check,

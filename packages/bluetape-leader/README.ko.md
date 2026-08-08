@@ -108,7 +108,7 @@ Package가 만드는 표현은 값을 노출하지 않습니다. Lease loss, rel
 backend failure는 일반 action result가 아니라 lifecycle 예외입니다.
 
 <!-- leader-scenario:manual-lifecycle -->
-## Manual lifecycle과 scoped lifecycle
+## 수동 lifecycle과 scoped lifecycle
 
 일반적인 경우에는 context를 사용하십시오. Context는 진입 시 소유권을 확인하고,
 필요하면 scope 안에서 renewal하며, 자신이 만든 작업을 제한 시간 안에 정리합니다.
@@ -169,7 +169,7 @@ lifecycle 예외로 바꿉니다. 예제는 action/release block에 들어가기
 사용하고, atomic downstream fencing transaction으로 stale write를 최종 차단하십시오.
 
 <!-- leader-scenario:identity -->
-## Identity field
+## Identity 필드
 
 | Field | 의미 | 안전성 역할 |
 |---|---|---|
@@ -182,7 +182,7 @@ lifecycle 예외로 바꿉니다. 예제는 action/release block에 들어가기
 아닙니다.
 
 <!-- leader-scenario:cancellation -->
-## Async cancellation
+## 비동기 cancellation
 
 Async lock과 elector 작업은 자신이 만든 cleanup task를 끝까지 추적합니다. Caller가
 작업을 취소하면 adapter는 제한된 cleanup을 수행한 다음 `CancelledError`를 다시
@@ -204,7 +204,7 @@ async def run_once(async_elector, options):
         raise
 ```
 
-## Error와 privacy 경계
+## 오류와 privacy 경계
 
 Public leader error에는 name, ID, key, prefix, client, owner record, backend
 reply, fence 값이 포함되지 않습니다. `LeaderBackendError`는 의도적으로 진단 정보를
